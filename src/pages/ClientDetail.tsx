@@ -56,7 +56,7 @@ const ClientDetail = () => {
     title: "",
     description: "",
     clientId: id || "",
-    status: "todo",
+    status: "pending",
     priority: "medium",
     dueDate: new Date(),
   });
@@ -84,8 +84,7 @@ const ClientDetail = () => {
   }
 
   const clientTasks = tasks.filter((task) => task.clientId === id);
-  const todoTasks = clientTasks.filter((task) => task.status === "todo");
-  const inProgressTasks = clientTasks.filter((task) => task.status === "in-progress");
+  const pendingTasks = clientTasks.filter((task) => task.status === "pending");
   const completedTasks = clientTasks.filter((task) => task.status === "completed");
 
   const getPriorityColor = (priority: string) => {
@@ -116,10 +115,8 @@ const ClientDetail = () => {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "todo":
+      case "pending":
         return "text-orange-500";
-      case "in-progress":
-        return "text-primary";
       case "completed":
         return "text-success";
       default:
@@ -129,10 +126,8 @@ const ClientDetail = () => {
 
   const getStatusBgColor = (status: string) => {
     switch (status) {
-      case "todo":
+      case "pending":
         return "bg-orange-500/10";
-      case "in-progress":
-        return "bg-primary/10";
       case "completed":
         return "bg-success/10";
       default:
@@ -155,7 +150,7 @@ const ClientDetail = () => {
         title: "",
         description: "",
         clientId: id || "",
-        status: "todo",
+        status: "pending",
         priority: "medium",
         dueDate: new Date(),
       });
@@ -165,10 +160,10 @@ const ClientDetail = () => {
     }
   };
 
-  const handleUpdateTaskStatus = async (taskId: string, newStatus: "todo" | "in-progress" | "completed") => {
+  const handleUpdateTaskStatus = async (taskId: string, newStatus: "pending" | "completed") => {
     try {
       await updateTask(taskId, { status: newStatus });
-      toast.success(`Task marked as ${newStatus.replace("-", " ")}`);
+      toast.success(`Task marked as ${newStatus}`);
     } catch (error) {
       console.error("Failed to update task:", error);
       toast.error("Failed to update task status");
@@ -225,14 +220,10 @@ const ClientDetail = () => {
             
             <div className="mt-6 pt-4 border-t">
               <h3 className="mb-2 font-medium">Task Summary</h3>
-              <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="grid grid-cols-2 gap-2 text-center">
                 <div className="rounded-md bg-orange-500/10 p-2">
-                  <span className="block text-lg font-medium">{todoTasks.length}</span>
-                  <span className="text-xs text-muted-foreground">To-Do</span>
-                </div>
-                <div className="rounded-md bg-primary/10 p-2">
-                  <span className="block text-lg font-medium">{inProgressTasks.length}</span>
-                  <span className="text-xs text-muted-foreground">In Progress</span>
+                  <span className="block text-lg font-medium">{pendingTasks.length}</span>
+                  <span className="text-xs text-muted-foreground">Pending</span>
                 </div>
                 <div className="rounded-md bg-success/10 p-2">
                   <span className="block text-lg font-medium">{completedTasks.length}</span>
@@ -346,10 +337,9 @@ const ClientDetail = () => {
           </CardHeader>
           <CardContent>
             <Tabs defaultValue="all">
-              <TabsList className="mb-4 grid w-full grid-cols-4">
+              <TabsList className="mb-4 grid w-full grid-cols-3">
                 <TabsTrigger value="all">All</TabsTrigger>
-                <TabsTrigger value="todo">To-Do</TabsTrigger>
-                <TabsTrigger value="in-progress">In Progress</TabsTrigger>
+                <TabsTrigger value="pending">Pending</TabsTrigger>
                 <TabsTrigger value="completed">Completed</TabsTrigger>
               </TabsList>
               
@@ -377,9 +367,9 @@ const ClientDetail = () => {
                 )}
               </TabsContent>
               
-              <TabsContent value="todo" className="space-y-4">
-                {todoTasks.length > 0 ? (
-                  todoTasks.map((task) => (
+              <TabsContent value="pending" className="space-y-4">
+                {pendingTasks.length > 0 ? (
+                  pendingTasks.map((task) => (
                     <TaskCard
                       key={task.id}
                       task={task}
@@ -393,33 +383,9 @@ const ClientDetail = () => {
                   ))
                 ) : (
                   <div className="flex h-40 flex-col items-center justify-center rounded-lg border border-dashed">
-                    <p className="text-lg font-medium">No to-do tasks</p>
+                    <p className="text-lg font-medium">No pending tasks</p>
                     <p className="text-sm text-muted-foreground">
-                      All tasks are in progress or completed
-                    </p>
-                  </div>
-                )}
-              </TabsContent>
-              
-              <TabsContent value="in-progress" className="space-y-4">
-                {inProgressTasks.length > 0 ? (
-                  inProgressTasks.map((task) => (
-                    <TaskCard
-                      key={task.id}
-                      task={task}
-                      onUpdateStatus={handleUpdateTaskStatus}
-                      onDelete={handleDeleteTask}
-                      getStatusColor={getStatusColor}
-                      getStatusBgColor={getStatusBgColor}
-                      getPriorityColor={getPriorityColor}
-                      getPriorityBgColor={getPriorityBgColor}
-                    />
-                  ))
-                ) : (
-                  <div className="flex h-40 flex-col items-center justify-center rounded-lg border border-dashed">
-                    <p className="text-lg font-medium">No in-progress tasks</p>
-                    <p className="text-sm text-muted-foreground">
-                      All tasks are to-do or completed
+                      All tasks are completed
                     </p>
                   </div>
                 )}
@@ -458,7 +424,7 @@ const ClientDetail = () => {
 
 interface TaskCardProps {
   task: Task;
-  onUpdateStatus: (id: string, status: "todo" | "in-progress" | "completed") => void;
+  onUpdateStatus: (id: string, status: "pending" | "completed") => void;
   onDelete: (id: string) => void;
   getStatusColor: (status: string) => string;
   getStatusBgColor: (status: string) => string;
@@ -490,11 +456,7 @@ const TaskCard = ({
                   task.status
                 )} ${getStatusColor(task.status)}`}
               >
-                {task.status === "todo"
-                  ? "To-Do"
-                  : task.status === "in-progress"
-                  ? "In Progress"
-                  : "Completed"}
+                {task.status === "pending" ? "Pending" : "Completed"}
               </span>
               <span
                 className={`inline-flex items-center rounded-full px-2 py-1 text-xs ${getPriorityBgColor(
@@ -542,26 +504,15 @@ const TaskCard = ({
         
         {task.status !== "completed" && (
           <div className="mt-4 flex space-x-2">
-            {task.status === "todo" && (
-              <Button
-                size="sm"
-                onClick={() => onUpdateStatus(task.id, "in-progress")}
-                variant="outline"
-              >
-                Start Task
-              </Button>
-            )}
-            {task.status === "in-progress" && (
-              <Button
-                size="sm"
-                onClick={() => onUpdateStatus(task.id, "completed")}
-                variant="outline"
-                className="text-success"
-              >
-                <CheckCircle2 className="mr-1 h-4 w-4" />
-                Complete
-              </Button>
-            )}
+            <Button
+              size="sm"
+              onClick={() => onUpdateStatus(task.id, "completed")}
+              variant="outline"
+              className="text-success"
+            >
+              <CheckCircle2 className="mr-1 h-4 w-4" />
+              Complete
+            </Button>
           </div>
         )}
       </CardContent>

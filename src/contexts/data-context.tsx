@@ -1,3 +1,4 @@
+
 import { createContext, useContext, useState, useEffect } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -20,7 +21,7 @@ export interface Task {
   title: string;
   description: string;
   clientId: string;
-  status: "todo" | "in-progress" | "completed";
+  status: "pending" | "completed";
   priority: "low" | "medium" | "high";
   dueDate: Date;
   createdAt: Date;
@@ -59,7 +60,8 @@ const transformTaskFromDB = (task: any): Task => ({
   title: task.title,
   description: task.description || "",
   clientId: task.client_id,
-  status: task.status,
+  // Map database statuses to our new simplified statuses
+  status: task.status === "completed" ? "completed" : "pending",
   priority: task.priority,
   dueDate: new Date(task.due_date),
   createdAt: new Date(task.created_at),
@@ -96,7 +98,7 @@ export const DataProvider = ({ children }: { children: React.ReactNode }) => {
       const { data: tasksData, error: tasksError } = await supabase
         .from("tasks")
         .select("*")
-        .order("created_at", { ascending: false });
+        .order("created_at", { ascending: true }); // Changed to ascending for oldest first
 
       if (tasksError) {
         throw tasksError;
@@ -236,7 +238,7 @@ export const DataProvider = ({ children }: { children: React.ReactNode }) => {
       if (error) throw error;
 
       const newTask = transformTaskFromDB(data);
-      setTasks(prev => [newTask, ...prev]);
+      setTasks(prev => [...prev, newTask]); // Add to end of array to maintain chronological order
       
       toast.success("Task added successfully");
       return newTask;

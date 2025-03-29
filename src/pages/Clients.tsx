@@ -1,6 +1,6 @@
 
 import { useState } from "react";
-import { PlusIcon, SearchIcon, Grid3X3Icon, TableIcon } from "lucide-react";
+import { PlusIcon, SearchIcon, Grid3X3Icon, TableIcon, Trash, Edit } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -22,6 +22,17 @@ import {
   DialogFooter,
   DialogClose,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/use-toast";
 import { useData, Client } from "@/contexts/data-context";
@@ -31,11 +42,14 @@ import { Switch } from "@/components/ui/switch";
 import { Card, CardContent } from "@/components/ui/card";
 
 export default function Clients() {
-  const { clients, addClient, isLoading } = useData();
+  const { clients, addClient, updateClient, deleteClient, isLoading } = useData();
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
   const [isAddClientOpen, setIsAddClientOpen] = useState(false);
+  const [isEditClientOpen, setIsEditClientOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"table" | "card">("table");
+  const [clientToDelete, setClientToDelete] = useState<string | null>(null);
+  const [selectedClient, setSelectedClient] = useState<Client | null>(null);
 
   // Add client form state
   const [newClient, setNewClient] = useState({
@@ -47,9 +61,24 @@ export default function Clients() {
     avatar: "",
   });
 
+  // Edit client form state
+  const [editClient, setEditClient] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    company: "",
+    domain: "",
+    avatar: "",
+  });
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setNewClient((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleEditInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setEditClient((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleAddClient = async () => {
@@ -76,6 +105,52 @@ export default function Clients() {
     } catch (error) {
       console.error("Error adding client:", error);
     }
+  };
+
+  const handleEditClient = async () => {
+    if (!selectedClient) return;
+    if (!editClient.name || !editClient.email) {
+      toast({
+        title: "Missing information",
+        description: "Name and email are required.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      await updateClient(selectedClient.id, editClient);
+      setIsEditClientOpen(false);
+      setSelectedClient(null);
+    } catch (error) {
+      console.error("Error updating client:", error);
+    }
+  };
+
+  const handleDeleteClient = async () => {
+    if (!clientToDelete) return;
+    
+    try {
+      const success = await deleteClient(clientToDelete);
+      if (success) {
+        setClientToDelete(null);
+      }
+    } catch (error) {
+      console.error("Error deleting client:", error);
+    }
+  };
+
+  const openEditDialog = (client: Client) => {
+    setSelectedClient(client);
+    setEditClient({
+      name: client.name,
+      email: client.email,
+      phone: client.phone,
+      company: client.company,
+      domain: client.domain || "",
+      avatar: client.avatar || "",
+    });
+    setIsEditClientOpen(true);
   };
 
   // Filter clients based on search term
@@ -221,6 +296,7 @@ export default function Clients() {
                 <TableHead className="hidden md:table-cell">Phone</TableHead>
                 <TableHead className="hidden md:table-cell">Company</TableHead>
                 <TableHead className="hidden md:table-cell">Domain</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -250,12 +326,15 @@ export default function Clients() {
                       <TableCell className="hidden md:table-cell">
                         <Skeleton className="h-5 w-32" />
                       </TableCell>
+                      <TableCell>
+                        <Skeleton className="h-9 w-20 ml-auto" />
+                      </TableCell>
                     </TableRow>
                   ))
               ) : filteredClients.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={7}
+                    colSpan={8}
                     className="h-32 text-center text-muted-foreground"
                   >
                     No clients found. Try a different search or add a new client.
@@ -295,6 +374,52 @@ export default function Clients() {
                     <TableCell className="hidden md:table-cell">
                       {client.domain || "—"}
                     </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end space-x-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => openEditDialog(client)}
+                          className="h-8 w-8"
+                        >
+                          <Edit className="h-4 w-4" />
+                          <span className="sr-only">Edit</span>
+                        </Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setClientToDelete(client.id)}
+                              className="h-8 w-8 text-destructive"
+                            >
+                              <Trash className="h-4 w-4" />
+                              <span className="sr-only">Delete</span>
+                            </Button>
+                          </AlertDialogTrigger>
+                          <AlertDialogContent>
+                            <AlertDialogHeader>
+                              <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                              <AlertDialogDescription>
+                                This will permanently delete the client and all associated data.
+                                This action cannot be undone.
+                              </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                              <AlertDialogCancel onClick={() => setClientToDelete(null)}>
+                                Cancel
+                              </AlertDialogCancel>
+                              <AlertDialogAction
+                                className="bg-destructive text-destructive-foreground"
+                                onClick={handleDeleteClient}
+                              >
+                                Delete
+                              </AlertDialogAction>
+                            </AlertDialogFooter>
+                          </AlertDialogContent>
+                        </AlertDialog>
+                      </div>
+                    </TableCell>
                   </TableRow>
                 ))
               )}
@@ -330,10 +455,10 @@ export default function Clients() {
               </div>
             ) : (
               filteredClients.map((client) => (
-                <Link to={`/clients/${client.id}`} key={client.id}>
-                  <Card className="overflow-hidden transition-all hover:shadow-md">
-                    <CardContent className="p-0">
-                      <div className="border-b p-4">
+                <Card key={client.id} className="overflow-hidden transition-all hover:shadow-md">
+                  <CardContent className="p-0">
+                    <div className="border-b p-4">
+                      <div className="flex items-center justify-between">
                         <div className="flex items-center space-x-4">
                           <Avatar className="h-12 w-12">
                             <AvatarImage src={client.avatar} alt={client.name} />
@@ -346,7 +471,9 @@ export default function Clients() {
                             </AvatarFallback>
                           </Avatar>
                           <div>
-                            <h3 className="font-medium">{client.name}</h3>
+                            <Link to={`/clients/${client.id}`}>
+                              <h3 className="font-medium hover:underline">{client.name}</h3>
+                            </Link>
                             {client.company && (
                               <p className="text-sm text-muted-foreground">
                                 {client.company}
@@ -354,35 +481,160 @@ export default function Clients() {
                             )}
                           </div>
                         </div>
-                      </div>
-                      <div className="p-4">
-                        <div className="space-y-2 text-sm">
-                          <div className="flex items-center justify-between">
-                            <span className="text-muted-foreground">Email:</span>
-                            <span className="truncate max-w-[180px]">{client.email}</span>
-                          </div>
-                          {client.phone && (
-                            <div className="flex items-center justify-between">
-                              <span className="text-muted-foreground">Phone:</span>
-                              <span>{client.phone}</span>
-                            </div>
-                          )}
-                          {client.domain && (
-                            <div className="flex items-center justify-between">
-                              <span className="text-muted-foreground">Domain:</span>
-                              <span className="truncate max-w-[180px]">{client.domain}</span>
-                            </div>
-                          )}
+                        <div className="flex space-x-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => openEditDialog(client)}
+                            className="h-8 w-8"
+                          >
+                            <Edit className="h-4 w-4" />
+                            <span className="sr-only">Edit</span>
+                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => setClientToDelete(client.id)}
+                                className="h-8 w-8 text-destructive"
+                              >
+                                <Trash className="h-4 w-4" />
+                                <span className="sr-only">Delete</span>
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  This will permanently delete the client and all associated data.
+                                  This action cannot be undone.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel onClick={() => setClientToDelete(null)}>
+                                  Cancel
+                                </AlertDialogCancel>
+                                <AlertDialogAction
+                                  className="bg-destructive text-destructive-foreground"
+                                  onClick={handleDeleteClient}
+                                >
+                                  Delete
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
                         </div>
                       </div>
-                    </CardContent>
-                  </Card>
-                </Link>
+                    </div>
+                    <div className="p-4">
+                      <div className="space-y-2 text-sm">
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">Email:</span>
+                          <span className="truncate max-w-[180px]">{client.email}</span>
+                        </div>
+                        {client.phone && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-muted-foreground">Phone:</span>
+                            <span>{client.phone}</span>
+                          </div>
+                        )}
+                        {client.domain && (
+                          <div className="flex items-center justify-between">
+                            <span className="text-muted-foreground">Domain:</span>
+                            <span className="truncate max-w-[180px]">{client.domain}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
               ))
             )}
           </div>
         )}
       </div>
+
+      {/* Edit Client Dialog */}
+      <Dialog open={isEditClientOpen} onOpenChange={setIsEditClientOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Client</DialogTitle>
+            <DialogDescription>
+              Update client information.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="edit-name">Name</Label>
+              <Input
+                id="edit-name"
+                name="name"
+                value={editClient.name}
+                onChange={handleEditInputChange}
+                placeholder="John Doe"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-email">Email</Label>
+              <Input
+                id="edit-email"
+                name="email"
+                type="email"
+                value={editClient.email}
+                onChange={handleEditInputChange}
+                placeholder="john@example.com"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-phone">Phone</Label>
+              <Input
+                id="edit-phone"
+                name="phone"
+                value={editClient.phone}
+                onChange={handleEditInputChange}
+                placeholder="+1 (555) 000-0000"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-company">Company</Label>
+              <Input
+                id="edit-company"
+                name="company"
+                value={editClient.company}
+                onChange={handleEditInputChange}
+                placeholder="Acme Inc."
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-domain">Domain</Label>
+              <Input
+                id="edit-domain"
+                name="domain"
+                value={editClient.domain}
+                onChange={handleEditInputChange}
+                placeholder="example.com"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit-avatar">Avatar URL</Label>
+              <Input
+                id="edit-avatar"
+                name="avatar"
+                value={editClient.avatar}
+                onChange={handleEditInputChange}
+                placeholder="https://example.com/avatar.png"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <DialogClose asChild>
+              <Button variant="outline">Cancel</Button>
+            </DialogClose>
+            <Button onClick={handleEditClient}>Save Changes</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

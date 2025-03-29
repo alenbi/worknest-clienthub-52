@@ -44,9 +44,9 @@ import { useData, Task } from "@/contexts/data-context";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "react-router-dom";
 
+// Updated status options for tasks
 const statusOptions = [
-  { value: "todo", label: "To Do" },
-  { value: "in-progress", label: "In Progress" },
+  { value: "pending", label: "Pending" },
   { value: "completed", label: "Completed" },
 ];
 
@@ -70,7 +70,7 @@ export default function Tasks() {
     title: "",
     description: "",
     clientId: "",
-    status: "todo",
+    status: "pending", // Default is now "pending" instead of "todo"
     priority: "medium",
     dueDate: new Date(),
   });
@@ -108,7 +108,7 @@ export default function Tasks() {
         title: "",
         description: "",
         clientId: "",
-        status: "todo",
+        status: "pending",
         priority: "medium",
         dueDate: new Date(),
       });
@@ -120,7 +120,7 @@ export default function Tasks() {
 
   const handleStatusChange = async (id: string, status: string) => {
     try {
-      await updateTask(id, { status: status as "todo" | "in-progress" | "completed" });
+      await updateTask(id, { status: status as "pending" | "completed" });
     } catch (error) {
       console.error("Error updating task status:", error);
     }
@@ -132,7 +132,7 @@ export default function Tasks() {
       task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       task.description.toLowerCase().includes(searchTerm.toLowerCase());
     
-    const matchesStatus = !statusFilter || task.status === statusFilter;
+    const matchesStatus = !statusFilter || statusFilter === "all" || task.status === statusFilter;
     
     return matchesSearch && matchesStatus;
   });
@@ -410,8 +410,6 @@ export default function Tasks() {
                             "w-[130px]",
                             task.status === "completed"
                               ? "bg-green-100 text-green-700 dark:bg-green-800 dark:text-green-100"
-                              : task.status === "in-progress"
-                              ? "bg-blue-100 text-blue-700 dark:bg-blue-800 dark:text-blue-100"
                               : "bg-amber-100 text-amber-700 dark:bg-amber-800 dark:text-amber-100"
                           )}
                         >
