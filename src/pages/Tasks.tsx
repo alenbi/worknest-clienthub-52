@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { format } from "date-fns";
 import { PlusIcon, SearchIcon, ArrowDown, ArrowUp } from "lucide-react";
@@ -52,7 +51,6 @@ import { useData, Task } from "@/contexts/data-context";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "react-router-dom";
 
-// Updated status options for tasks
 const statusOptions = [
   { value: "pending", label: "Pending" },
   { value: "completed", label: "Completed" },
@@ -64,7 +62,6 @@ const priorityOptions = [
   { value: "high", label: "High" },
 ];
 
-// Add sorting options
 const sortOptions = [
   { value: "oldest", label: "Oldest First" },
   { value: "newest", label: "Newest First" },
@@ -81,7 +78,6 @@ export default function Tasks() {
   const [sortOrder, setSortOrder] = useState<string>("oldest");
   const [isAddTaskOpen, setIsAddTaskOpen] = useState(false);
 
-  // Add task form state
   const [newTask, setNewTask] = useState<
     Omit<Task, "id" | "createdAt" | "completedAt">
   >({
@@ -144,7 +140,6 @@ export default function Tasks() {
     }
   };
 
-  // Filter tasks based on search term and status filter
   const filteredTasks = tasks.filter((task) => {
     const matchesSearch =
       task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -155,7 +150,6 @@ export default function Tasks() {
     return matchesSearch && matchesStatus;
   });
 
-  // Sort the filtered tasks based on the selected sort order
   const sortedTasks = [...filteredTasks].sort((a, b) => {
     switch (sortOrder) {
       case "newest":
@@ -452,12 +446,12 @@ export default function Tasks() {
                       <Badge
                         variant="outline"
                         className={cn(
-                          "bg-opacity-10",
                           task.priority === "high"
-                            ? "bg-destructive text-white"
+                            ? "bg-destructive text-destructive-foreground"
                             : task.priority === "medium"
                             ? "bg-amber-500 text-amber-500"
-                            : "bg-muted text-muted-foreground"
+                            : "bg-muted text-muted-foreground",
+                          "bg-opacity-10"
                         )}
                       >
                         {task.priority.charAt(0).toUpperCase() +

@@ -1,4 +1,3 @@
-
 import { createContext, useContext, useState, useEffect } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -67,6 +66,30 @@ const transformTaskFromDB = (task: any): Task => ({
   createdAt: new Date(task.created_at),
   completedAt: task.completed_at ? new Date(task.completed_at) : undefined,
 });
+
+// Predefined tasks to create for new clients
+const predefinedTasks = [
+  "Domain & Hosting",
+  "Hostinger Invite",
+  "Site Installation",
+  "Find & Replace",
+  "WhatsApp Widget",
+  "Header",
+  "Footer",
+  "Home",
+  "SMTP",
+  "Woo Settings",
+  "Tracker",
+  "Resell License",
+  "Access File",
+  "Forward to Kamalesh",
+  "Connect Gateway",
+  "Anydesk Session",
+  "Update Page",
+  "Affiliate Setup",
+  "Ad Campaign",
+  "Chatbot"
+];
 
 export const DataProvider = ({ children }: { children: React.ReactNode }) => {
   const [clients, setClients] = useState<Client[]>([]);
@@ -145,12 +168,55 @@ export const DataProvider = ({ children }: { children: React.ReactNode }) => {
       const newClient = transformClientFromDB(data);
       setClients(prev => [newClient, ...prev]);
       
+      // Automatically create predefined tasks for this client
+      await createPredefinedTasks(newClient.id);
+      
       toast.success("Client added successfully");
       return newClient;
     } catch (error) {
       console.error("Error adding client:", error);
       toast.error("Failed to add client");
       throw error;
+    }
+  };
+
+  // Function to create predefined tasks for a client
+  const createPredefinedTasks = async (clientId: string) => {
+    try {
+      // Create predefined tasks with medium priority and 20 days deadline
+      const now = new Date();
+      const dueDate = new Date(now);
+      dueDate.setDate(now.getDate() + 20);
+
+      // Prepare tasks data
+      const tasksToCreate = predefinedTasks.map((title) => ({
+        title,
+        description: "",
+        client_id: clientId,
+        status: "todo", // Using "todo" for the database
+        priority: "medium",
+        due_date: dueDate.toISOString(),
+      }));
+
+      const { data, error } = await supabase
+        .from("tasks")
+        .insert(tasksToCreate)
+        .select();
+
+      if (error) {
+        throw error;
+      }
+
+      // Transform and add new tasks to local state
+      if (data) {
+        const newTasks = data.map(transformTaskFromDB);
+        setTasks(prev => [...prev, ...newTasks]);
+      }
+      
+      toast.success(`${predefinedTasks.length} tasks created for the new client`);
+    } catch (error) {
+      console.error("Error creating predefined tasks:", error);
+      toast.error("Failed to create predefined tasks");
     }
   };
 
