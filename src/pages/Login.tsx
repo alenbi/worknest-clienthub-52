@@ -46,7 +46,10 @@ const Login = () => {
       setIsSubmitting(true);
       await login(email, password);
       toast.success("Successfully signed in!");
-      // Don't need to navigate here as the useEffect will handle it
+      
+      // Force navigation here in addition to the useEffect
+      console.log("Manually navigating to dashboard after successful login");
+      navigate("/dashboard", { replace: true });
     } catch (error: any) {
       console.error("Login error:", error);
       setError(error?.message || "Failed to sign in");

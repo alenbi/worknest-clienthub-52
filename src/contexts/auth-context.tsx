@@ -1,4 +1,3 @@
-
 import { createContext, useContext, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Session, User } from "@supabase/supabase-js";
@@ -139,6 +138,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
       if (error) {
         throw error;
+      }
+
+      // Explicitly update state here for immediate feedback
+      if (data.session) {
+        console.log("Setting session and user immediately after login");
+        setSession(data.session);
+        
+        // Update user with profile data
+        const enhancedUser = await updateUserWithProfile(data.user);
+        setUser(enhancedUser);
       }
 
       // Successfully logged in
