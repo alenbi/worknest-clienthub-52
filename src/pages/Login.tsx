@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Label } from "@/components/ui/label";
 import { Link, Navigate } from "react-router-dom";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
 const Login = () => {
   const { login, isAuthenticated, isLoading } = useAuth();
@@ -18,7 +19,7 @@ const Login = () => {
 
   // Redirect if already authenticated
   if (isAuthenticated) {
-    return <Navigate to="/" />;
+    return <Navigate to="/dashboard" />;
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -30,11 +31,15 @@ const Login = () => {
     }
     
     try {
+      console.log("Attempting login with:", { email });
       setError("");
       setIsSubmitting(true);
       await login(email, password);
-    } catch (error) {
-      // Error is handled in the auth context
+      toast.success("Successfully signed in!");
+    } catch (error: any) {
+      console.error("Login error:", error);
+      setError(error?.message || "Failed to sign in");
+      toast.error(error?.message || "Failed to sign in");
     } finally {
       setIsSubmitting(false);
     }
@@ -109,8 +114,12 @@ const Login = () => {
             </div>
           </CardContent>
           <CardFooter className="flex flex-col space-y-4">
-            <Button type="submit" className="w-full" disabled={isSubmitting || isLoading}>
-              {isSubmitting || isLoading ? (
+            <Button 
+              type="submit" 
+              className="w-full" 
+              disabled={isSubmitting || isLoading}
+            >
+              {isSubmitting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Signing in...

@@ -126,15 +126,26 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   const login = async (email: string, password: string) => {
+    console.log("Login function called with email:", email);
     try {
       setIsLoading(true);
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      if (error) throw error;
+      console.log("Login response:", { data, error });
+
+      if (error) {
+        throw error;
+      }
+
+      // Successfully logged in
+      toast.success("Successfully signed in!");
+      
+      // The session update will be handled by the onAuthStateChange listener
     } catch (error: any) {
+      console.error("Login error details:", error);
       toast.error(error.message || "Failed to sign in");
       throw error;
     } finally {
@@ -171,6 +182,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setIsLoading(true);
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
+      
+      // Clean up state - will also be handled by onAuthStateChange,
+      // but good to do it explicitly here
+      setUser(null);
+      setSession(null);
     } catch (error: any) {
       toast.error(error.message || "Failed to sign out");
     } finally {
