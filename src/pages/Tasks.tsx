@@ -1,25 +1,9 @@
 
 import { useState } from "react";
-import { Link } from "react-router-dom";
-import { useData, Task } from "@/contexts/data-context";
+import { format } from "date-fns";
+import { PlusIcon, SearchIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import {
   Select,
   SelectContent,
@@ -27,31 +11,62 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
-import { Checkbox } from "@/components/ui/checkbox";
-import { format, isAfter, isBefore, isToday, startOfToday } from "date-fns";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
-  Search,
-  Plus,
-  MoreHorizontal,
-  Clock,
-  CalendarIcon,
-  AlertTriangle,
-  CheckCircle2,
-  ArrowUpRight,
-  Trash,
-  Edit,
-  FilterX,
-} from "lucide-react";
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+  DialogClose,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { useToast } from "@/components/ui/use-toast";
+import { cn } from "@/lib/utils";
+import { useData, Task } from "@/contexts/data-context";
+import { Badge } from "@/components/ui/badge";
+import { Link } from "react-router-dom";
 
-const Tasks = () => {
-  const { clients, tasks, addTask, updateTask, deleteTask, isLoading } = useData();
-  const [searchQuery, setSearchQuery] = useState("");
-  const [priorityFilter, setPriorityFilter] = useState<string>("all");
-  const [clientFilter, setClientFilter] = useState<string>("all");
-  const [isAddTaskDialogOpen, setIsAddTaskDialogOpen] = useState(false);
-  const [newTask, setNewTask] = useState<Omit<Task, "id" | "createdAt" | "completedAt">>({
+const statusOptions = [
+  { value: "todo", label: "To Do" },
+  { value: "in-progress", label: "In Progress" },
+  { value: "completed", label: "Completed" },
+];
+
+const priorityOptions = [
+  { value: "low", label: "Low" },
+  { value: "medium", label: "Medium" },
+  { value: "high", label: "High" },
+];
+
+export default function Tasks() {
+  const { tasks, clients, addTask, updateTask, isLoading } = useData();
+  const { toast } = useToast();
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [isAddTaskOpen, setIsAddTaskOpen] = useState(false);
+
+  // Add task form state
+  const [newTask, setNewTask] = useState<
+    Omit<Task, "id" | "createdAt" | "completedAt">
+  >({
     title: "",
     description: "",
     clientId: "",
@@ -60,52 +75,33 @@ const Tasks = () => {
     dueDate: new Date(),
   });
 
-  if (isLoading) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <div className="h-12 w-12 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
-      </div>
-    );
-  }
-
-  const filteredTasks = tasks.filter((task) => {
-    // Search filter
-    const matchesSearch =
-      task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      task.description?.toLowerCase().includes(searchQuery.toLowerCase() || "");
-
-    // Priority filter
-    const matchesPriority = priorityFilter === "all" || task.priority === priorityFilter;
-
-    // Client filter
-    const matchesClient = clientFilter === "all" || task.clientId === clientFilter;
-
-    return matchesSearch && matchesPriority && matchesClient;
-  });
-
-  // Sort tasks by creation date (newest last)
-  const sortByCreatedAt = (taskList: Task[]) => {
-    return [...taskList].sort((a, b) => 
-      new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-    );
+  const handleInputChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => {
+    const { name, value } = e.target;
+    setNewTask((prev) => ({ ...prev, [name]: value }));
   };
 
-  const todoTasks = sortByCreatedAt(filteredTasks.filter((task) => task.status === "todo"));
-  const inProgressTasks = sortByCreatedAt(filteredTasks.filter((task) => task.status === "in-progress"));
-  const completedTasks = sortByCreatedAt(filteredTasks.filter((task) => task.status === "completed"));
-
-  const getClientName = (clientId: string) => {
-    const client = clients.find((c) => c.id === clientId);
-    return client ? client.name : "Unknown Client";
+  const handleSelectChange = (name: string, value: string) => {
+    setNewTask((prev) => ({ ...prev, [name]: value }));
   };
 
-  const resetFilters = () => {
-    setPriorityFilter("all");
-    setClientFilter("all");
-    setSearchQuery("");
+  const handleDateChange = (date: Date | undefined) => {
+    if (date) {
+      setNewTask((prev) => ({ ...prev, dueDate: date }));
+    }
   };
 
   const handleAddTask = async () => {
+    if (!newTask.title || !newTask.clientId) {
+      toast({
+        title: "Missing information",
+        description: "Title and client are required.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       await addTask(newTask);
       setNewTask({
@@ -116,424 +112,340 @@ const Tasks = () => {
         priority: "medium",
         dueDate: new Date(),
       });
-      setIsAddTaskDialogOpen(false);
+      setIsAddTaskOpen(false);
     } catch (error) {
-      console.error("Failed to add task:", error);
+      console.error("Error adding task:", error);
     }
   };
 
-  const handleUpdateTaskStatus = async (taskId: string, newStatus: "todo" | "in-progress" | "completed") => {
+  const handleStatusChange = async (id: string, status: string) => {
     try {
-      await updateTask(taskId, { status: newStatus });
+      await updateTask(id, { status: status as "todo" | "in-progress" | "completed" });
     } catch (error) {
-      console.error("Failed to update task:", error);
+      console.error("Error updating task status:", error);
     }
   };
 
-  const handleDeleteTask = async (taskId: string) => {
-    try {
-      await deleteTask(taskId);
-    } catch (error) {
-      console.error("Failed to delete task:", error);
-    }
-  };
-
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case "high":
-        return "text-destructive";
-      case "medium":
-        return "text-warning";
-      case "low":
-        return "text-info";
-      default:
-        return "text-muted-foreground";
-    }
-  };
-
-  // Task component with numbering
-  const TaskItem = ({ task, index, status }: { task: Task; index: number; status: string }) => (
-    <div
-      key={task.id}
-      className="group relative rounded-lg border p-4 shadow-sm hover:shadow-md transition-shadow"
-    >
-      <div className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
-        {index + 1}
-      </div>
-      
-      <div className="flex items-start justify-between">
-        <div className="flex items-start space-x-4">
-          {status !== "completed" ? (
-            <Checkbox
-              id={`task-${task.id}`}
-              checked={status === "completed"}
-              onCheckedChange={() => 
-                handleUpdateTaskStatus(
-                  task.id, 
-                  status === "todo" ? "in-progress" : "completed"
-                )
-              }
-            />
-          ) : (
-            <Checkbox
-              id={`task-${task.id}`}
-              checked={true}
-              disabled
-            />
-          )}
-          <div>
-            <div className="flex items-center">
-              <h3 className={`font-medium ${status === "completed" ? "line-through text-muted-foreground" : ""}`}>
-                {task.title}
-              </h3>
-              <span className={`ml-2 text-xs px-2 py-0.5 rounded-full ${getPriorityColor(task.priority)} bg-opacity-10`}>
-                {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
-              </span>
-            </div>
-            <p className="mt-1 text-sm text-muted-foreground">{task.description}</p>
-            
-            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-              <Link
-                to={`/clients/${task.clientId}`}
-                className="flex items-center hover:text-primary"
-              >
-                <ArrowUpRight className="mr-1 h-3 w-3" />
-                {getClientName(task.clientId)}
-              </Link>
-              
-              <span className="flex items-center">
-                <CalendarIcon className="mr-1 h-3 w-3" />
-                Due: {format(new Date(task.dueDate), "MMM d, yyyy")}
-              </span>
-              
-              {isBefore(new Date(task.dueDate), startOfToday()) && status !== "completed" && (
-                <span className="flex items-center text-destructive">
-                  <AlertTriangle className="mr-1 h-3 w-3" />
-                  Overdue
-                </span>
-              )}
-              
-              {isToday(new Date(task.dueDate)) && status !== "completed" && (
-                <span className="flex items-center text-warning">
-                  <Clock className="mr-1 h-3 w-3" />
-                  Due today
-                </span>
-              )}
-              
-              {task.completedAt && (
-                <span className="flex items-center text-success">
-                  <CheckCircle2 className="mr-1 h-3 w-3" />
-                  Completed: {format(new Date(task.completedAt), "MMM d, yyyy")}
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-        
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8">
-              <MoreHorizontal className="h-4 w-4" />
-              <span className="sr-only">Open menu</span>
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            {status === "todo" && (
-              <>
-                <DropdownMenuItem
-                  onClick={() => handleUpdateTaskStatus(task.id, "in-progress")}
-                >
-                  <Clock className="mr-2 h-4 w-4" />
-                  Start Task
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => handleUpdateTaskStatus(task.id, "completed")}
-                >
-                  <CheckCircle2 className="mr-2 h-4 w-4" />
-                  Mark Complete
-                </DropdownMenuItem>
-              </>
-            )}
-            
-            {status === "in-progress" && (
-              <>
-                <DropdownMenuItem
-                  onClick={() => handleUpdateTaskStatus(task.id, "todo")}
-                >
-                  <Clock className="mr-2 h-4 w-4" />
-                  Move to To-Do
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => handleUpdateTaskStatus(task.id, "completed")}
-                >
-                  <CheckCircle2 className="mr-2 h-4 w-4" />
-                  Mark Complete
-                </DropdownMenuItem>
-              </>
-            )}
-            
-            {status === "completed" && (
-              <DropdownMenuItem
-                onClick={() => handleUpdateTaskStatus(task.id, "todo")}
-              >
-                <Clock className="mr-2 h-4 w-4" />
-                Reopen as To-Do
-              </DropdownMenuItem>
-            )}
-            
-            <DropdownMenuSeparator />
-            <DropdownMenuItem>
-              <Edit className="mr-2 h-4 w-4" />
-              Edit
-            </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => handleDeleteTask(task.id)}
-              className="text-destructive"
-            >
-              <Trash className="mr-2 h-4 w-4" />
-              Delete
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-    </div>
-  );
+  // Filter tasks based on search term and status filter
+  const filteredTasks = tasks.filter((task) => {
+    const matchesSearch =
+      task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      task.description.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    const matchesStatus = !statusFilter || task.status === statusFilter;
+    
+    return matchesSearch && matchesStatus;
+  });
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col justify-between space-y-4 md:flex-row md:items-center md:space-y-0">
-        <h2 className="text-3xl font-bold tracking-tight">Tasks</h2>
-        <div className="flex flex-wrap gap-2">
-          <div className="relative w-full sm:w-64">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              type="search"
-              placeholder="Search tasks..."
-              className="w-full pl-8"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-          </div>
-          <Dialog open={isAddTaskDialogOpen} onOpenChange={setIsAddTaskDialogOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Plus className="mr-2 h-4 w-4" />
-                Add Task
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Add New Task</DialogTitle>
-                <DialogDescription>
-                  Fill in the details to create a new task
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <label htmlFor="title" className="text-sm font-medium">
-                    Title
-                  </label>
-                  <Input
-                    id="title"
-                    placeholder="Task title"
-                    value={newTask.title}
-                    onChange={(e) =>
-                      setNewTask((prev) => ({ ...prev, title: e.target.value }))
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label htmlFor="client" className="text-sm font-medium">
-                    Client
-                  </label>
+      <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+        <div>
+          <h1 className="text-2xl font-bold">Tasks</h1>
+          <p className="text-muted-foreground">
+            Manage and track your client tasks
+          </p>
+        </div>
+        <Dialog open={isAddTaskOpen} onOpenChange={setIsAddTaskOpen}>
+          <DialogTrigger asChild>
+            <Button>
+              <PlusIcon className="mr-2 h-4 w-4" />
+              Add Task
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-[525px]">
+            <DialogHeader>
+              <DialogTitle>Add New Task</DialogTitle>
+              <DialogDescription>
+                Add a new task to your dashboard.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="title">Title</Label>
+                <Input
+                  id="title"
+                  name="title"
+                  value={newTask.title}
+                  onChange={handleInputChange}
+                  placeholder="Task title"
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="description">Description</Label>
+                <Textarea
+                  id="description"
+                  name="description"
+                  value={newTask.description}
+                  onChange={handleInputChange}
+                  placeholder="Task description"
+                  rows={3}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="clientId">Client</Label>
+                <Select
+                  value={newTask.clientId}
+                  onValueChange={(value) =>
+                    handleSelectChange("clientId", value)
+                  }
+                >
+                  <SelectTrigger id="clientId">
+                    <SelectValue placeholder="Select client" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {clients.map((client) => (
+                      <SelectItem key={client.id} value={client.id}>
+                        {client.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="grid gap-2">
+                  <Label htmlFor="priority">Priority</Label>
                   <Select
-                    value={newTask.clientId}
+                    value={newTask.priority}
                     onValueChange={(value) =>
-                      setNewTask((prev) => ({ ...prev, clientId: value }))
+                      handleSelectChange("priority", value)
                     }
                   >
-                    <SelectTrigger id="client">
-                      <SelectValue placeholder="Select client" />
+                    <SelectTrigger id="priority">
+                      <SelectValue placeholder="Select priority" />
                     </SelectTrigger>
                     <SelectContent>
-                      {clients.map((client) => (
-                        <SelectItem key={client.id} value={client.id}>
-                          {client.name}
+                      {priorityOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-2">
-                  <label htmlFor="description" className="text-sm font-medium">
-                    Description
-                  </label>
-                  <Textarea
-                    id="description"
-                    placeholder="Task description"
-                    value={newTask.description}
-                    onChange={(e) =>
-                      setNewTask((prev) => ({
-                        ...prev,
-                        description: e.target.value,
-                      }))
+                <div className="grid gap-2">
+                  <Label htmlFor="status">Status</Label>
+                  <Select
+                    value={newTask.status}
+                    onValueChange={(value) =>
+                      handleSelectChange("status", value)
                     }
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label htmlFor="priority" className="text-sm font-medium">
-                      Priority
-                    </label>
-                    <Select
-                      value={newTask.priority}
-                      onValueChange={(value: "low" | "medium" | "high") =>
-                        setNewTask((prev) => ({ ...prev, priority: value }))
-                      }
-                    >
-                      <SelectTrigger id="priority">
-                        <SelectValue placeholder="Select priority" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="low">Low</SelectItem>
-                        <SelectItem value="medium">Medium</SelectItem>
-                        <SelectItem value="high">High</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <label htmlFor="dueDate" className="text-sm font-medium">
-                      Due Date
-                    </label>
-                    <Input
-                      id="dueDate"
-                      type="date"
-                      value={format(new Date(newTask.dueDate), "yyyy-MM-dd")}
-                      onChange={(e) =>
-                        setNewTask((prev) => ({
-                          ...prev,
-                          dueDate: new Date(e.target.value),
-                        }))
-                      }
-                    />
-                  </div>
+                  >
+                    <SelectTrigger id="status">
+                      <SelectValue placeholder="Select status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {statusOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
-              <DialogFooter>
-                <Button
-                  variant="outline"
-                  onClick={() => setIsAddTaskDialogOpen(false)}
-                >
-                  Cancel
-                </Button>
-                <Button onClick={handleAddTask}>Add Task</Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+              <div className="grid gap-2">
+                <Label htmlFor="dueDate">Due Date</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant={"outline"}
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !newTask.dueDate && "text-muted-foreground"
+                      )}
+                    >
+                      {newTask.dueDate ? (
+                        format(newTask.dueDate, "PPP")
+                      ) : (
+                        <span>Pick a date</span>
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={newTask.dueDate}
+                      onSelect={handleDateChange}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
+            </div>
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button variant="outline">Cancel</Button>
+              </DialogClose>
+              <Button onClick={handleAddTask}>Add Task</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+      <div className="rounded-md border">
+        <div className="flex flex-col space-y-3 p-4 sm:flex-row sm:items-center sm:space-x-4 sm:space-y-0">
+          <div className="relative flex-1">
+            <SearchIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="search"
+              placeholder="Search tasks..."
+              className="pl-8"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </div>
+          <div>
+            <Select value={statusFilter} onValueChange={setStatusFilter}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Filter by status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">All Statuses</SelectItem>
+                {statusOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-[30px]">#</TableHead>
+              <TableHead>Title</TableHead>
+              <TableHead className="hidden md:table-cell">Client</TableHead>
+              <TableHead className="hidden md:table-cell">Due Date</TableHead>
+              <TableHead>Priority</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {isLoading ? (
+              Array(5)
+                .fill(0)
+                .map((_, index) => (
+                  <TableRow key={index}>
+                    <TableCell>
+                      <Skeleton className="h-5 w-5" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-5 w-52" />
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell">
+                      <Skeleton className="h-5 w-32" />
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell">
+                      <Skeleton className="h-5 w-24" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-5 w-16" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-8 w-24" />
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Skeleton className="ml-auto h-10 w-10" />
+                    </TableCell>
+                  </TableRow>
+                ))
+            ) : filteredTasks.length === 0 ? (
+              <TableRow>
+                <TableCell
+                  colSpan={7}
+                  className="h-32 text-center text-muted-foreground"
+                >
+                  No tasks found. Try a different search or add a new task.
+                </TableCell>
+              </TableRow>
+            ) : (
+              filteredTasks.map((task, index) => {
+                const client = clients.find((c) => c.id === task.clientId);
+                return (
+                  <TableRow key={task.id}>
+                    <TableCell className="font-medium">{index + 1}</TableCell>
+                    <TableCell>{task.title}</TableCell>
+                    <TableCell className="hidden md:table-cell">
+                      {client ? (
+                        <Link
+                          to={`/clients/${client.id}`}
+                          className="hover:underline"
+                        >
+                          {client.name}
+                        </Link>
+                      ) : (
+                        "Unknown Client"
+                      )}
+                    </TableCell>
+                    <TableCell className="hidden md:table-cell">
+                      {format(task.dueDate, "MMM d, yyyy")}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "bg-opacity-10",
+                          task.priority === "high"
+                            ? "bg-destructive text-destructive"
+                            : task.priority === "medium"
+                            ? "bg-amber-500 text-amber-500"
+                            : "bg-muted text-muted-foreground"
+                        )}
+                      >
+                        {task.priority.charAt(0).toUpperCase() +
+                          task.priority.slice(1)}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Select
+                        value={task.status}
+                        onValueChange={(value) =>
+                          handleStatusChange(task.id, value)
+                        }
+                      >
+                        <SelectTrigger
+                          className={cn(
+                            "w-[130px]",
+                            task.status === "completed"
+                              ? "bg-green-100 text-green-700 dark:bg-green-800 dark:text-green-100"
+                              : task.status === "in-progress"
+                              ? "bg-blue-100 text-blue-700 dark:bg-blue-800 dark:text-blue-100"
+                              : "bg-amber-100 text-amber-700 dark:bg-amber-800 dark:text-amber-100"
+                          )}
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {statusOptions.map((option) => (
+                            <SelectItem key={option.value} value={option.value}>
+                              {option.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 w-7 p-0"
+                        asChild
+                      >
+                        <Link to={`/tasks/${task.id}`}>
+                          <span className="sr-only">View task</span>
+                          <SearchIcon className="h-4 w-4" />
+                        </Link>
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                );
+              })
+            )}
+          </TableBody>
+        </Table>
       </div>
-
-      <div className="flex flex-wrap gap-2">
-        <Select
-          value={priorityFilter}
-          onValueChange={setPriorityFilter}
-        >
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Filter by priority" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Priorities</SelectItem>
-            <SelectItem value="high">High Priority</SelectItem>
-            <SelectItem value="medium">Medium Priority</SelectItem>
-            <SelectItem value="low">Low Priority</SelectItem>
-          </SelectContent>
-        </Select>
-
-        <Select
-          value={clientFilter}
-          onValueChange={setClientFilter}
-        >
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Filter by client" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Clients</SelectItem>
-            {clients.map((client) => (
-              <SelectItem key={client.id} value={client.id}>
-                {client.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-
-        {(priorityFilter !== "all" || clientFilter !== "all" || searchQuery) && (
-          <Button variant="ghost" onClick={resetFilters} className="h-10">
-            <FilterX className="mr-2 h-4 w-4" />
-            Reset filters
-          </Button>
-        )}
-      </div>
-
-      <Tabs defaultValue="todo">
-        <TabsList className="mb-4 grid w-full grid-cols-3">
-          <TabsTrigger value="todo">To-Do ({todoTasks.length})</TabsTrigger>
-          <TabsTrigger value="in-progress">In Progress ({inProgressTasks.length})</TabsTrigger>
-          <TabsTrigger value="completed">Completed ({completedTasks.length})</TabsTrigger>
-        </TabsList>
-        
-        <TabsContent value="todo" className="space-y-4">
-          {todoTasks.length > 0 ? (
-            todoTasks.map((task, index) => (
-              <TaskItem key={task.id} task={task} index={index} status="todo" />
-            ))
-          ) : (
-            <div className="flex h-40 flex-col items-center justify-center rounded-lg border border-dashed">
-              <p className="text-lg font-medium">No to-do tasks found</p>
-              <p className="text-sm text-muted-foreground">
-                {searchQuery || priorityFilter !== "all" || clientFilter !== "all"
-                  ? "Try adjusting your filters"
-                  : "Add a task to get started"}
-              </p>
-            </div>
-          )}
-        </TabsContent>
-        
-        <TabsContent value="in-progress" className="space-y-4">
-          {inProgressTasks.length > 0 ? (
-            inProgressTasks.map((task, index) => (
-              <TaskItem key={task.id} task={task} index={index} status="in-progress" />
-            ))
-          ) : (
-            <div className="flex h-40 flex-col items-center justify-center rounded-lg border border-dashed">
-              <p className="text-lg font-medium">No in-progress tasks found</p>
-              <p className="text-sm text-muted-foreground">
-                {searchQuery || priorityFilter !== "all" || clientFilter !== "all"
-                  ? "Try adjusting your filters"
-                  : "Start a task to see it here"}
-              </p>
-            </div>
-          )}
-        </TabsContent>
-        
-        <TabsContent value="completed" className="space-y-4">
-          {completedTasks.length > 0 ? (
-            completedTasks.map((task, index) => (
-              <TaskItem key={task.id} task={task} index={index} status="completed" />
-            ))
-          ) : (
-            <div className="flex h-40 flex-col items-center justify-center rounded-lg border border-dashed">
-              <p className="text-lg font-medium">No completed tasks found</p>
-              <p className="text-sm text-muted-foreground">
-                {searchQuery || priorityFilter !== "all" || clientFilter !== "all"
-                  ? "Try adjusting your filters"
-                  : "Complete a task to see it here"}
-              </p>
-            </div>
-          )}
-        </TabsContent>
-      </Tabs>
     </div>
   );
-};
-
-export default Tasks;
+}

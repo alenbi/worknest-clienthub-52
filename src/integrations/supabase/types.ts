@@ -14,6 +14,7 @@ export type Database = {
           avatar: string | null
           company: string | null
           created_at: string
+          domain: string | null
           email: string
           id: string
           name: string
@@ -24,6 +25,7 @@ export type Database = {
           avatar?: string | null
           company?: string | null
           created_at?: string
+          domain?: string | null
           email: string
           id?: string
           name: string
@@ -34,6 +36,7 @@ export type Database = {
           avatar?: string | null
           company?: string | null
           created_at?: string
+          domain?: string | null
           email?: string
           id?: string
           name?: string
