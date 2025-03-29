@@ -17,6 +17,7 @@ import NotFound from "./pages/NotFound";
 import Layout from "./components/layout/Layout";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
 import Settings from "./pages/Settings";
+import Index from "./pages/Index";
 
 const queryClient = new QueryClient();
 
