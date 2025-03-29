@@ -12,7 +12,7 @@ const Index = () => {
     // Only redirect if auth state has been determined
     if (!isLoading) {
       // Redirect to dashboard if authenticated, otherwise to login
-      navigate(isAuthenticated ? '/' : '/login', { replace: true });
+      navigate(isAuthenticated ? '/dashboard' : '/login', { replace: true });
     }
   }, [navigate, isAuthenticated, isLoading]);
 
