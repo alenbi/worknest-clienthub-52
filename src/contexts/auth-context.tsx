@@ -1,122 +1,106 @@
 
-import { createContext, useContext, useState, useEffect } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { Session, User } from "@supabase/supabase-js";
 import { toast } from "sonner";
 
-export interface User {
-  id: string;
-  name: string;
-  email: string;
-  role: "admin" | "team";
-  avatar?: string;
-}
-
 interface AuthContextType {
-  user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<boolean>;
-  register: (name: string, email: string, password: string) => Promise<boolean>;
-  logout: () => void;
+  user: User | null;
+  session: Session | null;
+  login: (email: string, password: string) => Promise<void>;
+  register: (email: string, password: string, name: string) => Promise<void>;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Mock users for demo purposes
-const MOCK_USERS = [
-  {
-    id: "1",
-    name: "Admin User",
-    email: "admin@example.com",
-    password: "password123", // In a real app, this would be hashed
-    role: "admin" as const,
-    avatar: "https://ui-avatars.com/api/?name=Admin+User&background=3b82f6&color=fff",
-  },
-  {
-    id: "2",
-    name: "Team Member",
-    email: "team@example.com",
-    password: "password123", // In a real app, this would be hashed
-    role: "team" as const,
-    avatar: "https://ui-avatars.com/api/?name=Team+Member&background=0ea5e9&color=fff",
-  },
-];
-
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Check if user is already logged in
-    const storedUser = localStorage.getItem("worknest-user");
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
-    }
-    setIsLoading(false);
+    // Set up auth state listener FIRST
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, currentSession) => {
+        setSession(currentSession);
+        setUser(currentSession?.user ?? null);
+        setIsLoading(false);
+      }
+    );
+
+    // THEN check for existing session
+    supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
+      setSession(currentSession);
+      setUser(currentSession?.user ?? null);
+      setIsLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  const login = async (email: string, password: string): Promise<boolean> => {
-    setIsLoading(true);
-    
+  const login = async (email: string, password: string) => {
     try {
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      const foundUser = MOCK_USERS.find(u => u.email === email && u.password === password);
-      
-      if (foundUser) {
-        const { password, ...userWithoutPassword } = foundUser;
-        setUser(userWithoutPassword);
-        localStorage.setItem("worknest-user", JSON.stringify(userWithoutPassword));
-        toast.success("Login successful");
-        return true;
-      } else {
-        toast.error("Invalid email or password");
-        return false;
-      }
-    } catch (error) {
-      toast.error("An error occurred during login");
-      return false;
+      setIsLoading(true);
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) throw error;
+    } catch (error: any) {
+      toast.error(error.message || "Failed to sign in");
+      throw error;
     } finally {
       setIsLoading(false);
     }
   };
 
-  const register = async (name: string, email: string, password: string): Promise<boolean> => {
-    setIsLoading(true);
-    
+  const register = async (email: string, password: string, name: string) => {
     try {
-      // Simulate API call delay
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      setIsLoading(true);
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: name,
+          },
+        },
+      });
+
+      if (error) throw error;
       
-      // Check if email already exists
-      if (MOCK_USERS.some(u => u.email === email)) {
-        toast.error("Email already in use");
-        return false;
-      }
-      
-      // In a real app, you would create a new user in the database
-      toast.success("Registration successful! Please login");
-      return true;
-    } catch (error) {
-      toast.error("An error occurred during registration");
-      return false;
+      toast.success("Registration successful! You can now sign in.");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to register");
+      throw error;
     } finally {
       setIsLoading(false);
     }
   };
 
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem("worknest-user");
-    toast.success("Logged out successfully");
+  const logout = async () => {
+    try {
+      setIsLoading(true);
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+    } catch (error: any) {
+      toast.error(error.message || "Failed to sign out");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
     <AuthContext.Provider
       value={{
-        user,
         isAuthenticated: !!user,
         isLoading,
+        user,
+        session,
         login,
         register,
         logout,
