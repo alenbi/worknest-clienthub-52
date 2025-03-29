@@ -72,7 +72,7 @@ const Tasks = () => {
     // Search filter
     const matchesSearch =
       task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      task.description.toLowerCase().includes(searchQuery.toLowerCase());
+      task.description?.toLowerCase().includes(searchQuery.toLowerCase() || "");
 
     // Priority filter
     const matchesPriority = priorityFilter === "all" || task.priority === priorityFilter;
@@ -83,9 +83,16 @@ const Tasks = () => {
     return matchesSearch && matchesPriority && matchesClient;
   });
 
-  const todoTasks = filteredTasks.filter((task) => task.status === "todo");
-  const inProgressTasks = filteredTasks.filter((task) => task.status === "in-progress");
-  const completedTasks = filteredTasks.filter((task) => task.status === "completed");
+  // Sort tasks by creation date (newest last)
+  const sortByCreatedAt = (taskList: Task[]) => {
+    return [...taskList].sort((a, b) => 
+      new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    );
+  };
+
+  const todoTasks = sortByCreatedAt(filteredTasks.filter((task) => task.status === "todo"));
+  const inProgressTasks = sortByCreatedAt(filteredTasks.filter((task) => task.status === "in-progress"));
+  const completedTasks = sortByCreatedAt(filteredTasks.filter((task) => task.status === "completed"));
 
   const getClientName = (clientId: string) => {
     const client = clients.find((c) => c.id === clientId);
@@ -143,6 +150,154 @@ const Tasks = () => {
         return "text-muted-foreground";
     }
   };
+
+  // Task component with numbering
+  const TaskItem = ({ task, index, status }: { task: Task; index: number; status: string }) => (
+    <div
+      key={task.id}
+      className="group relative rounded-lg border p-4 shadow-sm hover:shadow-md transition-shadow"
+    >
+      <div className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+        {index + 1}
+      </div>
+      
+      <div className="flex items-start justify-between">
+        <div className="flex items-start space-x-4">
+          {status !== "completed" ? (
+            <Checkbox
+              id={`task-${task.id}`}
+              checked={status === "completed"}
+              onCheckedChange={() => 
+                handleUpdateTaskStatus(
+                  task.id, 
+                  status === "todo" ? "in-progress" : "completed"
+                )
+              }
+            />
+          ) : (
+            <Checkbox
+              id={`task-${task.id}`}
+              checked={true}
+              disabled
+            />
+          )}
+          <div>
+            <div className="flex items-center">
+              <h3 className={`font-medium ${status === "completed" ? "line-through text-muted-foreground" : ""}`}>
+                {task.title}
+              </h3>
+              <span className={`ml-2 text-xs px-2 py-0.5 rounded-full ${getPriorityColor(task.priority)} bg-opacity-10`}>
+                {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
+              </span>
+            </div>
+            <p className="mt-1 text-sm text-muted-foreground">{task.description}</p>
+            
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <Link
+                to={`/clients/${task.clientId}`}
+                className="flex items-center hover:text-primary"
+              >
+                <ArrowUpRight className="mr-1 h-3 w-3" />
+                {getClientName(task.clientId)}
+              </Link>
+              
+              <span className="flex items-center">
+                <CalendarIcon className="mr-1 h-3 w-3" />
+                Due: {format(new Date(task.dueDate), "MMM d, yyyy")}
+              </span>
+              
+              {isBefore(new Date(task.dueDate), startOfToday()) && status !== "completed" && (
+                <span className="flex items-center text-destructive">
+                  <AlertTriangle className="mr-1 h-3 w-3" />
+                  Overdue
+                </span>
+              )}
+              
+              {isToday(new Date(task.dueDate)) && status !== "completed" && (
+                <span className="flex items-center text-warning">
+                  <Clock className="mr-1 h-3 w-3" />
+                  Due today
+                </span>
+              )}
+              
+              {task.completedAt && (
+                <span className="flex items-center text-success">
+                  <CheckCircle2 className="mr-1 h-3 w-3" />
+                  Completed: {format(new Date(task.completedAt), "MMM d, yyyy")}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+        
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-8 w-8">
+              <MoreHorizontal className="h-4 w-4" />
+              <span className="sr-only">Open menu</span>
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            {status === "todo" && (
+              <>
+                <DropdownMenuItem
+                  onClick={() => handleUpdateTaskStatus(task.id, "in-progress")}
+                >
+                  <Clock className="mr-2 h-4 w-4" />
+                  Start Task
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => handleUpdateTaskStatus(task.id, "completed")}
+                >
+                  <CheckCircle2 className="mr-2 h-4 w-4" />
+                  Mark Complete
+                </DropdownMenuItem>
+              </>
+            )}
+            
+            {status === "in-progress" && (
+              <>
+                <DropdownMenuItem
+                  onClick={() => handleUpdateTaskStatus(task.id, "todo")}
+                >
+                  <Clock className="mr-2 h-4 w-4" />
+                  Move to To-Do
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => handleUpdateTaskStatus(task.id, "completed")}
+                >
+                  <CheckCircle2 className="mr-2 h-4 w-4" />
+                  Mark Complete
+                </DropdownMenuItem>
+              </>
+            )}
+            
+            {status === "completed" && (
+              <DropdownMenuItem
+                onClick={() => handleUpdateTaskStatus(task.id, "todo")}
+              >
+                <Clock className="mr-2 h-4 w-4" />
+                Reopen as To-Do
+              </DropdownMenuItem>
+            )}
+            
+            <DropdownMenuSeparator />
+            <DropdownMenuItem>
+              <Edit className="mr-2 h-4 w-4" />
+              Edit
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => handleDeleteTask(task.id)}
+              className="text-destructive"
+            >
+              <Trash className="mr-2 h-4 w-4" />
+              Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    </div>
+  );
 
   return (
     <div className="space-y-6">
@@ -328,94 +483,8 @@ const Tasks = () => {
         
         <TabsContent value="todo" className="space-y-4">
           {todoTasks.length > 0 ? (
-            todoTasks.map((task) => (
-              <div
-                key={task.id}
-                className="group relative rounded-lg border p-4 shadow-sm hover:shadow-md transition-shadow"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex items-start space-x-4">
-                    <Checkbox
-                      id={`task-${task.id}`}
-                      checked={false}
-                      onCheckedChange={() => handleUpdateTaskStatus(task.id, "in-progress")}
-                    />
-                    <div>
-                      <div className="flex items-center">
-                        <h3 className="font-medium">{task.title}</h3>
-                        <span className={`ml-2 text-xs px-2 py-0.5 rounded-full ${getPriorityColor(task.priority)} bg-opacity-10`}>
-                          {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-sm text-muted-foreground">{task.description}</p>
-                      
-                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                        <Link
-                          to={`/clients/${task.clientId}`}
-                          className="flex items-center hover:text-primary"
-                        >
-                          <ArrowUpRight className="mr-1 h-3 w-3" />
-                          {getClientName(task.clientId)}
-                        </Link>
-                        
-                        <span className="flex items-center">
-                          <CalendarIcon className="mr-1 h-3 w-3" />
-                          Due: {format(new Date(task.dueDate), "MMM d, yyyy")}
-                        </span>
-                        
-                        {isBefore(new Date(task.dueDate), startOfToday()) && (
-                          <span className="flex items-center text-destructive">
-                            <AlertTriangle className="mr-1 h-3 w-3" />
-                            Overdue
-                          </span>
-                        )}
-                        
-                        {isToday(new Date(task.dueDate)) && (
-                          <span className="flex items-center text-warning">
-                            <Clock className="mr-1 h-3 w-3" />
-                            Due today
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8">
-                        <MoreHorizontal className="h-4 w-4" />
-                        <span className="sr-only">Open menu</span>
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem
-                        onClick={() => handleUpdateTaskStatus(task.id, "in-progress")}
-                      >
-                        <Clock className="mr-2 h-4 w-4" />
-                        Start Task
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => handleUpdateTaskStatus(task.id, "completed")}
-                      >
-                        <CheckCircle2 className="mr-2 h-4 w-4" />
-                        Mark Complete
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem>
-                        <Edit className="mr-2 h-4 w-4" />
-                        Edit
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => handleDeleteTask(task.id)}
-                        className="text-destructive"
-                      >
-                        <Trash className="mr-2 h-4 w-4" />
-                        Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              </div>
+            todoTasks.map((task, index) => (
+              <TaskItem key={task.id} task={task} index={index} status="todo" />
             ))
           ) : (
             <div className="flex h-40 flex-col items-center justify-center rounded-lg border border-dashed">
@@ -431,94 +500,8 @@ const Tasks = () => {
         
         <TabsContent value="in-progress" className="space-y-4">
           {inProgressTasks.length > 0 ? (
-            inProgressTasks.map((task) => (
-              <div
-                key={task.id}
-                className="group relative rounded-lg border p-4 shadow-sm hover:shadow-md transition-shadow"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex items-start space-x-4">
-                    <Checkbox
-                      id={`task-${task.id}`}
-                      checked={false}
-                      onCheckedChange={() => handleUpdateTaskStatus(task.id, "completed")}
-                    />
-                    <div>
-                      <div className="flex items-center">
-                        <h3 className="font-medium">{task.title}</h3>
-                        <span className={`ml-2 text-xs px-2 py-0.5 rounded-full ${getPriorityColor(task.priority)} bg-opacity-10`}>
-                          {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-sm text-muted-foreground">{task.description}</p>
-                      
-                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                        <Link
-                          to={`/clients/${task.clientId}`}
-                          className="flex items-center hover:text-primary"
-                        >
-                          <ArrowUpRight className="mr-1 h-3 w-3" />
-                          {getClientName(task.clientId)}
-                        </Link>
-                        
-                        <span className="flex items-center">
-                          <CalendarIcon className="mr-1 h-3 w-3" />
-                          Due: {format(new Date(task.dueDate), "MMM d, yyyy")}
-                        </span>
-                        
-                        {isBefore(new Date(task.dueDate), startOfToday()) && (
-                          <span className="flex items-center text-destructive">
-                            <AlertTriangle className="mr-1 h-3 w-3" />
-                            Overdue
-                          </span>
-                        )}
-                        
-                        {isToday(new Date(task.dueDate)) && (
-                          <span className="flex items-center text-warning">
-                            <Clock className="mr-1 h-3 w-3" />
-                            Due today
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8">
-                        <MoreHorizontal className="h-4 w-4" />
-                        <span className="sr-only">Open menu</span>
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem
-                        onClick={() => handleUpdateTaskStatus(task.id, "todo")}
-                      >
-                        <Clock className="mr-2 h-4 w-4" />
-                        Move to To-Do
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => handleUpdateTaskStatus(task.id, "completed")}
-                      >
-                        <CheckCircle2 className="mr-2 h-4 w-4" />
-                        Mark Complete
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem>
-                        <Edit className="mr-2 h-4 w-4" />
-                        Edit
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => handleDeleteTask(task.id)}
-                        className="text-destructive"
-                      >
-                        <Trash className="mr-2 h-4 w-4" />
-                        Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              </div>
+            inProgressTasks.map((task, index) => (
+              <TaskItem key={task.id} task={task} index={index} status="in-progress" />
             ))
           ) : (
             <div className="flex h-40 flex-col items-center justify-center rounded-lg border border-dashed">
@@ -534,79 +517,8 @@ const Tasks = () => {
         
         <TabsContent value="completed" className="space-y-4">
           {completedTasks.length > 0 ? (
-            completedTasks.map((task) => (
-              <div
-                key={task.id}
-                className="group relative rounded-lg border p-4 shadow-sm hover:shadow-md transition-shadow"
-              >
-                <div className="flex items-start justify-between">
-                  <div className="flex items-start space-x-4">
-                    <Checkbox
-                      id={`task-${task.id}`}
-                      checked={true}
-                      disabled
-                    />
-                    <div>
-                      <div className="flex items-center">
-                        <h3 className="font-medium line-through text-muted-foreground">
-                          {task.title}
-                        </h3>
-                        <span className={`ml-2 text-xs px-2 py-0.5 rounded-full ${getPriorityColor(task.priority)} bg-opacity-10`}>
-                          {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-sm text-muted-foreground">{task.description}</p>
-                      
-                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                        <Link
-                          to={`/clients/${task.clientId}`}
-                          className="flex items-center hover:text-primary"
-                        >
-                          <ArrowUpRight className="mr-1 h-3 w-3" />
-                          {getClientName(task.clientId)}
-                        </Link>
-                        
-                        <span className="flex items-center">
-                          <CalendarIcon className="mr-1 h-3 w-3" />
-                          Due: {format(new Date(task.dueDate), "MMM d, yyyy")}
-                        </span>
-                        
-                        {task.completedAt && (
-                          <span className="flex items-center text-success">
-                            <CheckCircle2 className="mr-1 h-3 w-3" />
-                            Completed: {format(new Date(task.completedAt), "MMM d, yyyy")}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8">
-                        <MoreHorizontal className="h-4 w-4" />
-                        <span className="sr-only">Open menu</span>
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem
-                        onClick={() => handleUpdateTaskStatus(task.id, "todo")}
-                      >
-                        <Clock className="mr-2 h-4 w-4" />
-                        Reopen as To-Do
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        onClick={() => handleDeleteTask(task.id)}
-                        className="text-destructive"
-                      >
-                        <Trash className="mr-2 h-4 w-4" />
-                        Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              </div>
+            completedTasks.map((task, index) => (
+              <TaskItem key={task.id} task={task} index={index} status="completed" />
             ))
           ) : (
             <div className="flex h-40 flex-col items-center justify-center rounded-lg border border-dashed">
