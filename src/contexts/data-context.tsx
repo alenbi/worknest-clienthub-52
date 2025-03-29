@@ -220,11 +220,21 @@ export const DataProvider = ({ children }: { children: React.ReactNode }) => {
   const addTask = async (taskData: Omit<Task, "id" | "createdAt" | "completedAt">): Promise<Task> => {
     try {
       // Prepare data for database
+      // Map our frontend status values to database accepted values
+      // The database appears to only accept "todo", "in-progress", or "completed"
+      let dbStatus = "todo"; // Default fallback
+      
+      if (taskData.status === "pending") {
+        dbStatus = "todo"; // Map "pending" to "todo" for database
+      } else if (taskData.status === "completed") {
+        dbStatus = "completed";
+      }
+      
       const dbTask = {
         title: taskData.title,
         description: taskData.description,
         client_id: taskData.clientId,
-        status: taskData.status,
+        status: dbStatus, // Use the mapped status value
         priority: taskData.priority,
         due_date: new Date(taskData.dueDate).toISOString(),
       };
@@ -261,7 +271,12 @@ export const DataProvider = ({ children }: { children: React.ReactNode }) => {
       
       // Handle status update and completed_at
       if (updates.status !== undefined) {
-        dbUpdates.status = updates.status;
+        // Map our frontend status to database status
+        if (updates.status === "pending") {
+          dbUpdates.status = "todo";
+        } else if (updates.status === "completed") {
+          dbUpdates.status = "completed";
+        }
         
         // If status is changing to completed, set completed_at
         const task = tasks.find(t => t.id === id);
