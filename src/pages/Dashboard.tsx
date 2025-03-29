@@ -1,4 +1,3 @@
-
 import { useAuth } from "@/contexts/auth-context";
 import { useData } from "@/contexts/data-context";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -43,8 +42,7 @@ const Dashboard = () => {
   }
 
   // Count tasks by status
-  const todoTasks = tasks.filter((task) => task.status === "todo");
-  const inProgressTasks = tasks.filter((task) => task.status === "in-progress");
+  const pendingTasks = tasks.filter((task) => task.status === "pending");
   const completedTasks = tasks.filter((task) => task.status === "completed");
 
   // Count high priority tasks
@@ -62,12 +60,12 @@ const Dashboard = () => {
 
   // Prepare data for task status pie chart
   const statusChartData = {
-    labels: ["To-Do", "In Progress", "Completed"],
+    labels: ["Pending", "Completed"],
     datasets: [
       {
-        data: [todoTasks.length, inProgressTasks.length, completedTasks.length],
-        backgroundColor: ["#f97316", "#3b82f6", "#10b981"],
-        borderColor: ["#f97316", "#3b82f6", "#10b981"],
+        data: [pendingTasks.length, completedTasks.length],
+        backgroundColor: ["#f97316", "#10b981"],
+        borderColor: ["#f97316", "#10b981"],
         borderWidth: 1,
       },
     ],
@@ -159,7 +157,7 @@ const Dashboard = () => {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {todoTasks.length + inProgressTasks.length}
+              {pendingTasks.length + completedTasks.length}
             </div>
             <p className="text-xs text-muted-foreground">
               Tasks in progress or to-do
