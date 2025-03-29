@@ -27,6 +27,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<UserWithProfile | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [authInitialized, setAuthInitialized] = useState(false);
 
   // Function to fetch profile data
   const fetchProfile = async (userId: string) => {
@@ -65,9 +66,35 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   useEffect(() => {
-    // Set up auth state listener FIRST
+    const initializeAuth = async () => {
+      try {
+        // Check for existing session first
+        const { data: { session: currentSession } } = await supabase.auth.getSession();
+        
+        setSession(currentSession);
+        
+        if (currentSession?.user) {
+          const enhancedUser = await updateUserWithProfile(currentSession.user);
+          setUser(enhancedUser);
+        } else {
+          setUser(null);
+        }
+      } catch (error) {
+        console.error("Error initializing auth:", error);
+        setUser(null);
+        setSession(null);
+      } finally {
+        setIsLoading(false);
+        setAuthInitialized(true);
+      }
+    };
+
+    initializeAuth();
+
+    // Set up auth state listener after initial check
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, currentSession) => {
+        console.log("Auth state changed:", event);
         setSession(currentSession);
         
         if (currentSession?.user) {
@@ -81,21 +108,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       }
     );
 
-    // THEN check for existing session
-    supabase.auth.getSession().then(async ({ data: { session: currentSession } }) => {
-      setSession(currentSession);
-      
-      if (currentSession?.user) {
-        const enhancedUser = await updateUserWithProfile(currentSession.user);
-        setUser(enhancedUser);
-      } else {
-        setUser(null);
-      }
-      
-      setIsLoading(false);
-    });
-
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+    };
   }, []);
 
   const login = async (email: string, password: string) => {
@@ -192,7 +207,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     <AuthContext.Provider
       value={{
         isAuthenticated: !!user,
-        isLoading,
+        isLoading: isLoading && !authInitialized, // Only show loading if we're still initializing
         user,
         session,
         login,
