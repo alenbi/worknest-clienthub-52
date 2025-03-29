@@ -1,11 +1,11 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Link, Navigate } from "react-router-dom";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -16,9 +16,19 @@ const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const navigate = useNavigate();
 
-  // Redirect if already authenticated
-  if (isAuthenticated) {
+  // Effect to handle redirect after authentication changes
+  useEffect(() => {
+    if (isAuthenticated && !isLoading) {
+      console.log("User is authenticated, redirecting to dashboard");
+      navigate("/dashboard", { replace: true });
+    }
+  }, [isAuthenticated, isLoading, navigate]);
+
+  // Regular redirect check (still useful for initial load)
+  if (isAuthenticated && !isLoading) {
+    console.log("Rendering redirect to dashboard");
     return <Navigate to="/dashboard" />;
   }
 
@@ -36,6 +46,7 @@ const Login = () => {
       setIsSubmitting(true);
       await login(email, password);
       toast.success("Successfully signed in!");
+      // Don't need to navigate here as the useEffect will handle it
     } catch (error: any) {
       console.error("Login error:", error);
       setError(error?.message || "Failed to sign in");

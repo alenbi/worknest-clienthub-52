@@ -1,14 +1,21 @@
 
-import { Navigate, Outlet } from "react-router-dom";
+import { Navigate, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/auth-context";
 import { useEffect } from "react";
 
 const ProtectedRoute = () => {
   const { isAuthenticated, isLoading } = useAuth();
+  const navigate = useNavigate();
 
   useEffect(() => {
     console.log("ProtectedRoute state:", { isAuthenticated, isLoading });
-  }, [isAuthenticated, isLoading]);
+    
+    // If authentication is complete and user is not authenticated, redirect to login
+    if (!isLoading && !isAuthenticated) {
+      console.log("User not authenticated, redirecting to login");
+      navigate("/login", { replace: true });
+    }
+  }, [isAuthenticated, isLoading, navigate]);
 
   // Only show loading if we're genuinely still checking auth
   if (isLoading) {

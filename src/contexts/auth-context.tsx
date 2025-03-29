@@ -97,6 +97,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         
         // Check for existing session
         const { data: { session: currentSession } } = await supabase.auth.getSession();
+        console.log("Current session check:", currentSession ? "Session exists" : "No session");
         setSession(currentSession);
         
         if (currentSession?.user) {
@@ -108,7 +109,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         
         setIsLoading(false);
         setAuthInitialized(true);
-        console.log("Auth initialization complete");
+        console.log("Auth initialization complete, isAuthenticated:", !!currentSession?.user);
 
         return () => {
           subscription.unsubscribe();
