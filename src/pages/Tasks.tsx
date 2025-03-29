@@ -1,7 +1,7 @@
 
 import { useState } from "react";
 import { format } from "date-fns";
-import { PlusIcon, SearchIcon } from "lucide-react";
+import { PlusIcon, SearchIcon, ArrowDown, ArrowUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -38,6 +38,14 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
 import { useData, Task } from "@/contexts/data-context";
@@ -56,11 +64,21 @@ const priorityOptions = [
   { value: "high", label: "High" },
 ];
 
+// Add sorting options
+const sortOptions = [
+  { value: "oldest", label: "Oldest First" },
+  { value: "newest", label: "Newest First" },
+  { value: "priority-high", label: "Priority: High to Low" },
+  { value: "priority-low", label: "Priority: Low to High" },
+  { value: "due-date", label: "Due Date" },
+];
+
 export default function Tasks() {
   const { tasks, clients, addTask, updateTask, isLoading } = useData();
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("");
+  const [sortOrder, setSortOrder] = useState<string>("oldest");
   const [isAddTaskOpen, setIsAddTaskOpen] = useState(false);
 
   // Add task form state
@@ -70,7 +88,7 @@ export default function Tasks() {
     title: "",
     description: "",
     clientId: "",
-    status: "pending", // Default is now "pending" instead of "todo"
+    status: "pending",
     priority: "medium",
     dueDate: new Date(),
   });
@@ -135,6 +153,28 @@ export default function Tasks() {
     const matchesStatus = !statusFilter || statusFilter === "all" || task.status === statusFilter;
     
     return matchesSearch && matchesStatus;
+  });
+
+  // Sort the filtered tasks based on the selected sort order
+  const sortedTasks = [...filteredTasks].sort((a, b) => {
+    switch (sortOrder) {
+      case "newest":
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      case "oldest":
+        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      case "priority-high":
+        const priorityOrder = { high: 3, medium: 2, low: 1 };
+        return (priorityOrder[b.priority as keyof typeof priorityOrder] || 0) - 
+               (priorityOrder[a.priority as keyof typeof priorityOrder] || 0);
+      case "priority-low":
+        const priorityOrderReverse = { high: 3, medium: 2, low: 1 };
+        return (priorityOrderReverse[a.priority as keyof typeof priorityOrderReverse] || 0) - 
+               (priorityOrderReverse[b.priority as keyof typeof priorityOrderReverse] || 0);
+      case "due-date":
+        return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+      default:
+        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    }
   });
 
   return (
@@ -294,7 +334,7 @@ export default function Tasks() {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </div>
-          <div>
+          <div className="flex flex-col space-y-3 sm:flex-row sm:space-x-4 sm:space-y-0">
             <Select value={statusFilter} onValueChange={setStatusFilter}>
               <SelectTrigger className="w-[180px]">
                 <SelectValue placeholder="Filter by status" />
@@ -308,6 +348,32 @@ export default function Tasks() {
                 ))}
               </SelectContent>
             </Select>
+            
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="w-[180px] justify-between">
+                  <span>Sort by: {sortOptions.find(o => o.value === sortOrder)?.label}</span>
+                  {sortOrder.includes("newest") ? <ArrowDown className="h-4 w-4 ml-2" /> : 
+                   sortOrder.includes("oldest") ? <ArrowUp className="h-4 w-4 ml-2" /> : null}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuLabel>Sort Options</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {sortOptions.map((option) => (
+                  <DropdownMenuItem 
+                    key={option.value}
+                    className={cn(
+                      "cursor-pointer",
+                      sortOrder === option.value && "bg-accent text-accent-foreground"
+                    )}
+                    onClick={() => setSortOrder(option.value)}
+                  >
+                    {option.label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
         <Table>
@@ -351,7 +417,7 @@ export default function Tasks() {
                     </TableCell>
                   </TableRow>
                 ))
-            ) : filteredTasks.length === 0 ? (
+            ) : sortedTasks.length === 0 ? (
               <TableRow>
                 <TableCell
                   colSpan={7}
@@ -361,7 +427,7 @@ export default function Tasks() {
                 </TableCell>
               </TableRow>
             ) : (
-              filteredTasks.map((task, index) => {
+              sortedTasks.map((task, index) => {
                 const client = clients.find((c) => c.id === task.clientId);
                 return (
                   <TableRow key={task.id}>
@@ -388,7 +454,7 @@ export default function Tasks() {
                         className={cn(
                           "bg-opacity-10",
                           task.priority === "high"
-                            ? "bg-destructive text-destructive"
+                            ? "bg-destructive text-white"
                             : task.priority === "medium"
                             ? "bg-amber-500 text-amber-500"
                             : "bg-muted text-muted-foreground"

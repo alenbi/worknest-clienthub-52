@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useData, Task } from "@/contexts/data-context";
@@ -90,7 +89,7 @@ const ClientDetail = () => {
   const getPriorityColor = (priority: string) => {
     switch (priority) {
       case "high":
-        return "text-destructive";
+        return "text-white";
       case "medium":
         return "text-warning";
       case "low":
