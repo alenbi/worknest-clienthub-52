@@ -16,12 +16,13 @@ import Register from "./pages/Register";
 import NotFound from "./pages/NotFound";
 import Layout from "./components/layout/Layout";
 import ProtectedRoute from "./components/auth/ProtectedRoute";
+import Settings from "./pages/Settings";
 
 const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <ThemeProvider defaultTheme="light" storageKey="worknest-theme">
+    <ThemeProvider defaultTheme="light" storageKey="digitalshopi-theme">
       <AuthProvider>
         <DataProvider>
           <TooltipProvider>
@@ -36,6 +37,7 @@ const App = () => (
                   <Route path="/clients" element={<Clients />} />
                   <Route path="/clients/:id" element={<ClientDetail />} />
                   <Route path="/tasks" element={<Tasks />} />
+                  <Route path="/settings" element={<Settings />} />
                 </Route>
               </Route>
               <Route path="*" element={<NotFound />} />

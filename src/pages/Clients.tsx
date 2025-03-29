@@ -47,6 +47,7 @@ const Clients = () => {
     email: "",
     phone: "",
     company: "",
+    domain: "",
   });
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
@@ -62,7 +63,8 @@ const Clients = () => {
   const filteredClients = clients.filter((client) =>
     client.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
     client.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    client.company?.toLowerCase().includes(searchQuery.toLowerCase())
+    client.company?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    client.domain?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const getClientTaskCount = (clientId: string) => {
@@ -90,6 +92,7 @@ const Clients = () => {
       email: "",
       phone: "",
       company: "",
+      domain: "",
     });
     setIsAddDialogOpen(false);
   };
@@ -98,9 +101,9 @@ const Clients = () => {
     await deleteClient(clientId);
   };
 
-  // Sort clients by creation date (newest last)
+  // Sort clients by creation date (newest first)
   const sortedClients = [...filteredClients].sort((a, b) => 
-    new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   );
 
   return (
@@ -201,6 +204,19 @@ const Clients = () => {
                       }
                     />
                   </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium" htmlFor="domain">
+                      Domain
+                    </label>
+                    <Input
+                      id="domain"
+                      placeholder="example.com"
+                      value={newClient.domain}
+                      onChange={(e) =>
+                        setNewClient((prev) => ({ ...prev, domain: e.target.value }))
+                      }
+                    />
+                  </div>
                 </div>
                 <DialogFooter>
                   <Button
@@ -277,6 +293,12 @@ const Clients = () => {
                     <span className="text-muted-foreground">Phone:</span>
                     <span>{client.phone}</span>
                   </div>
+                  {client.domain && (
+                    <div className="flex justify-between py-1">
+                      <span className="text-muted-foreground">Domain:</span>
+                      <span className="truncate max-w-[180px]">{client.domain}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between py-1">
                     <span className="text-muted-foreground">Client since:</span>
                     <span>{format(new Date(client.createdAt), "MMM d, yyyy")}</span>
@@ -320,6 +342,7 @@ const Clients = () => {
                 <TableHead>Client</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Company</TableHead>
+                <TableHead>Domain</TableHead>
                 <TableHead>Phone</TableHead>
                 <TableHead>Since</TableHead>
                 <TableHead>Tasks</TableHead>
@@ -341,6 +364,7 @@ const Clients = () => {
                   </TableCell>
                   <TableCell>{client.email}</TableCell>
                   <TableCell>{client.company}</TableCell>
+                  <TableCell>{client.domain}</TableCell>
                   <TableCell>{client.phone}</TableCell>
                   <TableCell>{format(new Date(client.createdAt), "MMM d, yyyy")}</TableCell>
                   <TableCell>
@@ -377,7 +401,7 @@ const Clients = () => {
               ))}
               {filteredClients.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={8} className="h-24 text-center">
+                  <TableCell colSpan={9} className="h-24 text-center">
                     <div>
                       <p className="text-lg font-medium">No clients found</p>
                       <p className="text-sm text-muted-foreground">

@@ -5,7 +5,6 @@ import {
   Users,
   CheckSquare,
   Settings,
-  HelpCircle,
   LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -40,11 +39,6 @@ export function Sidebar() {
       icon: Settings,
       path: "/settings",
     },
-    {
-      title: "Help",
-      icon: HelpCircle,
-      path: "/help",
-    },
   ];
 
   return (
@@ -55,7 +49,7 @@ export function Sidebar() {
       <div className="flex h-full flex-col">
         <div className="flex h-16 items-center border-b px-6">
           <h2 className="text-lg font-semibold text-sidebar-foreground">
-            WorkNest
+            Digitalshopi
             <span className="text-primary">.</span>
           </h2>
         </div>

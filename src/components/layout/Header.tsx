@@ -1,5 +1,6 @@
 
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Bell, Menu, Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ThemeToggle } from "./ThemeToggle";
@@ -18,9 +19,14 @@ import { Input } from "@/components/ui/input";
 export function Header() {
   const { user, logout } = useAuth();
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const navigate = useNavigate();
 
   const handleLogout = () => {
     logout();
+  };
+
+  const handleProfileClick = () => {
+    navigate('/settings');
   };
 
   const getInitials = (name: string) => {
@@ -51,6 +57,10 @@ export function Header() {
       </div>
 
       <div className="flex flex-1 items-center">
+        <div className="mr-4 hidden lg:block">
+          <h1 className="text-lg font-semibold">Digitalshopi Client Management</h1>
+        </div>
+        
         {isSearchOpen ? (
           <div className="relative w-full max-w-md">
             <Input
@@ -107,8 +117,8 @@ export function Header() {
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>Profile</DropdownMenuItem>
-            <DropdownMenuItem>Settings</DropdownMenuItem>
+            <DropdownMenuItem onClick={handleProfileClick}>Profile</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => navigate('/settings')}>Settings</DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={handleLogout}>
               Log out

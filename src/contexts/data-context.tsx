@@ -1,4 +1,3 @@
-
 import { createContext, useContext, useState, useEffect } from "react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -11,6 +10,7 @@ export interface Client {
   email: string;
   phone: string;
   company: string;
+  domain?: string;
   avatar?: string;
   createdAt: Date;
 }
@@ -49,6 +49,7 @@ const transformClientFromDB = (client: any): Client => ({
   email: client.email,
   phone: client.phone || "",
   company: client.company || "",
+  domain: client.domain || "",
   avatar: client.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(client.name)}&background=6366f1&color=fff`,
   createdAt: new Date(client.created_at),
 });
@@ -127,6 +128,7 @@ export const DataProvider = ({ children }: { children: React.ReactNode }) => {
         email: clientData.email,
         phone: clientData.phone,
         company: clientData.company,
+        domain: clientData.domain,
         avatar: clientData.avatar,
       };
 
@@ -158,6 +160,7 @@ export const DataProvider = ({ children }: { children: React.ReactNode }) => {
       if (updates.email !== undefined) dbUpdates.email = updates.email;
       if (updates.phone !== undefined) dbUpdates.phone = updates.phone;
       if (updates.company !== undefined) dbUpdates.company = updates.company;
+      if (updates.domain !== undefined) dbUpdates.domain = updates.domain;
       if (updates.avatar !== undefined) dbUpdates.avatar = updates.avatar;
       dbUpdates.updated_at = new Date().toISOString();
 
