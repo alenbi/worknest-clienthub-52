@@ -2,14 +2,19 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Skeleton } from "@/components/ui/skeleton";
+import { useAuth } from "@/contexts/auth-context";
 
 const Index = () => {
   const navigate = useNavigate();
+  const { isAuthenticated, isLoading } = useAuth();
   
   useEffect(() => {
-    // Redirect to the dashboard page
-    navigate('/');
-  }, [navigate]);
+    // Only redirect if auth state has been determined
+    if (!isLoading) {
+      // Redirect to dashboard if authenticated, otherwise to login
+      navigate(isAuthenticated ? '/' : '/login', { replace: true });
+    }
+  }, [navigate, isAuthenticated, isLoading]);
 
   // Display a loading skeleton while redirecting
   return (

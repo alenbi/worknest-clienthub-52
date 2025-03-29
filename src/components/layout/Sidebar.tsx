@@ -1,4 +1,3 @@
-
 import { NavLink } from "react-router-dom";
 import {
   BarChart3,
@@ -19,7 +18,7 @@ export function Sidebar() {
     {
       title: "Dashboard",
       icon: BarChart3,
-      path: "/",
+      path: "/dashboard",
     },
     {
       title: "Clients",

@@ -19,7 +19,15 @@ import ProtectedRoute from "./components/auth/ProtectedRoute";
 import Settings from "./pages/Settings";
 import Index from "./pages/Index";
 
-const queryClient = new QueryClient();
+// Create query client with default options to avoid state issues on refresh
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      retry: 1,
+    },
+  },
+});
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -30,11 +38,12 @@ const App = () => (
             <Toaster />
             <Sonner />
             <Routes>
+              <Route path="/" element={<Index />} />
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
               <Route element={<ProtectedRoute />}>
                 <Route element={<Layout />}>
-                  <Route path="/" element={<Dashboard />} />
+                  <Route path="/dashboard" element={<Dashboard />} />
                   <Route path="/clients" element={<Clients />} />
                   <Route path="/clients/:id" element={<ClientDetail />} />
                   <Route path="/tasks" element={<Tasks />} />
