@@ -36,7 +36,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         .from("profiles")
         .select("*")
         .eq("id", userId)
-        .single();
+        .maybeSingle();
 
       if (error) {
         console.error("Error fetching profile:", error);
@@ -68,9 +68,35 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     const initializeAuth = async () => {
       try {
-        // Check for existing session first
-        const { data: { session: currentSession } } = await supabase.auth.getSession();
+        setIsLoading(true);
+        console.log("Initializing auth state...");
         
+        // Set up auth state listener first to catch any events during initialization
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(
+          async (event, currentSession) => {
+            console.log("Auth state changed:", event);
+            
+            // Only update state if we're initialized to avoid race conditions
+            if (authInitialized) {
+              setSession(currentSession);
+              
+              if (currentSession?.user) {
+                // Defer profile fetch to avoid Supabase auth deadlocks
+                setTimeout(async () => {
+                  const enhancedUser = await updateUserWithProfile(currentSession.user);
+                  setUser(enhancedUser);
+                  setIsLoading(false);
+                }, 0);
+              } else {
+                setUser(null);
+                setIsLoading(false);
+              }
+            }
+          }
+        );
+        
+        // Check for existing session
+        const { data: { session: currentSession } } = await supabase.auth.getSession();
         setSession(currentSession);
         
         if (currentSession?.user) {
@@ -79,38 +105,24 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         } else {
           setUser(null);
         }
+        
+        setIsLoading(false);
+        setAuthInitialized(true);
+        console.log("Auth initialization complete");
+
+        return () => {
+          subscription.unsubscribe();
+        };
       } catch (error) {
         console.error("Error initializing auth:", error);
         setUser(null);
         setSession(null);
-      } finally {
         setIsLoading(false);
         setAuthInitialized(true);
       }
     };
 
     initializeAuth();
-
-    // Set up auth state listener after initial check
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, currentSession) => {
-        console.log("Auth state changed:", event);
-        setSession(currentSession);
-        
-        if (currentSession?.user) {
-          const enhancedUser = await updateUserWithProfile(currentSession.user);
-          setUser(enhancedUser);
-        } else {
-          setUser(null);
-        }
-        
-        setIsLoading(false);
-      }
-    );
-
-    return () => {
-      subscription.unsubscribe();
-    };
   }, []);
 
   const login = async (email: string, password: string) => {

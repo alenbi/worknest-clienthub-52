@@ -1,9 +1,14 @@
 
 import { Navigate, Outlet } from "react-router-dom";
 import { useAuth } from "@/contexts/auth-context";
+import { useEffect } from "react";
 
 const ProtectedRoute = () => {
   const { isAuthenticated, isLoading } = useAuth();
+
+  useEffect(() => {
+    console.log("ProtectedRoute state:", { isAuthenticated, isLoading });
+  }, [isAuthenticated, isLoading]);
 
   // Only show loading if we're genuinely still checking auth
   if (isLoading) {
