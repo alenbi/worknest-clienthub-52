@@ -72,8 +72,8 @@ Since your application uses Supabase, you need to set the following environment 
 1. Go to your site settings in Netlify.
 2. Navigate to "Build & deploy" > "Environment variables".
 3. Add the following variables:
-   - `VITE_SUPABASE_URL`: Your Supabase project URL
-   - `VITE_SUPABASE_ANON_KEY`: Your Supabase anonymous key
+   - `VITE_SUPABASE_URL`: https://xmyqiplgjcaxpnojdxmk.supabase.co
+   - `VITE_SUPABASE_ANON_KEY`: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhteXFpcGxnamNheHBub2pkeG1rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDMyMjQ4MjksImV4cCI6MjA1ODgwMDgyOX0.tzxkW_UrwoRP5P1WI8AtH_L92qXbVRsv8TZK-s3AaFk
 
 ## Step 4: Custom Domain (Optional)
 
