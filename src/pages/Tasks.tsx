@@ -1,6 +1,7 @@
+
 import { useState } from "react";
 import { format } from "date-fns";
-import { PlusIcon, SearchIcon, ArrowDown, ArrowUp, Edit, Download } from "lucide-react";
+import { PlusIcon, SearchIcon, ArrowDown, ArrowUp, Edit, Download, Filter } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -76,6 +77,7 @@ export default function Tasks() {
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("");
+  const [priorityFilter, setPriorityFilter] = useState<string>("");
   const [sortOrder, setSortOrder] = useState<string>("oldest");
   const [isAddTaskOpen, setIsAddTaskOpen] = useState(false);
   const [isEditTaskOpen, setIsEditTaskOpen] = useState(false);
@@ -252,7 +254,9 @@ export default function Tasks() {
     
     const matchesStatus = !statusFilter || statusFilter === "all" || task.status === statusFilter;
     
-    return matchesSearch && matchesStatus;
+    const matchesPriority = !priorityFilter || priorityFilter === "all" || task.priority === priorityFilter;
+    
+    return matchesSearch && matchesStatus && matchesPriority;
   });
 
   const sortedTasks = [...filteredTasks].sort((a, b) => {
@@ -447,6 +451,20 @@ export default function Tasks() {
               <SelectContent>
                 <SelectItem value="all">All Statuses</SelectItem>
                 {statusOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            
+            <Select value={priorityFilter} onValueChange={setPriorityFilter}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="Filter by priority" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Priorities</SelectItem>
+                {priorityOptions.map((option) => (
                   <SelectItem key={option.value} value={option.value}>
                     {option.label}
                   </SelectItem>
