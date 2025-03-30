@@ -1,6 +1,5 @@
-
 import { useState } from "react";
-import { PlusIcon, SearchIcon, Grid3X3Icon, TableIcon, Trash, Edit } from "lucide-react";
+import { PlusIcon, SearchIcon, Grid3X3Icon, TableIcon, Trash, Edit, Download, ArrowDown, ArrowUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -40,6 +39,25 @@ import { Link } from "react-router-dom";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Switch } from "@/components/ui/switch";
 import { Card, CardContent } from "@/components/ui/card";
+import { format } from "date-fns";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
+
+const sortOptions = [
+  { value: "name-asc", label: "Name (A-Z)" },
+  { value: "name-desc", label: "Name (Z-A)" },
+  { value: "newest", label: "Newest First" },
+  { value: "oldest", label: "Oldest First" },
+  { value: "company-asc", label: "Company (A-Z)" },
+  { value: "company-desc", label: "Company (Z-A)" },
+];
 
 export default function Clients() {
   const { clients, addClient, updateClient, deleteClient, isLoading } = useData();
@@ -50,6 +68,7 @@ export default function Clients() {
   const [viewMode, setViewMode] = useState<"table" | "card">("table");
   const [clientToDelete, setClientToDelete] = useState<string | null>(null);
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [sortOrder, setSortOrder] = useState<string>("name-asc");
 
   // Add client form state
   const [newClient, setNewClient] = useState({
@@ -91,6 +110,37 @@ export default function Clients() {
       return;
     }
 
+    // Check for duplicate email
+    const isDuplicateEmail = clients.some(client => 
+      client.email.toLowerCase() === newClient.email.toLowerCase()
+    );
+
+    if (isDuplicateEmail) {
+      toast({
+        title: "Duplicate email",
+        description: "A client with this email already exists.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Check for duplicate name and company if company is provided
+    if (newClient.company) {
+      const isDuplicateNameAndCompany = clients.some(client => 
+        client.name.toLowerCase() === newClient.name.toLowerCase() && 
+        client.company?.toLowerCase() === newClient.company.toLowerCase()
+      );
+
+      if (isDuplicateNameAndCompany) {
+        toast({
+          title: "Duplicate client",
+          description: "A client with this name and company already exists.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
     try {
       await addClient(newClient);
       setNewClient({
@@ -116,6 +166,43 @@ export default function Clients() {
         variant: "destructive",
       });
       return;
+    }
+
+    // Check for duplicate email only if email is changed
+    if (editClient.email.toLowerCase() !== selectedClient.email.toLowerCase()) {
+      const isDuplicateEmail = clients.some(client => 
+        client.id !== selectedClient.id && 
+        client.email.toLowerCase() === editClient.email.toLowerCase()
+      );
+
+      if (isDuplicateEmail) {
+        toast({
+          title: "Duplicate email",
+          description: "A client with this email already exists.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    // Check for duplicate name and company if company is provided and either is changed
+    if (editClient.company && 
+        (editClient.name.toLowerCase() !== selectedClient.name.toLowerCase() || 
+         editClient.company.toLowerCase() !== (selectedClient.company || "").toLowerCase())) {
+      const isDuplicateNameAndCompany = clients.some(client => 
+        client.id !== selectedClient.id && 
+        client.name.toLowerCase() === editClient.name.toLowerCase() && 
+        client.company?.toLowerCase() === editClient.company.toLowerCase()
+      );
+
+      if (isDuplicateNameAndCompany) {
+        toast({
+          title: "Duplicate client",
+          description: "A client with this name and company already exists.",
+          variant: "destructive",
+        });
+        return;
+      }
     }
 
     try {
@@ -153,6 +240,64 @@ export default function Clients() {
     setIsEditClientOpen(true);
   };
 
+  const exportClients = () => {
+    try {
+      // Filter and sort clients just like in the UI
+      const clientsToExport = [...filteredClients];
+      
+      // Format clients for export
+      const formattedClients = clientsToExport.map(client => ({
+        name: client.name,
+        email: client.email,
+        phone: client.phone || "",
+        company: client.company || "",
+        domain: client.domain || "",
+        createdAt: format(new Date(client.createdAt), "yyyy-MM-dd")
+      }));
+
+      // Convert to CSV
+      const headers = ["Name", "Email", "Phone", "Company", "Domain", "Created At"];
+      const csvContent = [
+        headers.join(','),
+        ...formattedClients.map(row => 
+          [
+            `"${row.name.replace(/"/g, '""')}"`,
+            `"${row.email.replace(/"/g, '""')}"`,
+            `"${row.phone.replace(/"/g, '""')}"`,
+            `"${row.company.replace(/"/g, '""')}"`,
+            `"${row.domain.replace(/"/g, '""')}"`,
+            row.createdAt
+          ].join(',')
+        )
+      ].join('\n');
+
+      // Create a download link
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const timestamp = format(new Date(), "yyyy-MM-dd");
+      
+      link.setAttribute('href', url);
+      link.setAttribute('download', `clients-export-${timestamp}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      toast({
+        title: "Export successful",
+        description: `${formattedClients.length} clients exported to CSV.`,
+      });
+    } catch (error) {
+      console.error("Error exporting clients:", error);
+      toast({
+        title: "Export failed",
+        description: "There was an error exporting clients.",
+        variant: "destructive",
+      });
+    }
+  };
+
   // Filter clients based on search term
   const filteredClients = clients.filter(
     (client) =>
@@ -160,6 +305,26 @@ export default function Clients() {
       client.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
       client.company?.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  // Sort the filtered clients based on the selected sort order
+  const sortedClients = [...filteredClients].sort((a, b) => {
+    switch (sortOrder) {
+      case "name-asc":
+        return a.name.localeCompare(b.name);
+      case "name-desc":
+        return b.name.localeCompare(a.name);
+      case "newest":
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      case "oldest":
+        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      case "company-asc":
+        return (a.company || "").localeCompare(b.company || "");
+      case "company-desc":
+        return (b.company || "").localeCompare(a.company || "");
+      default:
+        return a.name.localeCompare(b.name);
+    }
+  });
 
   const toggleViewMode = () => {
     setViewMode(viewMode === "table" ? "card" : "table");
@@ -174,7 +339,11 @@ export default function Clients() {
             Manage your client relationships
           </p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button variant="outline" onClick={exportClients}>
+            <Download className="mr-2 h-4 w-4" />
+            Export
+          </Button>
           <div className="flex items-center space-x-2">
             <TableIcon className="h-4 w-4 text-muted-foreground" />
             <Switch 
@@ -272,8 +441,8 @@ export default function Clients() {
         </div>
       </div>
       <div className="rounded-md border">
-        <div className="px-4 py-3">
-          <div className="relative">
+        <div className="flex flex-col space-y-3 p-4 sm:flex-row sm:items-center sm:space-x-4 sm:space-y-0">
+          <div className="relative flex-1">
             <SearchIcon className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
             <Input
               type="search"
@@ -282,6 +451,33 @@ export default function Clients() {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
+          </div>
+          <div className="flex flex-col space-y-3 sm:flex-row sm:space-x-4 sm:space-y-0">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="w-[180px] justify-between">
+                  <span>Sort by: {sortOptions.find(o => o.value === sortOrder)?.label}</span>
+                  {sortOrder.includes("desc") ? <ArrowDown className="h-4 w-4 ml-2" /> : 
+                   sortOrder.includes("asc") ? <ArrowUp className="h-4 w-4 ml-2" /> : null}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuLabel>Sort Options</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {sortOptions.map((option) => (
+                  <DropdownMenuItem 
+                    key={option.value}
+                    className={cn(
+                      "cursor-pointer",
+                      sortOrder === option.value && "bg-accent text-accent-foreground"
+                    )}
+                    onClick={() => setSortOrder(option.value)}
+                  >
+                    {option.label}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
         
@@ -331,7 +527,7 @@ export default function Clients() {
                       </TableCell>
                     </TableRow>
                   ))
-              ) : filteredClients.length === 0 ? (
+              ) : sortedClients.length === 0 ? (
                 <TableRow>
                   <TableCell
                     colSpan={8}
@@ -341,7 +537,7 @@ export default function Clients() {
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredClients.map((client, index) => (
+                sortedClients.map((client, index) => (
                   <TableRow key={client.id}>
                     <TableCell className="font-medium">{index + 1}</TableCell>
                     <TableCell>
@@ -449,12 +645,12 @@ export default function Clients() {
                     </CardContent>
                   </Card>
                 ))
-            ) : filteredClients.length === 0 ? (
+            ) : sortedClients.length === 0 ? (
               <div className="col-span-full py-8 text-center text-muted-foreground">
                 No clients found. Try a different search or add a new client.
               </div>
             ) : (
-              filteredClients.map((client) => (
+              sortedClients.map((client) => (
                 <Card key={client.id} className="overflow-hidden transition-all hover:shadow-md">
                   <CardContent className="p-0">
                     <div className="border-b p-4">

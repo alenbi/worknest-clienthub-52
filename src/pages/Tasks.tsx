@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { format } from "date-fns";
-import { PlusIcon, SearchIcon, ArrowDown, ArrowUp } from "lucide-react";
+import { PlusIcon, SearchIcon, ArrowDown, ArrowUp, Edit, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -50,6 +50,7 @@ import { cn } from "@/lib/utils";
 import { useData, Task } from "@/contexts/data-context";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "react-router-dom";
+import { TaskEditDialog } from "@/components/TaskEditDialog";
 
 const statusOptions = [
   { value: "pending", label: "Pending" },
@@ -77,6 +78,8 @@ export default function Tasks() {
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [sortOrder, setSortOrder] = useState<string>("oldest");
   const [isAddTaskOpen, setIsAddTaskOpen] = useState(false);
+  const [isEditTaskOpen, setIsEditTaskOpen] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
   const [newTask, setNewTask] = useState<
     Omit<Task, "id" | "createdAt" | "completedAt">
@@ -140,6 +143,108 @@ export default function Tasks() {
     }
   };
 
+  const handleEditTask = async (taskId: string, updates: Partial<Task>) => {
+    try {
+      await updateTask(taskId, updates);
+      toast({
+        title: "Task updated",
+        description: "The task has been updated successfully.",
+      });
+    } catch (error) {
+      console.error("Error updating task:", error);
+      toast({
+        title: "Error",
+        description: "Failed to update task. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const openEditDialog = (task: Task) => {
+    setSelectedTask(task);
+    setIsEditTaskOpen(true);
+  };
+
+  const exportTasks = () => {
+    try {
+      const tasksToExport = [...filteredTasks].sort((a, b) => {
+        switch (sortOrder) {
+          case "newest":
+            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+          case "oldest":
+            return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+          case "priority-high":
+            const priorityOrder = { high: 3, medium: 2, low: 1 };
+            return (priorityOrder[b.priority as keyof typeof priorityOrder] || 0) - 
+                   (priorityOrder[a.priority as keyof typeof priorityOrder] || 0);
+          case "priority-low":
+            const priorityOrderReverse = { high: 3, medium: 2, low: 1 };
+            return (priorityOrderReverse[a.priority as keyof typeof priorityOrderReverse] || 0) - 
+                   (priorityOrderReverse[b.priority as keyof typeof priorityOrderReverse] || 0);
+          case "due-date":
+            return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+          default:
+            return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+        }
+      });
+
+      const formattedTasks = tasksToExport.map(task => {
+        const client = clients.find(c => c.id === task.clientId);
+        return {
+          title: task.title,
+          description: task.description,
+          client: client ? client.name : "Unknown",
+          status: task.status,
+          priority: task.priority,
+          dueDate: format(new Date(task.dueDate), "yyyy-MM-dd"),
+          createdAt: format(new Date(task.createdAt), "yyyy-MM-dd"),
+          completedAt: task.completedAt ? format(new Date(task.completedAt), "yyyy-MM-dd") : ""
+        };
+      });
+
+      const headers = ["Title", "Description", "Client", "Status", "Priority", "Due Date", "Created At", "Completed At"];
+      const csvContent = [
+        headers.join(','),
+        ...formattedTasks.map(row => 
+          [
+            `"${row.title.replace(/"/g, '""')}"`,
+            `"${row.description ? row.description.replace(/"/g, '""') : ''}"`,
+            `"${row.client}"`,
+            `"${row.status}"`,
+            `"${row.priority}"`,
+            row.dueDate,
+            row.createdAt,
+            row.completedAt
+          ].join(',')
+        )
+      ].join('\n');
+
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const timestamp = format(new Date(), "yyyy-MM-dd");
+      
+      link.setAttribute('href', url);
+      link.setAttribute('download', `tasks-export-${timestamp}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      
+      toast({
+        title: "Export successful",
+        description: `${formattedTasks.length} tasks exported to CSV.`,
+      });
+    } catch (error) {
+      console.error("Error exporting tasks:", error);
+      toast({
+        title: "Export failed",
+        description: "There was an error exporting tasks.",
+        variant: "destructive",
+      });
+    }
+  };
+
   const filteredTasks = tasks.filter((task) => {
     const matchesSearch =
       task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -180,141 +285,147 @@ export default function Tasks() {
             Manage and track your client tasks
           </p>
         </div>
-        <Dialog open={isAddTaskOpen} onOpenChange={setIsAddTaskOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <PlusIcon className="mr-2 h-4 w-4" />
-              Add Task
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[525px]">
-            <DialogHeader>
-              <DialogTitle>Add New Task</DialogTitle>
-              <DialogDescription>
-                Add a new task to your dashboard.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="grid gap-2">
-                <Label htmlFor="title">Title</Label>
-                <Input
-                  id="title"
-                  name="title"
-                  value={newTask.title}
-                  onChange={handleInputChange}
-                  placeholder="Task title"
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="description">Description</Label>
-                <Textarea
-                  id="description"
-                  name="description"
-                  value={newTask.description}
-                  onChange={handleInputChange}
-                  placeholder="Task description"
-                  rows={3}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="clientId">Client</Label>
-                <Select
-                  value={newTask.clientId}
-                  onValueChange={(value) =>
-                    handleSelectChange("clientId", value)
-                  }
-                >
-                  <SelectTrigger id="clientId">
-                    <SelectValue placeholder="Select client" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {clients.map((client) => (
-                      <SelectItem key={client.id} value={client.id}>
-                        {client.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={exportTasks}>
+            <Download className="mr-2 h-4 w-4" />
+            Export
+          </Button>
+          <Dialog open={isAddTaskOpen} onOpenChange={setIsAddTaskOpen}>
+            <DialogTrigger asChild>
+              <Button>
+                <PlusIcon className="mr-2 h-4 w-4" />
+                Add Task
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[525px]">
+              <DialogHeader>
+                <DialogTitle>Add New Task</DialogTitle>
+                <DialogDescription>
+                  Add a new task to your dashboard.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
                 <div className="grid gap-2">
-                  <Label htmlFor="priority">Priority</Label>
+                  <Label htmlFor="title">Title</Label>
+                  <Input
+                    id="title"
+                    name="title"
+                    value={newTask.title}
+                    onChange={handleInputChange}
+                    placeholder="Task title"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="description">Description</Label>
+                  <Textarea
+                    id="description"
+                    name="description"
+                    value={newTask.description}
+                    onChange={handleInputChange}
+                    placeholder="Task description"
+                    rows={3}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="clientId">Client</Label>
                   <Select
-                    value={newTask.priority}
+                    value={newTask.clientId}
                     onValueChange={(value) =>
-                      handleSelectChange("priority", value)
+                      handleSelectChange("clientId", value)
                     }
                   >
-                    <SelectTrigger id="priority">
-                      <SelectValue placeholder="Select priority" />
+                    <SelectTrigger id="clientId">
+                      <SelectValue placeholder="Select client" />
                     </SelectTrigger>
                     <SelectContent>
-                      {priorityOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
+                      {clients.map((client) => (
+                        <SelectItem key={client.id} value={client.id}>
+                          {client.name}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="status">Status</Label>
-                  <Select
-                    value={newTask.status}
-                    onValueChange={(value) =>
-                      handleSelectChange("status", value)
-                    }
-                  >
-                    <SelectTrigger id="status">
-                      <SelectValue placeholder="Select status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {statusOptions.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="dueDate">Due Date</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant={"outline"}
-                      className={cn(
-                        "w-full justify-start text-left font-normal",
-                        !newTask.dueDate && "text-muted-foreground"
-                      )}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label htmlFor="priority">Priority</Label>
+                    <Select
+                      value={newTask.priority}
+                      onValueChange={(value) =>
+                        handleSelectChange("priority", value)
+                      }
                     >
-                      {newTask.dueDate ? (
-                        format(newTask.dueDate, "PPP")
-                      ) : (
-                        <span>Pick a date</span>
-                      )}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={newTask.dueDate}
-                      onSelect={handleDateChange}
-                      initialFocus
-                    />
-                  </PopoverContent>
-                </Popover>
+                      <SelectTrigger id="priority">
+                        <SelectValue placeholder="Select priority" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {priorityOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="status">Status</Label>
+                    <Select
+                      value={newTask.status}
+                      onValueChange={(value) =>
+                        handleSelectChange("status", value)
+                      }
+                    >
+                      <SelectTrigger id="status">
+                        <SelectValue placeholder="Select status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {statusOptions.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="dueDate">Due Date</Label>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant={"outline"}
+                        className={cn(
+                          "w-full justify-start text-left font-normal",
+                          !newTask.dueDate && "text-muted-foreground"
+                        )}
+                      >
+                        {newTask.dueDate ? (
+                          format(newTask.dueDate, "PPP")
+                        ) : (
+                          <span>Pick a date</span>
+                        )}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={newTask.dueDate}
+                        onSelect={handleDateChange}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                </div>
               </div>
-            </div>
-            <DialogFooter>
-              <DialogClose asChild>
-                <Button variant="outline">Cancel</Button>
-              </DialogClose>
-              <Button onClick={handleAddTask}>Add Task</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+              <DialogFooter>
+                <DialogClose asChild>
+                  <Button variant="outline">Cancel</Button>
+                </DialogClose>
+                <Button onClick={handleAddTask}>Add Task</Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
       <div className="rounded-md border">
         <div className="flex flex-col space-y-3 p-4 sm:flex-row sm:items-center sm:space-x-4 sm:space-y-0">
@@ -447,7 +558,7 @@ export default function Tasks() {
                         variant="outline"
                         className={cn(
                           task.priority === "high"
-                            ? "bg-destructive text-destructive-foreground"
+                            ? "bg-destructive text-white"
                             : task.priority === "medium"
                             ? "bg-amber-500 text-amber-500"
                             : "bg-muted text-muted-foreground",
@@ -485,17 +596,28 @@ export default function Tasks() {
                       </Select>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="h-7 w-7 p-0"
-                        asChild
-                      >
-                        <Link to={`/tasks/${task.id}`}>
-                          <span className="sr-only">View task</span>
-                          <SearchIcon className="h-4 w-4" />
-                        </Link>
-                      </Button>
+                      <div className="flex justify-end space-x-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 p-0"
+                          onClick={() => openEditDialog(task)}
+                        >
+                          <Edit className="h-4 w-4" />
+                          <span className="sr-only">Edit task</span>
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0"
+                          asChild
+                        >
+                          <Link to={`/tasks/${task.id}`}>
+                            <span className="sr-only">View task</span>
+                            <SearchIcon className="h-4 w-4" />
+                          </Link>
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 );
@@ -504,6 +626,14 @@ export default function Tasks() {
           </TableBody>
         </Table>
       </div>
+
+      <TaskEditDialog
+        task={selectedTask}
+        clients={clients}
+        isOpen={isEditTaskOpen}
+        onOpenChange={setIsEditTaskOpen}
+        onSave={handleEditTask}
+      />
     </div>
   );
 }
