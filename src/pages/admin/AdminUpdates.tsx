@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -86,7 +85,7 @@ export default function AdminUpdates() {
                   <TableRow key={update.id}>
                     <TableCell className="font-medium">{update.title}</TableCell>
                     <TableCell>
-                      {format(new Date(update.created_at), "MMM d, yyyy")}
+                      {format(new Date(update.created_at!), "MMM d, yyyy")}
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center space-x-2">

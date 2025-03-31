@@ -1,9 +1,7 @@
-
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { v4 as uuidv4 } from 'uuid';
 
-// Define types for data models
 export interface Client {
   id: string;
   name: string;
@@ -14,6 +12,7 @@ export interface Client {
   user_id?: string;
   created_at?: string;
   updated_at?: string;
+  avatar?: string;
 }
 
 export interface Task {
@@ -26,7 +25,7 @@ export interface Task {
   completed_at?: string;
   updated_at?: string;
   priority?: 'low' | 'medium' | 'high';
-  due_date?: string | Date;
+  due_date?: string;
 }
 
 export interface Resource {
@@ -69,7 +68,6 @@ export interface Update {
   created_at?: string;
 }
 
-// Define data context type
 interface Data {
   clients: Client[];
   tasks: Task[];
@@ -97,12 +95,14 @@ interface Data {
   updateUpdate: (id: string, data: { title?: string; content?: string; image_url?: string; is_published?: boolean; created_at?: string }) => Promise<Update | void>;
   deleteUpdate: (id: string) => Promise<void>;
   isLoading?: boolean;
+  toggleUpdatePublished: (id: string, isPublished: boolean) => Promise<void>;
+  addTask: (task: Omit<Task, 'id'>) => Promise<Task>;
+  updateClientPassword?: (clientId: string, newPassword: string) => Promise<void>;
+  addClient?: (client: Omit<Client, 'id'>) => Promise<Client>;
 }
 
-// Define context
 const DataContext = createContext<Data | undefined>(undefined);
 
-// Define provider
 interface DataProviderProps {
   children: React.ReactNode;
 }
@@ -115,7 +115,6 @@ interface UpdateData {
   created_at?: string;
 }
 
-// Fix the Update interface createUpdate method parameter
 export const updateDataContext = (data: UpdateData | null = null): Data => {
   const [clients, setClients] = useState<Client[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -142,7 +141,7 @@ export const updateDataContext = (data: UpdateData | null = null): Data => {
         .order('created_at', { ascending: false });
 
       if (tasksError) throw tasksError;
-      setTasks(tasksData || []);
+      setTasks((tasksData || []) as Task[]);
 
       const { data: resourcesData, error: resourcesError } = await supabase
         .from("resources")
@@ -158,7 +157,11 @@ export const updateDataContext = (data: UpdateData | null = null): Data => {
         .order('created_at', { ascending: false });
 
       if (videosError) throw videosError;
-      setVideos(videosData || []);
+      const formattedVideos = (videosData || []).map(video => ({
+        ...video,
+        url: video.youtube_id ? `https://youtube.com/watch?v=${video.youtube_id}` : ''
+      }));
+      setVideos(formattedVideos);
 
       const { data: offersData, error: offersError } = await supabase
         .from("offers")
@@ -237,18 +240,14 @@ export const updateDataContext = (data: UpdateData | null = null): Data => {
   const createTask = async (task: Omit<Task, 'id'>): Promise<Task> => {
     try {
       const taskToInsert = {
-        title: task.title,
-        description: task.description,
-        status: task.status || 'pending',
-        client_id: task.client_id,
-        priority: task.priority || 'medium',
-        due_date: task.due_date,
-        created_at: new Date().toISOString()
+        ...task,
+        due_date: typeof task.due_date === 'string' ? task.due_date : 
+          task.due_date instanceof Date ? task.due_date.toISOString() : undefined
       };
 
       const { data: newTask, error } = await supabase
         .from("tasks")
-        .insert([{ ...taskToInsert, id: uuidv4() }])
+        .insert({ ...taskToInsert, id: uuidv4() })
         .select()
         .single();
 
@@ -263,9 +262,16 @@ export const updateDataContext = (data: UpdateData | null = null): Data => {
 
   const updateTask = async (id: string, updates: Partial<Task>): Promise<Task | void> => {
     try {
+      const updatesToSubmit = { 
+        ...updates,
+        due_date: updates.due_date instanceof Date 
+          ? updates.due_date.toISOString() 
+          : updates.due_date
+      };
+
       const { data: updatedTask, error } = await supabase
         .from("tasks")
-        .update(updates)
+        .update(updatesToSubmit)
         .eq("id", id)
         .select()
         .single();
@@ -455,8 +461,7 @@ export const updateDataContext = (data: UpdateData | null = null): Data => {
       throw error;
     }
   };
-    
-  // Fix the createUpdate method to ensure created_at is always a string
+
   const createUpdate = async (data: { title: string; content: string; image_url?: string; is_published?: boolean }) => {
     try {
       const { data: update, error } = await supabase
@@ -466,7 +471,7 @@ export const updateDataContext = (data: UpdateData | null = null): Data => {
           content: data.content,
           image_url: data.image_url,
           is_published: data.is_published || false,
-          created_at: new Date().toISOString(), // Ensure created_at is always a string
+          created_at: new Date().toISOString(),
         })
         .select()
         .single();
@@ -479,11 +484,9 @@ export const updateDataContext = (data: UpdateData | null = null): Data => {
       throw error;
     }
   };
-    
-  // Fix in updateUpdate to ensure created_at is always a string when provided
+
   const updateUpdate = async (id: string, data: { title?: string; content?: string; image_url?: string; is_published?: boolean; created_at?: string }) => {
     try {
-      // If created_at is a Date object, convert it to ISO string
       const updateData = {
         ...data,
         created_at: data.created_at ? 
@@ -500,7 +503,6 @@ export const updateDataContext = (data: UpdateData | null = null): Data => {
 
       if (error) throw error;
       
-      // Update local state
       setUpdates(prevUpdates => 
         prevUpdates.map(item => item.id === id ? update as Update : item)
       );
@@ -522,6 +524,55 @@ export const updateDataContext = (data: UpdateData | null = null): Data => {
       throw error;
     }
   };
+
+  const toggleUpdatePublished = async (id: string, isPublished: boolean): Promise<void> => {
+    try {
+      const { error } = await supabase
+        .from("updates")
+        .update({ is_published: isPublished })
+        .eq("id", id);
+      
+      if (error) throw error;
+      
+      setUpdates(prevUpdates => 
+        prevUpdates.map(update => 
+          update.id === id ? { ...update, is_published: isPublished } : update
+        )
+      );
+    } catch (error) {
+      console.error("Error toggling update published status:", error);
+      throw error;
+    }
+  };
+
+  const addTask = createTask;
+
+  const updateClientPassword = async (clientId: string, newPassword: string): Promise<void> => {
+    try {
+      const { data: client, error: clientError } = await supabase
+        .from("clients")
+        .select("user_id")
+        .eq("id", clientId)
+        .single();
+      
+      if (clientError) throw clientError;
+      
+      if (!client.user_id) {
+        throw new Error("Client does not have a user account");
+      }
+      
+      const { error } = await supabase.auth.admin.updateUserById(client.user_id, {
+        password: newPassword
+      });
+      
+      if (error) throw error;
+    } catch (error) {
+      console.error("Error updating client password:", error);
+      throw error;
+    }
+  };
+
+  const addClient = createClient;
 
   return {
     clients,
@@ -549,7 +600,11 @@ export const updateDataContext = (data: UpdateData | null = null): Data => {
     createUpdate,
     updateUpdate,
     deleteUpdate,
-    isLoading
+    isLoading,
+    toggleUpdatePublished,
+    addTask,
+    updateClientPassword,
+    addClient
   };
 };
 
@@ -559,7 +614,6 @@ export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
   return <DataContext.Provider value={data}>{children}</DataContext.Provider>;
 };
 
-// Define hook
 export const useData = () => {
   const context = useContext(DataContext);
   if (context === undefined) {

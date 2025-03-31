@@ -53,8 +53,7 @@ export function EditUpdateDialog({ updateId, open, onOpenChange }: EditUpdateDia
     
     try {
       setIsSubmitting(true);
-      await updateUpdate({
-        id: updateId,
+      await updateUpdate(updateId, {
         title,
         content,
         is_published: isPublished,

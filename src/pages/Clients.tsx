@@ -38,6 +38,8 @@ export default function Clients() {
   const [searchQuery, setSearchQuery] = useState("");
   const [sortField, setSortField] = useState<string>("name");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [editClientDialogOpen, setEditClientDialogOpen] = useState<boolean>(false);
+  const [selectedClient, setSelectedClient] = useState<string | null>(null);
   const navigate = useNavigate();
 
   const handleSort = (field: string) => {
@@ -92,6 +94,11 @@ export default function Clients() {
     if (window.confirm("Are you sure you want to delete this client? This action cannot be undone.")) {
       await deleteClient(id);
     }
+  };
+
+  const handleEditClient = (clientId: string) => {
+    setSelectedClient(clientId);
+    setEditClientDialogOpen(true);
   };
 
   return (
@@ -212,7 +219,13 @@ export default function Clients() {
                     <TableCell className="text-right">
                       <div className="flex justify-end space-x-2">
                         <ChangePasswordDialog client={client} variant="outline" />
-                        <EditClientDialog client={client} />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleEditClient(client.id)}
+                        >
+                          <Edit className="mr-2 h-4 w-4" /> Edit
+                        </Button>
                         <Button
                           variant="outline"
                           size="sm"
@@ -236,6 +249,14 @@ export default function Clients() {
           </Table>
         </CardContent>
       </Card>
+
+      {selectedClient && (
+        <EditClientDialog 
+          client={clients.find(c => c.id === selectedClient)!}
+          open={editClientDialogOpen}
+          onOpenChange={setEditClientDialogOpen}
+        />
+      )}
     </div>
   );
 }
