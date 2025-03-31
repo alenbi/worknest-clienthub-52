@@ -147,32 +147,58 @@ export const DataProvider = ({ children }: { children: React.ReactNode }) => {
 
   const addClient = async (clientData: Omit<Client, "id" | "createdAt">): Promise<Client> => {
     try {
-      // Prepare data for database
-      const dbClient = {
-        name: clientData.name,
+      // Create user account for client
+      let userId = null;
+      
+      // Generate a random password
+      const password = Math.random().toString(36).slice(-10);
+      
+      // Create user in Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
         email: clientData.email,
-        phone: clientData.phone,
-        company: clientData.company,
-        domain: clientData.domain,
-        avatar: clientData.avatar,
-      };
-
-      const { data, error } = await supabase
-        .from("clients")
-        .insert(dbClient)
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      const newClient = transformClientFromDB(data);
-      setClients(prev => [newClient, ...prev]);
+        password,
+        options: {
+          data: {
+            full_name: clientData.name,
+          },
+        },
+      });
       
-      // Automatically create predefined tasks for this client
-      await createPredefinedTasks(newClient.id);
+      if (authError) throw authError;
       
-      toast.success("Client added successfully");
-      return newClient;
+      if (authData.user) {
+        userId = authData.user.id;
+        
+        // Prepare data for database with user_id
+        const dbClient = {
+          name: clientData.name,
+          email: clientData.email,
+          phone: clientData.phone,
+          company: clientData.company,
+          domain: clientData.domain,
+          avatar: clientData.avatar,
+          user_id: userId
+        };
+
+        const { data, error } = await supabase
+          .from("clients")
+          .insert(dbClient)
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        const newClient = transformClientFromDB(data);
+        setClients(prev => [newClient, ...prev]);
+        
+        // Automatically create predefined tasks for this client
+        await createPredefinedTasks(newClient.id);
+        
+        toast.success(`Client added and account created with email: ${clientData.email}`);
+        return newClient;
+      } else {
+        throw new Error("Failed to create user account");
+      }
     } catch (error) {
       console.error("Error adding client:", error);
       toast.error("Failed to add client");

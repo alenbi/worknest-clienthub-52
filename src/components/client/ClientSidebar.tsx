@@ -2,78 +2,63 @@
 import { NavLink } from "react-router-dom";
 import {
   BarChart3,
-  Users,
   CheckSquare,
-  Settings,
-  LogOut,
   MessageSquare,
-  FileText,
   Video,
+  FileText,
   Tag,
+  LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { useAuth } from "@/contexts/auth-context";
+import { useClientAuth } from "@/contexts/client-auth-context";
 import { Separator } from "@/components/ui/separator";
 
-export function Sidebar() {
-  const { logout } = useAuth();
+export function ClientSidebar() {
+  const { logout, user } = useClientAuth();
 
   const menuItems = [
     {
       title: "Dashboard",
       icon: BarChart3,
-      path: "/dashboard",
+      path: "/client/dashboard",
     },
     {
-      title: "Clients",
-      icon: Users,
-      path: "/clients",
-    },
-    {
-      title: "Tasks",
+      title: "My Tasks",
       icon: CheckSquare,
-      path: "/tasks",
+      path: "/client/tasks",
     },
     {
-      title: "Messages",
+      title: "Chat Support",
       icon: MessageSquare,
-      path: "/admin/chat",
+      path: "/client/chat",
     },
     {
       title: "Resources",
       icon: FileText,
-      path: "/admin/resources",
+      path: "/client/resources",
     },
     {
       title: "Videos",
       icon: Video,
-      path: "/admin/videos",
+      path: "/client/videos",
     },
     {
       title: "Offers",
       icon: Tag,
-      path: "/admin/offers",
-    },
-  ];
-
-  const bottomMenuItems = [
-    {
-      title: "Settings",
-      icon: Settings,
-      path: "/settings",
+      path: "/client/offers",
     },
   ];
 
   return (
     <aside
-      id="sidebar"
+      id="client-sidebar"
       className="bg-sidebar fixed inset-y-0 left-0 z-20 w-64 transform border-r transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:w-64 -translate-x-full"
     >
       <div className="flex h-full flex-col">
         <div className="flex h-16 items-center border-b px-6">
           <h2 className="text-lg font-semibold text-sidebar-foreground">
-            Digitalshopi
+            {user?.company || "Client"} 
             <span className="text-primary">.</span>
           </h2>
         </div>
@@ -101,23 +86,6 @@ export function Sidebar() {
 
         <div className="border-t p-3">
           <div className="space-y-1">
-            {bottomMenuItems.map((item) => (
-              <NavLink
-                key={item.path}
-                to={item.path}
-                className={({ isActive }) =>
-                  cn(
-                    "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium",
-                    isActive
-                      ? "bg-sidebar-primary text-sidebar-primary-foreground"
-                      : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-                  )
-                }
-              >
-                <item.icon className="h-5 w-5" />
-                {item.title}
-              </NavLink>
-            ))}
             <Separator className="my-2" />
             <Button
               variant="ghost"
