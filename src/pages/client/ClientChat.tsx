@@ -21,7 +21,7 @@ interface Message {
 }
 
 const ClientChat = () => {
-  const { user, client } = useClientAuth();
+  const { user } = useClientAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -31,34 +31,47 @@ const ClientChat = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (!client) return;
+    if (!user?.id) return;
 
     const fetchMessages = async () => {
       try {
         setIsLoading(true);
         
-        // Explicitly specify which table the user_id comes from in the join
+        const { data: clientData, error: clientError } = await supabase
+          .from("clients")
+          .select("id")
+          .eq("user_id", user.id)
+          .single();
+        
+        if (clientError) throw clientError;
+        
+        if (!clientData) {
+          toast.error("Client profile not found");
+          setIsLoading(false);
+          return;
+        }
+        
+        const clientId = clientData.id;
+        
         const { data, error } = await supabase
           .from("client_messages")
-          .select("*, profiles!client_messages_sender_id_fkey(full_name)")
-          .eq("client_id", client.id)
+          .select("*, profiles(full_name)")
+          .eq("client_id", clientId)
           .order("created_at", { ascending: true });
         
         if (error) throw error;
         
-        // Mark all messages from admin as read
         await supabase
           .from("client_messages")
           .update({ is_read: true })
-          .eq("client_id", client.id)
+          .eq("client_id", clientId)
           .eq("is_from_client", false)
           .eq("is_read", false);
         
-        // Transform data to include sender name
         const formattedMessages = data.map((msg: any) => ({
           ...msg,
           sender_name: msg.is_from_client 
-            ? (client?.name || "You")
+            ? (user?.name || "You")
             : (msg.profiles?.full_name || "Support Staff")
         }));
         
@@ -73,73 +86,109 @@ const ClientChat = () => {
 
     fetchMessages();
     
-    // Subscribe to real-time updates
-    const channel = supabase
-      .channel('client_messages_changes')
-      .on('postgres_changes', 
-        { 
-          event: 'INSERT', 
-          schema: 'public', 
-          table: 'client_messages',
-          filter: `client_id=eq.${client.id}`
-        }, 
-        async (payload) => {
-          const newMessage = payload.new as Message;
+    const setupSubscription = async () => {
+      try {
+        const { data: clientData, error: clientError } = await supabase
+          .from("clients")
+          .select("id")
+          .eq("user_id", user.id)
+          .single();
           
-          // Mark message as read if it's from admin
-          if (!newMessage.is_from_client) {
-            await supabase
-              .from("client_messages")
-              .update({ is_read: true })
-              .eq("id", newMessage.id);
-          }
-          
-          // Fetch sender name
-          if (newMessage.is_from_client) {
-            newMessage.sender_name = client?.name || "You";
-          } else {
-            try {
-              const { data } = await supabase
-                .from("profiles")
-                .select("full_name")
-                .eq("id", newMessage.sender_id)
-                .single();
+        if (clientError) throw clientError;
+        if (!clientData) return;
+        
+        const clientId = clientData.id;
+        
+        const channel = supabase
+          .channel('client_messages_changes')
+          .on('postgres_changes', 
+            { 
+              event: 'INSERT', 
+              schema: 'public', 
+              table: 'client_messages',
+              filter: `client_id=eq.${clientId}`
+            }, 
+            async (payload) => {
+              const newMessage = payload.new as Message;
               
-              newMessage.sender_name = data?.full_name || "Support Staff";
-            } catch (error) {
-              newMessage.sender_name = "Support Staff";
-            }
-          }
+              if (!newMessage.is_from_client) {
+                await supabase
+                  .from("client_messages")
+                  .update({ is_read: true })
+                  .eq("id", newMessage.id);
+              }
+              
+              if (newMessage.is_from_client) {
+                newMessage.sender_name = user?.name || "You";
+              } else {
+                try {
+                  const { data } = await supabase
+                    .from("profiles")
+                    .select("full_name")
+                    .eq("id", newMessage.sender_id)
+                    .single();
+                  
+                  newMessage.sender_name = data?.full_name || "Support Staff";
+                } catch (error) {
+                  newMessage.sender_name = "Support Staff";
+                }
+              }
+              
+              setMessages(prev => [...prev, newMessage]);
+            })
+          .subscribe();
           
-          setMessages(prev => [...prev, newMessage]);
-        })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
+        return () => {
+          supabase.removeChannel(channel);
+        };
+      } catch (error) {
+        console.error("Error setting up message subscription:", error);
+      }
     };
-  }, [client]);
+    
+    const unsubscribe = setupSubscription();
+    
+    return () => {
+      if (unsubscribe && typeof unsubscribe.then === 'function') {
+        unsubscribe.then(unsub => {
+          if (unsub) unsub();
+        });
+      }
+    };
+  }, [user]);
 
   useEffect(() => {
-    // Scroll to bottom when messages change
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
   const handleSendMessage = async () => {
     if (!newMessage.trim() && !file) return;
-    if (!client || !user) return;
+    if (!user?.id) return;
     
     try {
       setIsSending(true);
       
-      // Upload file if exists
+      const { data: clientData, error: clientError } = await supabase
+        .from("clients")
+        .select("id")
+        .eq("user_id", user.id)
+        .single();
+        
+      if (clientError) throw clientError;
+      if (!clientData) {
+        toast.error("Client profile not found");
+        return;
+      }
+      
+      const clientId = clientData.id;
+      
       let attachmentUrl = null;
       let attachmentType = null;
       
       if (file) {
         const fileExt = file.name.split('.').pop();
         const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
-        const filePath = `client-attachments/${client.id}/${fileName}`;
+        const filePath = `client-attachments/${clientId}/${fileName}`;
         
         const { error: uploadError, data } = await supabase.storage
           .from('chat-attachments')
@@ -155,22 +204,20 @@ const ClientChat = () => {
         attachmentType = file.type.startsWith('image/') ? 'image' : 'file';
       }
       
-      // Insert message
       const { error } = await supabase
         .from("client_messages")
         .insert({
-          client_id: client.id,
+          client_id: clientId,
           sender_id: user.id,
           is_from_client: true,
           message: newMessage.trim(),
           attachment_url: attachmentUrl,
           attachment_type: attachmentType,
-          is_read: false // Client messages are marked as unread for admin
+          is_read: false
         });
       
       if (error) throw error;
       
-      // Clear input
       setNewMessage("");
       setFile(null);
       
@@ -245,12 +292,19 @@ const ClientChat = () => {
           )}
         </CardContent>
         <CardFooter className="p-4 border-t">
-          <form onSubmit={handleSendMessage} className="flex gap-2">
+          <form 
+            className="flex gap-2 w-full"
+            onSubmit={(e) => {
+              e.preventDefault(); 
+              handleSendMessage();
+            }}
+          >
             <Textarea
               placeholder="Type your message..."
               value={newMessage}
               onChange={(e) => setNewMessage(e.target.value)}
               disabled={isSending}
+              className="flex-1"
             />
             <Button type="button" variant="outline" size="icon" disabled={isSending}>
               <Paperclip className="h-4 w-4" />
