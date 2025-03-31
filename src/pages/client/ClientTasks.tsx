@@ -1,166 +1,97 @@
+
 import { useState, useEffect } from "react";
+import { Card } from "@/components/ui/card";
 import { useClientAuth } from "@/contexts/client-auth-context";
 import { supabase } from "@/integrations/supabase/client";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { CheckCircle, Clock, AlertTriangle, CalendarIcon } from "lucide-react";
-import { format } from "date-fns";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
+import { format } from "date-fns";
+import { Loader2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Task, TaskStatus } from "@/lib/models";
 
-interface Task {
-  id: string;
-  title: string;
-  description: string | null;
-  status: string;
-  priority: string;
-  created_at: string;
-  due_date: string;
-  completed_at: string | null;
-}
+const statusColors: Record<TaskStatus, string> = {
+  [TaskStatus.TODO]: "bg-gray-100 text-gray-800",
+  [TaskStatus.IN_PROGRESS]: "bg-blue-100 text-blue-800",
+  [TaskStatus.COMPLETED]: "bg-green-100 text-green-800",
+  [TaskStatus.BLOCKED]: "bg-red-100 text-red-800"
+};
+
+const statusLabels: Record<TaskStatus, string> = {
+  [TaskStatus.TODO]: "To Do",
+  [TaskStatus.IN_PROGRESS]: "In Progress",
+  [TaskStatus.COMPLETED]: "Completed",
+  [TaskStatus.BLOCKED]: "Blocked"
+};
 
 const ClientTasks = () => {
   const { user } = useClientAuth();
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [loading, setLoading] = useState(true);
   const [clientId, setClientId] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("all");
 
-  const getStatusColor = (status: TaskStatus) => {
-    switch (status) {
-      case "open":
-        return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300";
-      case "in progress":
-        return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300";
-      case "pending":
-        return "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300";
-      case "completed":
-      case "done":
-        return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300";
-      default:
-        return "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300";
-    }
-  };
-
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'completed':
-        return (
-          <Badge className="bg-green-500 text-white">
-            <CheckCircle className="h-3 w-3 mr-1" />
-            Completed
-          </Badge>
-        );
-      case 'pending':
-        return (
-          <Badge className="bg-blue-500 text-white">
-            <Clock className="h-3 w-3 mr-1" />
-            Pending
-          </Badge>
-        );
-      case 'overdue':
-        return (
-          <Badge className="bg-red-500 text-white">
-            <AlertTriangle className="h-3 w-3 mr-1" />
-            Overdue
-          </Badge>
-        );
-      default:
-        return (
-          <Badge variant="outline">
-            {status}
-          </Badge>
-        );
-    }
-  };
-
-  const getPriorityBadge = (priority: string) => {
-    switch (priority) {
-      case 'high':
-        return <Badge className="bg-red-500 text-white">High</Badge>;
-      case 'medium':
-        return <Badge className="bg-yellow-500 text-white">Medium</Badge>;
-      case 'low':
-        return <Badge className="bg-green-500 text-white">Low</Badge>;
-      default:
-        return <Badge variant="outline">{priority}</Badge>;
-    }
-  };
-
+  // Get clientId from user
   useEffect(() => {
-    const getClientId = async () => {
-      if (!user) return;
-      
+    const fetchClientId = async () => {
+      if (!user?.id) return;
+
       try {
         const { data, error } = await supabase
           .from("clients")
           .select("id")
           .eq("user_id", user.id)
           .single();
-        
+
         if (error) throw error;
-        
-        if (data) {
-          setClientId(data.id);
-        }
+        setClientId(data?.id || null);
       } catch (error) {
         console.error("Error fetching client ID:", error);
-        toast.error("Failed to load client profile");
+        toast.error("Could not load client profile");
       }
     };
-    
-    getClientId();
+
+    fetchClientId();
   }, [user]);
 
+  // Fetch tasks once we have clientId
   useEffect(() => {
     const fetchTasks = async () => {
       if (!clientId) return;
-      
+
       try {
-        setIsLoading(true);
-        
+        setLoading(true);
         const { data, error } = await supabase
           .from("tasks")
           .select("*")
           .eq("client_id", clientId)
-          .order("due_date", { ascending: true });
-        
+          .order("created_at", { ascending: false });
+
         if (error) throw error;
-        
-        const processedTasks = (data || []).map(task => {
-          if (task.status !== "completed" && new Date(task.due_date) < new Date()) {
-            return { ...task, status: "overdue" };
-          }
-          return task;
-        });
-        
-        setTasks(processedTasks);
+        setTasks(data as Task[]);
       } catch (error) {
         console.error("Error fetching tasks:", error);
         toast.error("Failed to load tasks");
       } finally {
-        setIsLoading(false);
+        setLoading(false);
       }
     };
-    
+
     if (clientId) {
       fetchTasks();
     }
   }, [clientId]);
 
-  const filteredTasks = tasks.filter(task => {
-    if (activeTab === "all") return true;
-    if (activeTab === "completed") return task.status === "completed";
-    if (activeTab === "pending") return task.status === "pending";
-    if (activeTab === "overdue") return task.status === "overdue";
-    return true;
-  });
-
-  if (!user) {
+  if (loading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <p>Please log in to view your tasks</p>
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!clientId) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <p className="text-muted-foreground">Client profile not found</p>
       </div>
     );
   }
@@ -168,82 +99,40 @@ const ClientTasks = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Your Tasks</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Tasks</h1>
         <p className="text-muted-foreground">
-          View and manage your project tasks
+          View your current tasks and their status
         </p>
       </div>
 
-      <Tabs 
-        defaultValue="all" 
-        value={activeTab}
-        onValueChange={setActiveTab}
-        className="w-full"
-      >
-        <TabsList className="grid grid-cols-4 w-full max-w-md">
-          <TabsTrigger value="all">All</TabsTrigger>
-          <TabsTrigger value="pending">Pending</TabsTrigger>
-          <TabsTrigger value="completed">Completed</TabsTrigger>
-          <TabsTrigger value="overdue">Overdue</TabsTrigger>
-        </TabsList>
-
-        <div className="mt-6">
-          {isLoading ? (
-            <div className="flex justify-center p-12">
-              <div className="animate-spin h-8 w-8 border-2 border-primary border-t-transparent rounded-full"></div>
-            </div>
-          ) : filteredTasks.length === 0 ? (
-            <Card>
-              <CardContent className="flex flex-col items-center justify-center py-12">
-                <div className="rounded-full bg-muted p-3 mb-4">
-                  <Clock className="h-6 w-6 text-muted-foreground" />
-                </div>
-                <h3 className="text-lg font-medium">No tasks found</h3>
-                <p className="text-sm text-muted-foreground text-center max-w-md mt-2">
-                  {activeTab === "all" 
-                    ? "You don't have any tasks assigned yet." 
-                    : `You don't have any ${activeTab} tasks.`}
-                </p>
-              </CardContent>
+      {tasks.length === 0 ? (
+        <Card className="p-8 text-center text-muted-foreground">
+          <p>No tasks assigned to you at the moment.</p>
+        </Card>
+      ) : (
+        <div className="space-y-4">
+          {tasks.map((task) => (
+            <Card key={task.id} className="p-4">
+              <div className="flex justify-between items-start mb-2">
+                <h3 className="text-lg font-medium">{task.title}</h3>
+                <Badge className={statusColors[task.status as TaskStatus]}>
+                  {statusLabels[task.status as TaskStatus]}
+                </Badge>
+              </div>
+              {task.description && <p className="text-muted-foreground mb-4">{task.description}</p>}
+              <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                <span>Created: {format(new Date(task.created_at), "MMM d, yyyy")}</span>
+                {task.due_date && (
+                  <span>Due: {format(new Date(task.due_date), "MMM d, yyyy")}</span>
+                )}
+                {task.completed_at && (
+                  <span>Completed: {format(new Date(task.completed_at), "MMM d, yyyy")}</span>
+                )}
+              </div>
             </Card>
-          ) : (
-            <div className="grid gap-4">
-              {filteredTasks.map((task) => (
-                <Card key={task.id}>
-                  <CardHeader className="pb-2">
-                    <div className="flex justify-between items-start">
-                      <CardTitle>{task.title}</CardTitle>
-                      <div className="flex space-x-2">
-                        {getPriorityBadge(task.priority)}
-                        {getStatusBadge(task.status)}
-                      </div>
-                    </div>
-                    <CardDescription>
-                      <div className="flex items-center text-sm mt-1">
-                        <CalendarIcon className="h-3 w-3 mr-1" />
-                        Due: {format(new Date(task.due_date), "MMM d, yyyy")}
-                      </div>
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    {task.description && (
-                      <p className="text-sm text-muted-foreground mb-4">
-                        {task.description}
-                      </p>
-                    )}
-                    
-                    {task.status === "completed" && task.completed_at && (
-                      <div className="text-sm text-muted-foreground">
-                        Completed on {format(new Date(task.completed_at), "MMM d, yyyy")}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
+          ))}
         </div>
-      </Tabs>
+      )}
     </div>
   );
 };

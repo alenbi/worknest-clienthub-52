@@ -9,13 +9,13 @@ import { useAuth } from "@/contexts/auth-context";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { 
-  ChatMessage, 
-  subscribeToChatChannel, 
+  ChatMessage as ChatMessageType,
+  subscribeToChatMessages,
   fetchClientMessages, 
   sendMessage,
   uploadChatFile,
   markMessageAsRead
-} from "@/lib/chat-utils";
+} from "@/lib/firebase-chat-utils";
 import { ChatMessageList } from "@/components/chat/ChatMessageList";
 import { ChatInput } from "@/components/chat/ChatInput";
 
@@ -32,12 +32,12 @@ export function AdminChatRoom() {
   const { user } = useAuth();
   const navigate = useNavigate();
   
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useState<ChatMessageType[]>([]);
   const [client, setClient] = useState<Client | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const channelRef = useRef<ReturnType<typeof subscribeToChatChannel> | null>(null);
+  const cleanupFunctionRef = useRef<(() => void) | null>(null);
 
   // Fetch client details
   useEffect(() => {
@@ -86,11 +86,11 @@ export function AdminChatRoom() {
         const messages = await fetchClientMessages(clientId);
         
         // Mark messages from client as read
-        messages.forEach(msg => {
+        for (const msg of messages) {
           if (msg.is_from_client && !msg.is_read) {
-            markMessageAsRead(msg.id);
+            await markMessageAsRead(clientId, msg.id);
           }
-        });
+        }
         
         setMessages(messages);
       } catch (error: any) {
@@ -106,9 +106,8 @@ export function AdminChatRoom() {
     
     // Set up realtime subscription
     try {
-      const channel = subscribeToChatChannel(
+      const unsubscribe = subscribeToChatMessages(
         clientId,
-        true, // is admin
         (newMessage) => {
           setMessages(prev => {
             // Check if message already exists
@@ -118,7 +117,7 @@ export function AdminChatRoom() {
             
             // Mark message as read if it's from client
             if (newMessage.is_from_client) {
-              markMessageAsRead(newMessage.id);
+              markMessageAsRead(clientId, newMessage.id);
             }
             
             return [...prev, newMessage];
@@ -126,7 +125,7 @@ export function AdminChatRoom() {
         }
       );
       
-      channelRef.current = channel;
+      cleanupFunctionRef.current = unsubscribe;
     } catch (error: any) {
       console.error("Error setting up message subscription:", error);
       toast.error("Failed to connect to chat service");
@@ -134,8 +133,8 @@ export function AdminChatRoom() {
     }
     
     return () => {
-      if (channelRef.current) {
-        supabase.removeChannel(channel);
+      if (cleanupFunctionRef.current) {
+        cleanupFunctionRef.current();
       }
     };
   }, [clientId, client, user?.id]);
@@ -169,6 +168,7 @@ export function AdminChatRoom() {
       await sendMessage({
         clientId,
         senderId: user.id,
+        senderName: user.full_name || 'Support Agent',
         message: messageText,
         isFromClient: false,
         attachmentUrl,

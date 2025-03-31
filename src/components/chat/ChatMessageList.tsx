@@ -1,7 +1,7 @@
 
 import { useRef, useEffect } from "react";
 import { Loader2 } from "lucide-react";
-import { ChatMessage as ChatMessageType } from "@/lib/chat-utils";
+import { ChatMessage as ChatMessageType } from "@/lib/firebase-chat-utils";
 import { ChatMessage } from "./ChatMessage";
 
 interface ChatMessageListProps {

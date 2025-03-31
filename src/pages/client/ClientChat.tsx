@@ -6,12 +6,12 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { 
   ChatMessage, 
-  subscribeToChatChannel,
+  subscribeToChatMessages,
   fetchClientMessages, 
   sendMessage,
   uploadChatFile,
   markMessageAsRead
-} from "@/lib/chat-utils";
+} from "@/lib/firebase-chat-utils";
 import { ChatMessageList } from "@/components/chat/ChatMessageList";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { Button } from "@/components/ui/button";
@@ -24,7 +24,7 @@ const ClientChat = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const channelRef = useRef<ReturnType<typeof subscribeToChatChannel> | null>(null);
+  const cleanupFunctionRef = useRef<(() => void) | null>(null);
 
   // Get client ID from user ID
   useEffect(() => {
@@ -80,7 +80,7 @@ const ClientChat = () => {
         // Mark all unread admin messages as read
         for (const msg of messages) {
           if (!msg.is_from_client && !msg.is_read) {
-            await markMessageAsRead(msg.id);
+            await markMessageAsRead(clientId, msg.id);
           }
         }
         
@@ -100,9 +100,8 @@ const ClientChat = () => {
     // Set up realtime subscription
     try {
       console.log("Setting up message subscription for client:", clientId);
-      const channel = subscribeToChatChannel(
+      const unsubscribe = subscribeToChatMessages(
         clientId,
-        false, // not admin
         (newMessage) => {
           console.log("New message received:", newMessage);
           setMessages(prev => {
@@ -111,12 +110,17 @@ const ClientChat = () => {
               return prev;
             }
             
+            // Mark admin messages as read automatically
+            if (!newMessage.is_from_client) {
+              markMessageAsRead(clientId, newMessage.id);
+            }
+            
             return [...prev, newMessage];
           });
         }
       );
       
-      channelRef.current = channel;
+      cleanupFunctionRef.current = unsubscribe;
     } catch (error: any) {
       console.error("Error setting up message subscription:", error);
       toast.error("Failed to connect to chat service");
@@ -124,9 +128,9 @@ const ClientChat = () => {
     }
     
     return () => {
-      if (channelRef.current) {
+      if (cleanupFunctionRef.current) {
         console.log("Cleaning up message subscription");
-        supabase.removeChannel(channelRef.current);
+        cleanupFunctionRef.current();
       }
     };
   }, [clientId]);
@@ -160,6 +164,7 @@ const ClientChat = () => {
       await sendMessage({
         clientId,
         senderId: user.id,
+        senderName: user.user_metadata?.full_name || 'Client',
         message: messageText,
         isFromClient: true,
         attachmentUrl,

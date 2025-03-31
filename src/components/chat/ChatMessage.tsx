@@ -2,7 +2,7 @@
 import { format } from "date-fns";
 import { File } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { ChatMessage as ChatMessageType } from "@/lib/chat-utils";
+import { ChatMessage as ChatMessageType } from "@/lib/firebase-chat-utils";
 
 interface ChatMessageProps {
   message: ChatMessageType;
@@ -64,7 +64,7 @@ export function ChatMessage({ message, isCurrentUser, showAvatar = true }: ChatM
         <div
           className={`text-xs mt-1 text-muted-foreground`}
         >
-          {!isCurrentUser && `${message.sender_name} • `}
+          {!isCurrentUser && `${message.sender_name || ''} • `}
           {format(new Date(message.created_at), "MMM d, h:mm a")}
         </div>
       </div>
