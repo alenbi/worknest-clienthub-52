@@ -1,61 +1,85 @@
+
 import { useState, useEffect } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Button } from "@/components/ui/button";
 import { useClientAuth } from "@/contexts/client-auth-context";
 import { supabase } from "@/integrations/supabase/client";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { CheckCircle, Clock, AlertTriangle, CalendarIcon } from "lucide-react";
 import { format } from "date-fns";
-import { CheckCircle, Clock, AlertTriangle, Plus, Loader2 } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+
+interface Task {
+  id: string;
+  title: string;
+  description: string | null;
+  status: string;
+  priority: string;
+  created_at: string;
+  due_date: string;
+  completed_at: string | null;
+}
 
 const ClientTasks = () => {
   const { user } = useClientAuth();
-  const location = useLocation();
-  const navigate = useNavigate();
-  const [tasks, setTasks] = useState<any[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [clientId, setClientId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("all");
-  const [openNewTaskDialog, setOpenNewTaskDialog] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  
-  const [newTask, setNewTask] = useState({
-    title: "",
-    description: "",
-    priority: "medium",
-    dueDate: format(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), "yyyy-MM-dd"),
-  });
 
-  useEffect(() => {
-    if (location.state?.openNewTask) {
-      setOpenNewTaskDialog(true);
-      navigate(location.pathname, { replace: true, state: {} });
+  // Function to get status badge
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'completed':
+        return (
+          <Badge className="bg-green-500 text-white">
+            <CheckCircle className="h-3 w-3 mr-1" />
+            Completed
+          </Badge>
+        );
+      case 'pending':
+        return (
+          <Badge className="bg-blue-500 text-white">
+            <Clock className="h-3 w-3 mr-1" />
+            Pending
+          </Badge>
+        );
+      case 'overdue':
+        return (
+          <Badge className="bg-red-500 text-white">
+            <AlertTriangle className="h-3 w-3 mr-1" />
+            Overdue
+          </Badge>
+        );
+      default:
+        return (
+          <Badge variant="outline">
+            {status}
+          </Badge>
+        );
     }
-  }, [location, navigate]);
+  };
 
+  // Get priority badge
+  const getPriorityBadge = (priority: string) => {
+    switch (priority) {
+      case 'high':
+        return <Badge className="bg-red-500 text-white">High</Badge>;
+      case 'medium':
+        return <Badge className="bg-yellow-500 text-white">Medium</Badge>;
+      case 'low':
+        return <Badge className="bg-green-500 text-white">Low</Badge>;
+      default:
+        return <Badge variant="outline">{priority}</Badge>;
+    }
+  };
+
+  // Get client ID
   useEffect(() => {
-    const fetchClientId = async () => {
-      if (!user?.id) return;
-
+    const getClientId = async () => {
+      if (!user) return;
+      
       try {
         const { data, error } = await supabase
           .from("clients")
@@ -70,30 +94,39 @@ const ClientTasks = () => {
         }
       } catch (error) {
         console.error("Error fetching client ID:", error);
-        toast.error("Failed to load your profile");
+        toast.error("Failed to load client profile");
       }
     };
-
-    if (user) {
-      fetchClientId();
-    }
+    
+    getClientId();
   }, [user]);
 
+  // Fetch tasks
   useEffect(() => {
     const fetchTasks = async () => {
       if (!clientId) return;
-
+      
       try {
         setIsLoading(true);
+        
         const { data, error } = await supabase
           .from("tasks")
           .select("*")
           .eq("client_id", clientId)
-          .order("created_at", { ascending: false });
+          .order("due_date", { ascending: true });
         
         if (error) throw error;
         
-        setTasks(data || []);
+        // Process tasks and check if any are overdue
+        const processedTasks = (data || []).map(task => {
+          // If task is not completed and due date is past, mark as overdue
+          if (task.status !== "completed" && new Date(task.due_date) < new Date()) {
+            return { ...task, status: "overdue" };
+          }
+          return task;
+        });
+        
+        setTasks(processedTasks);
       } catch (error) {
         console.error("Error fetching tasks:", error);
         toast.error("Failed to load tasks");
@@ -101,255 +134,108 @@ const ClientTasks = () => {
         setIsLoading(false);
       }
     };
-
+    
     if (clientId) {
       fetchTasks();
     }
   }, [clientId]);
 
-  const handleSubmitNewTask = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!clientId) {
-      toast.error("Client profile not found");
-      return;
-    }
-    
-    if (!newTask.title || !newTask.priority || !newTask.dueDate) {
-      toast.error("Please fill in all required fields");
-      return;
-    }
-    
-    try {
-      setIsSubmitting(true);
-      
-      const taskToCreate = {
-        title: newTask.title,
-        description: newTask.description,
-        priority: newTask.priority,
-        client_id: clientId,
-        status: "pending",
-        due_date: new Date(newTask.dueDate).toISOString(),
-        created_at: new Date().toISOString(),
-      };
-      
-      const { error, data } = await supabase
-        .from("tasks")
-        .insert(taskToCreate)
-        .select();
-      
-      if (error) throw error;
-      
-      if (data && data[0]) {
-        setTasks([data[0], ...tasks]);
-      }
-      
-      setNewTask({
-        title: "",
-        description: "",
-        priority: "medium",
-        dueDate: format(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), "yyyy-MM-dd"),
-      });
-      
-      setOpenNewTaskDialog(false);
-      toast.success("Task created successfully");
-      
-    } catch (error: any) {
-      console.error("Error creating task:", error);
-      toast.error(error.message || "Failed to create task");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const filteredTasks = tasks.filter((task) => {
-    switch (activeTab) {
-      case "completed":
-        return task.status === "completed";
-      case "pending":
-        return task.status === "pending";
-      case "overdue":
-        return task.status === "pending" && new Date(task.due_date) < new Date();
-      default:
-        return true;
-    }
+  // Filter tasks based on active tab
+  const filteredTasks = tasks.filter(task => {
+    if (activeTab === "all") return true;
+    if (activeTab === "completed") return task.status === "completed";
+    if (activeTab === "pending") return task.status === "pending";
+    if (activeTab === "overdue") return task.status === "overdue";
+    return true;
   });
 
-  if (isLoading) {
+  if (!user) {
     return (
       <div className="flex items-center justify-center h-full">
-        <Loader2 className="h-8 w-8 animate-spin text-primary mr-2" />
-        <span>Loading tasks...</span>
+        <p>Please log in to view your tasks</p>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">My Tasks</h1>
-          <p className="text-muted-foreground">
-            View and manage your project tasks
-          </p>
-        </div>
-        <Button onClick={() => setOpenNewTaskDialog(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          New Task
-        </Button>
+      <div>
+        <h1 className="text-3xl font-bold tracking-tight">Your Tasks</h1>
+        <p className="text-muted-foreground">
+          View and manage your project tasks
+        </p>
       </div>
 
-      <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="mb-4">
-          <TabsTrigger value="all">All Tasks</TabsTrigger>
-          <TabsTrigger value="pending">In Progress</TabsTrigger>
+      <Tabs 
+        defaultValue="all" 
+        value={activeTab}
+        onValueChange={setActiveTab}
+        className="w-full"
+      >
+        <TabsList className="grid grid-cols-4 w-full max-w-md">
+          <TabsTrigger value="all">All</TabsTrigger>
+          <TabsTrigger value="pending">Pending</TabsTrigger>
           <TabsTrigger value="completed">Completed</TabsTrigger>
           <TabsTrigger value="overdue">Overdue</TabsTrigger>
         </TabsList>
 
-        <TabsContent value={activeTab}>
-          {filteredTasks.length > 0 ? (
-            <div className="space-y-4">
+        <div className="mt-6">
+          {isLoading ? (
+            <div className="flex justify-center p-12">
+              <div className="animate-spin h-8 w-8 border-2 border-primary border-t-transparent rounded-full"></div>
+            </div>
+          ) : filteredTasks.length === 0 ? (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <div className="rounded-full bg-muted p-3 mb-4">
+                  <Clock className="h-6 w-6 text-muted-foreground" />
+                </div>
+                <h3 className="text-lg font-medium">No tasks found</h3>
+                <p className="text-sm text-muted-foreground text-center max-w-md mt-2">
+                  {activeTab === "all" 
+                    ? "You don't have any tasks assigned yet." 
+                    : `You don't have any ${activeTab} tasks.`}
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid gap-4">
               {filteredTasks.map((task) => (
                 <Card key={task.id}>
-                  <CardContent className="p-4">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-start space-x-4">
-                        <div className="mt-1">
-                          {task.status === "completed" ? (
-                            <CheckCircle className="h-5 w-5 text-green-500" />
-                          ) : new Date(task.due_date) < new Date() ? (
-                            <AlertTriangle className="h-5 w-5 text-red-500" />
-                          ) : (
-                            <Clock className="h-5 w-5 text-blue-500" />
-                          )}
-                        </div>
-                        <div>
-                          <h3 className="font-medium text-lg">{task.title}</h3>
-                          {task.description && (
-                            <p className="text-muted-foreground mt-1">{task.description}</p>
-                          )}
-                          <div className="flex gap-2 mt-2">
-                            <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs ${
-                              task.priority === "high" 
-                                ? "bg-red-100 text-red-700" 
-                                : task.priority === "medium"
-                                  ? "bg-yellow-100 text-yellow-700"
-                                  : "bg-blue-100 text-blue-700"
-                            }`}>
-                              {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)} Priority
-                            </span>
-                            <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs ${
-                              task.status === "completed"
-                                ? "bg-green-100 text-green-700"
-                                : "bg-blue-100 text-blue-700"
-                            }`}>
-                              {task.status.charAt(0).toUpperCase() + task.status.slice(1)}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="text-sm text-muted-foreground">
-                        Due: {format(new Date(task.due_date), "MMM d, yyyy")}
+                  <CardHeader className="pb-2">
+                    <div className="flex justify-between items-start">
+                      <CardTitle>{task.title}</CardTitle>
+                      <div className="flex space-x-2">
+                        {getPriorityBadge(task.priority)}
+                        {getStatusBadge(task.status)}
                       </div>
                     </div>
+                    <CardDescription>
+                      <div className="flex items-center text-sm mt-1">
+                        <CalendarIcon className="h-3 w-3 mr-1" />
+                        Due: {format(new Date(task.due_date), "MMM d, yyyy")}
+                      </div>
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {task.description && (
+                      <p className="text-sm text-muted-foreground mb-4">
+                        {task.description}
+                      </p>
+                    )}
+                    
+                    {task.status === "completed" && task.completed_at && (
+                      <div className="text-sm text-muted-foreground">
+                        Completed on {format(new Date(task.completed_at), "MMM d, yyyy")}
+                      </div>
+                    )}
                   </CardContent>
                 </Card>
               ))}
             </div>
-          ) : (
-            <div className="flex items-center justify-center h-64 rounded-md border border-dashed">
-              <div className="text-center">
-                <p className="text-muted-foreground">No tasks found</p>
-                <Button 
-                  variant="outline" 
-                  onClick={() => setOpenNewTaskDialog(true)}
-                  className="mt-4"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create a New Task
-                </Button>
-              </div>
-            </div>
           )}
-        </TabsContent>
+        </div>
       </Tabs>
-
-      <Dialog open={openNewTaskDialog} onOpenChange={setOpenNewTaskDialog}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>New Task Request</DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleSubmitNewTask}>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="title">Task Title</Label>
-                <Input
-                  id="title"
-                  placeholder="Enter task title"
-                  value={newTask.title}
-                  onChange={(e) => setNewTask({ ...newTask, title: e.target.value })}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="description">Description</Label>
-                <Textarea
-                  id="description"
-                  placeholder="Describe what you need help with"
-                  value={newTask.description}
-                  onChange={(e) => setNewTask({ ...newTask, description: e.target.value })}
-                  rows={4}
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="priority">Priority</Label>
-                  <Select
-                    value={newTask.priority}
-                    onValueChange={(value) => setNewTask({ ...newTask, priority: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select priority" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="low">Low</SelectItem>
-                      <SelectItem value="medium">Medium</SelectItem>
-                      <SelectItem value="high">High</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="dueDate">Due Date</Label>
-                  <Input
-                    id="dueDate"
-                    type="date"
-                    value={newTask.dueDate}
-                    onChange={(e) => setNewTask({ ...newTask, dueDate: e.target.value })}
-                    min={format(new Date(), "yyyy-MM-dd")}
-                    required
-                  />
-                </div>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setOpenNewTaskDialog(false)}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Creating...
-                  </>
-                ) : (
-                  "Create Task"
-                )}
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };

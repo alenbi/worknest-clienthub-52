@@ -1,3 +1,4 @@
+
 import { ref, push, set, onValue, off, get, query, orderByChild, update } from "firebase/database";
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
 import { database, storage } from "@/integrations/firebase/config";
@@ -36,8 +37,9 @@ export async function testFirebaseConnection(): Promise<boolean> {
     const testRef = ref(database, '.info/connected');
     
     return new Promise((resolve) => {
-      // Create a timeout ID variable BEFORE creating the onValue callback
+      // Initialize variables first
       let timeoutId: number | undefined;
+      let unsubscribe: (() => void) | null = null;
       
       // Prepare cleanup function
       const cleanup = () => {
@@ -45,16 +47,15 @@ export async function testFirebaseConnection(): Promise<boolean> {
           window.clearTimeout(timeoutId);
           timeoutId = undefined;
         }
-      };
-      
-      // Create the onValue function reference first before using it
-      const onValueCallback = (snapshot: any) => {
-        cleanup(); // Clear timeout
         
-        // Now we can safely call unsubscribe because it's defined
         if (unsubscribe) {
           unsubscribe();
         }
+      };
+      
+      // Create the onValue function reference
+      const onValueCallback = (snapshot: any) => {
+        cleanup(); // Clear timeout
         
         const connected = snapshot.val() === true;
         console.log("Firebase connection test:", connected ? "Connected" : "Not connected");
@@ -66,20 +67,12 @@ export async function testFirebaseConnection(): Promise<boolean> {
       const onError = (error: any) => {
         cleanup(); // Clear timeout
         
-        // Now we can safely call unsubscribe because it's defined
-        if (unsubscribe) {
-          unsubscribe();
-        }
-        
         console.error("Firebase connection test failed:", error);
         isFirebaseAvailable = false;
         resolve(false);
       };
       
-      // Define unsubscribe BEFORE using it
-      let unsubscribe: (() => void) | null = null;
-      
-      // Assign the actual onValue result to unsubscribe
+      // Now assign the onValue result to unsubscribe
       try {
         unsubscribe = onValue(testRef, onValueCallback, onError);
       } catch (innerError) {
@@ -93,9 +86,7 @@ export async function testFirebaseConnection(): Promise<boolean> {
       // Set a timeout in case onValue doesn't fire
       timeoutId = window.setTimeout(() => {
         console.error("Firebase connection test timed out");
-        if (unsubscribe) {
-          unsubscribe();
-        }
+        cleanup();
         isFirebaseAvailable = false;
         resolve(false);
       }, 5000);
@@ -301,7 +292,7 @@ export async function sendMessage({
   try {
     if (!isFirebaseAvailable) {
       console.log("Firebase not available, using Supabase for sending message");
-      return await sendSupabaseMessage({
+      const result = await sendSupabaseMessage({
         clientId, 
         senderId, 
         message, 
@@ -309,6 +300,11 @@ export async function sendMessage({
         attachmentUrl, 
         attachmentType
       });
+      
+      // Send email notification
+      await sendMessageNotification(clientId, senderId, senderName, message, isFromClient);
+      
+      return result;
     }
     
     console.log("Sending Firebase message", {
@@ -346,6 +342,9 @@ export async function sendMessage({
     
     console.log("Firebase message sent successfully:", id);
     
+    // Send email notification
+    await sendMessageNotification(clientId, senderId, senderName, finalMessage, isFromClient);
+    
     return {
       id,
       ...messageData
@@ -357,7 +356,7 @@ export async function sendMessage({
     // Fallback to Supabase
     try {
       console.log("Falling back to Supabase for sending message");
-      return await sendSupabaseMessage({
+      const result = await sendSupabaseMessage({
         clientId, 
         senderId, 
         message, 
@@ -365,6 +364,11 @@ export async function sendMessage({
         attachmentUrl, 
         attachmentType
       });
+      
+      // Send email notification
+      await sendMessageNotification(clientId, senderId, senderName, message, isFromClient);
+      
+      return result;
     } catch (fallbackError) {
       console.error("Fallback to Supabase also failed:", fallbackError);
       toast.error("Failed to send message. Please try again.");
@@ -382,8 +386,8 @@ export async function uploadChatFile(
   isAdmin: boolean
 ): Promise<{ url: string; type: string }> {
   try {
-    if (!isFirebaseAvailable) {
-      console.log("Firebase not available, using Supabase for file upload");
+    if (!isFirebaseAvailable || !storage) {
+      console.log("Firebase Storage not available, using Supabase for file upload");
       return await uploadSupabaseChatFile(file, clientId, isAdmin);
     }
     
@@ -401,12 +405,15 @@ export async function uploadChatFile(
     // Upload file to Firebase Storage
     const fileRef = storageRef(storage, `chat/${filePath}`);
     
+    console.log("Uploading to Firebase path:", `chat/${filePath}`);
+    
     // Upload the file
     const snapshot = await uploadBytes(fileRef, file);
     console.log("File uploaded successfully:", snapshot.metadata.name);
     
     // Get the download URL
     const downloadUrl = await getDownloadURL(fileRef);
+    console.log("Download URL obtained:", downloadUrl);
     
     return {
       url: downloadUrl,
@@ -425,6 +432,51 @@ export async function uploadChatFile(
       toast.error("Failed to upload file. Please try again.");
       throw error;
     }
+  }
+}
+
+/**
+ * Sends an email notification about a new message
+ */
+async function sendMessageNotification(
+  clientId: string,
+  senderId: string,
+  senderName: string,
+  message: string,
+  isFromClient: boolean
+): Promise<void> {
+  try {
+    // Get client details
+    const { data: clientData } = await supabase
+      .from("clients")
+      .select("name, email")
+      .eq("id", clientId)
+      .single();
+    
+    if (!clientData) {
+      console.error("Client not found for notification");
+      return;
+    }
+    
+    // Prepare notification data
+    const notificationData = {
+      clientId,
+      clientName: clientData.name,
+      clientEmail: clientData.email,
+      senderName,
+      message: message.substring(0, 100) + (message.length > 100 ? '...' : ''),
+      isFromClient
+    };
+    
+    // Send the notification to our function
+    await supabase.functions.invoke('send-message-notification', {
+      body: notificationData
+    });
+    
+    console.log("Message notification sent");
+  } catch (error) {
+    console.error("Failed to send message notification:", error);
+    // Don't throw here - this is a non-essential operation
   }
 }
 
