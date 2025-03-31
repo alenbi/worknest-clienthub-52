@@ -25,6 +25,7 @@ import Index from "./pages/Index";
 // Client pages
 import ClientDashboard from "./pages/client/ClientDashboard";
 import ClientTasks from "./pages/client/ClientTasks";
+import ClientAddTask from "./pages/client/ClientAddTask";
 import ClientChat from "./pages/client/ClientChat";
 import ClientResources from "./pages/client/ClientResources";
 import ClientVideos from "./pages/client/ClientVideos";
@@ -98,6 +99,7 @@ const App = () => (
                   <Route element={<ClientLayout />}>
                     <Route path="/client/dashboard" element={<ClientDashboard />} />
                     <Route path="/client/tasks" element={<ClientTasks />} />
+                    <Route path="/client/tasks/add" element={<ClientAddTask />} />
                     <Route path="/client/chat" element={<ClientChat />} />
                     <Route path="/client/resources" element={<ClientResources />} />
                     <Route path="/client/videos" element={<ClientVideos />} />

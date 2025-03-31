@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Calendar as CalendarIcon } from "lucide-react";
 import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
 import { useClientAuth } from "@/contexts/client-auth-context";
 import { supabase } from "@/integrations/supabase/client";
 import { Calendar } from "@/components/ui/calendar";
@@ -14,8 +15,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { TaskPriority, TaskStatus } from "@/contexts/data-context";
-import { useNavigate } from "react-router-dom";
+import { TaskPriority, TaskStatus } from "@/lib/models";
 
 const ClientAddTask = () => {
   const { user } = useClientAuth();
@@ -29,7 +29,7 @@ const ClientAddTask = () => {
   const [clientId, setClientId] = useState<string | null>(null);
   
   // Get the client ID when the component mounts
-  useState(() => {
+  useEffect(() => {
     const fetchClientId = async () => {
       if (!user?.id) return;
       
@@ -49,7 +49,7 @@ const ClientAddTask = () => {
     };
     
     fetchClientId();
-  });
+  }, [user]);
   
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

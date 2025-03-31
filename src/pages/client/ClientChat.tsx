@@ -1,8 +1,9 @@
+
 import { useState, useEffect, useRef, useCallback } from "react";
 import { ChatMessage, fetchClientMessages, sendMessage, subscribeToChatMessages, markMessageAsRead, uploadChatFile } from "@/lib/chat-utils";
 import { useClientAuth } from "@/contexts/client-auth-context";
-import ChatMessageList from "@/components/chat/ChatMessageList";
-import ChatInput from "@/components/chat/ChatInput";
+import { ChatMessageList } from "@/components/chat/ChatMessageList";
+import { ChatInput } from "@/components/chat/ChatInput";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
