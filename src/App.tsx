@@ -49,10 +49,12 @@ const queryClient = new QueryClient({
       retry: 2,
     },
   },
-  queryCache: {
-    onError: (error) => {
-      console.error("Query error:", error);
-    }
+});
+
+// Add global error handler
+queryClient.getQueryCache().subscribe({
+  onError: (error) => {
+    console.error("Query error:", error);
   }
 });
 
