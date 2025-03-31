@@ -295,7 +295,7 @@ const ClientDetail = () => {
                       </label>
                       <Select
                         value={newTask.priority}
-                        onValueChange={(value: "low" | "medium" | "high") =>
+                        onValueChange={(value: TaskPriority) =>
                           setNewTask((prev) => ({ ...prev, priority: value }))
                         }
                       >
@@ -303,9 +303,9 @@ const ClientDetail = () => {
                           <SelectValue placeholder="Select priority" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="low">Low</SelectItem>
-                          <SelectItem value="medium">Medium</SelectItem>
-                          <SelectItem value="high">High</SelectItem>
+                          <SelectItem value={TaskPriority.LOW}>Low</SelectItem>
+                          <SelectItem value={TaskPriority.MEDIUM}>Medium</SelectItem>
+                          <SelectItem value={TaskPriority.HIGH}>High</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>

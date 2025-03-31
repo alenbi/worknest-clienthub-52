@@ -38,14 +38,14 @@ interface TaskEditDialogProps {
 }
 
 const statusOptions = [
-  { value: "pending", label: "Pending" },
-  { value: "completed", label: "Completed" },
+  { value: TaskStatus.PENDING, label: "Pending" },
+  { value: TaskStatus.COMPLETED, label: "Completed" },
 ];
 
 const priorityOptions = [
-  { value: "low", label: "Low" },
-  { value: "medium", label: "Medium" },
-  { value: "high", label: "High" },
+  { value: TaskPriority.LOW, label: "Low" },
+  { value: TaskPriority.MEDIUM, label: "Medium" },
+  { value: TaskPriority.HIGH, label: "High" },
 ];
 
 export function TaskEditDialog({
@@ -152,7 +152,7 @@ export function TaskEditDialog({
               <Select
                 value={editedTask.priority}
                 onValueChange={(value) =>
-                  handleSelectChange("priority", value)
+                  handleSelectChange("priority", value as TaskPriority)
                 }
               >
                 <SelectTrigger id="priority">
@@ -172,7 +172,7 @@ export function TaskEditDialog({
               <Select
                 value={editedTask.status}
                 onValueChange={(value) =>
-                  handleSelectChange("status", value)
+                  handleSelectChange("status", value as TaskStatus)
                 }
               >
                 <SelectTrigger id="status">
