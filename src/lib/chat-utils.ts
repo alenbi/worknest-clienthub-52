@@ -1,3 +1,4 @@
+
 import { RealtimeChannel } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -217,10 +218,10 @@ export async function uploadChatFile(
  */
 export async function fetchClientMessages(clientId: string): Promise<ChatMessage[]> {
   try {
-    // Get all messages for this client - Fixed to avoid the ambiguous column reference and fix the relation issue
+    // Get all messages for this client - Fixed to avoid the ambiguous column reference
     const { data: messages, error } = await supabase
       .from("client_messages")
-      .select("*, profiles(full_name)")
+      .select("*")
       .eq("client_id", clientId)
       .order("created_at", { ascending: true });
     
@@ -233,6 +234,19 @@ export async function fetchClientMessages(clientId: string): Promise<ChatMessage
       return [];
     }
     
+    // Fetch profile names separately and merge them with messages
+    const senderIds = [...new Set(messages.map(msg => msg.sender_id))];
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("id, full_name")
+      .in("id", senderIds);
+    
+    // Create a map of sender IDs to names for quick lookup
+    const senderNameMap = (profiles || []).reduce((map, profile) => {
+      map[profile.id] = profile.full_name;
+      return map;
+    }, {} as Record<string, string>);
+    
     // Format the messages to match the ChatMessage interface
     const formattedMessages = messages.map(msg => ({
       id: msg.id,
@@ -242,7 +256,7 @@ export async function fetchClientMessages(clientId: string): Promise<ChatMessage
       is_from_client: msg.is_from_client,
       created_at: msg.created_at,
       is_read: msg.is_read,
-      sender_name: msg.profiles?.full_name || "Unknown User",
+      sender_name: senderNameMap[msg.sender_id] || "Unknown User",
       attachment_url: msg.attachment_url,
       attachment_type: msg.attachment_type
     }));
