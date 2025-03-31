@@ -8,7 +8,19 @@ import { supabase } from "@/integrations/supabase/client";
 import { Send, PaperclipIcon, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import type { ClientMessage } from "@/lib/models";
+
+// Define ClientMessage interface for type safety
+interface ClientMessage {
+  id: string;
+  client_id: string;
+  sender_id: string;
+  is_from_client: boolean;
+  is_read: boolean;
+  message: string;
+  created_at: string;
+  attachment_url?: string;
+  attachment_type?: string;
+}
 
 const ClientChat = () => {
   const { user } = useClientAuth();
@@ -17,6 +29,7 @@ const ClientChat = () => {
   const [clientId, setClientId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Fetch client ID from database based on user ID
@@ -25,17 +38,28 @@ const ClientChat = () => {
       if (!user?.id) return;
 
       try {
-        const { data } = await supabase
+        console.log("Fetching client ID for user:", user.id);
+        const { data, error } = await supabase
           .from("clients")
           .select("id")
           .eq("user_id", user.id)
           .single();
         
+        if (error) {
+          console.error("Error fetching client ID:", error);
+          setError(`Could not find client profile: ${error.message}`);
+          setIsLoading(false);
+          return;
+        }
+        
+        console.log("Client ID found:", data?.id);
         if (data) {
           setClientId(data.id);
         }
-      } catch (error) {
-        console.error("Error fetching client ID:", error);
+      } catch (err) {
+        console.error("Exception fetching client ID:", err);
+        setError("An unexpected error occurred while loading your profile");
+        setIsLoading(false);
       }
     };
 
@@ -50,6 +74,7 @@ const ClientChat = () => {
       if (!clientId) return;
 
       try {
+        console.log("Fetching messages for client:", clientId);
         setIsLoading(true);
         const { data, error } = await supabase
           .from("client_messages")
@@ -57,9 +82,14 @@ const ClientChat = () => {
           .eq("client_id", clientId)
           .order("created_at", { ascending: true });
         
-        if (error) throw error;
+        if (error) {
+          console.error("Error fetching messages:", error);
+          setError(`Could not load messages: ${error.message}`);
+          setIsLoading(false);
+          return;
+        }
         
-        // Explicitly type the data as ClientMessage[] since we updated the interface
+        console.log(`Loaded ${data?.length || 0} messages`);
         setMessages(data as ClientMessage[]);
         
         // Mark all unread messages from admin as read
@@ -68,25 +98,26 @@ const ClientChat = () => {
         );
         
         if (unreadAdminMessages.length > 0) {
+          console.log(`Marking ${unreadAdminMessages.length} messages as read`);
           const unreadIds = unreadAdminMessages.map(msg => msg.id);
           await supabase
             .from("client_messages")
             .update({ is_read: true })
             .in("id", unreadIds);
         }
-      } catch (error) {
-        console.error("Error fetching messages:", error);
-        toast.error("Failed to load messages");
+      } catch (err) {
+        console.error("Exception fetching messages:", err);
+        setError("An unexpected error occurred while loading messages");
       } finally {
         setIsLoading(false);
       }
     };
 
-    fetchMessages();
-
-    // Set up realtime subscription for new messages
     if (clientId) {
-      const subscription = supabase
+      fetchMessages();
+      
+      // Set up realtime subscription for new messages
+      const channel = supabase
         .channel('client_messages_changes')
         .on('postgres_changes', { 
           event: 'INSERT', 
@@ -94,6 +125,7 @@ const ClientChat = () => {
           table: 'client_messages',
           filter: `client_id=eq.${clientId}`
         }, (payload) => {
+          console.log("Received new message:", payload);
           const newMessage = payload.new as ClientMessage;
           setMessages(prev => [...prev, newMessage]);
           
@@ -108,7 +140,8 @@ const ClientChat = () => {
         .subscribe();
 
       return () => {
-        supabase.removeChannel(subscription);
+        console.log("Unsubscribing from client_messages_changes channel");
+        supabase.removeChannel(channel);
       };
     }
   }, [clientId]);
@@ -125,6 +158,7 @@ const ClientChat = () => {
     
     try {
       setIsSending(true);
+      console.log("Sending message:", message.trim());
       
       const newMessage = {
         client_id: clientId,
@@ -138,12 +172,16 @@ const ClientChat = () => {
         .from("client_messages")
         .insert(newMessage);
       
-      if (error) throw error;
+      if (error) {
+        console.error("Error sending message:", error);
+        toast.error(`Failed to send message: ${error.message}`);
+        return;
+      }
       
       setMessage("");
-    } catch (error) {
-      console.error("Error sending message:", error);
-      toast.error("Failed to send message");
+    } catch (err) {
+      console.error("Exception sending message:", err);
+      toast.error("An unexpected error occurred while sending your message");
     } finally {
       setIsSending(false);
     }
@@ -152,8 +190,20 @@ const ClientChat = () => {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <span className="ml-2">Loading conversation...</span>
+        <Loader2 className="h-8 w-8 animate-spin text-primary mr-2" />
+        <span>Loading conversation...</span>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full">
+        <div className="text-destructive mb-4">
+          <p className="font-semibold text-lg">Error loading chat</p>
+          <p>{error}</p>
+        </div>
+        <Button onClick={() => window.location.reload()}>Try again</Button>
       </div>
     );
   }

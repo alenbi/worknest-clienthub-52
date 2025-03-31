@@ -1,30 +1,20 @@
 
-import { Navigate, Outlet, useNavigate, useLocation } from "react-router-dom";
+import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useClientAuth } from "@/contexts/client-auth-context";
-import { useEffect } from "react";
 import { Loader2 } from "lucide-react";
 
 const ClientProtectedRoute = () => {
   const { isAuthenticated, isLoading } = useClientAuth();
-  const navigate = useNavigate();
   const location = useLocation();
-
-  useEffect(() => {
-    // If authentication is complete and user is not authenticated, redirect to login
-    if (!isLoading && !isAuthenticated) {
-      navigate("/client/login", { replace: true });
-    }
-    
-    // If authenticated as client but trying to access admin routes, redirect to client dashboard
-    if (isAuthenticated && !isLoading) {
-      const adminPaths = ['/dashboard', '/clients', '/tasks', '/settings', '/admin'];
-      const isAdminPath = adminPaths.some(path => location.pathname.startsWith(path));
-      
-      if (isAdminPath) {
-        navigate("/client/dashboard", { replace: true });
-      }
-    }
-  }, [isAuthenticated, isLoading, navigate, location]);
+  
+  // Check if trying to access admin routes
+  const adminPaths = ['/dashboard', '/clients', '/tasks', '/settings', '/admin'];
+  const isAdminPath = adminPaths.some(path => location.pathname.startsWith(path));
+  
+  // If authenticated as client but trying to access admin routes, redirect to client dashboard
+  if (isAuthenticated && isAdminPath) {
+    return <Navigate to="/client/dashboard" replace />;
+  }
 
   // Only show loading if we're genuinely still checking auth
   if (isLoading) {
@@ -36,6 +26,7 @@ const ClientProtectedRoute = () => {
     );
   }
 
+  // Return outlet only for client who's authenticated and on client routes
   return isAuthenticated ? <Outlet /> : <Navigate to="/client/login" replace />;
 };
 

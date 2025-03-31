@@ -7,6 +7,7 @@ import { useClientAuth } from "@/contexts/client-auth-context";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from "recharts";
+import { useNavigate } from "react-router-dom";
 
 const ClientDashboard = () => {
   const { user } = useClientAuth();
@@ -22,7 +23,7 @@ const ClientDashboard = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [clientName, setClientName] = useState(user?.name || "Client");
   const [latestOffers, setLatestOffers] = useState<any[]>([]);
-  const [upcomingMilestones, setUpcomingMilestones] = useState<any[]>([]);
+  const navigate = useNavigate();
 
   // Fetch client ID based on user ID
   useEffect(() => {
@@ -114,12 +115,6 @@ const ClientDashboard = () => {
         }));
         
         setLatestOffers(formattedOffers);
-        
-        // Mock data for milestones (would typically come from a real table in production)
-        setUpcomingMilestones([
-          { id: 1, title: "Project Phase 1 Completion", date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000) },
-          { id: 2, title: "Website Launch", date: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000) }
-        ]);
 
       } catch (error) {
         console.error("Error fetching client data:", error);
@@ -130,6 +125,11 @@ const ClientDashboard = () => {
 
     fetchClientData();
   }, [clientId]);
+
+  // Function to navigate to task creation
+  const navigateToNewTask = () => {
+    navigate('/client/tasks', { state: { openNewTask: true } });
+  };
 
   // Prepare data for chart
   const chartData = [
@@ -150,12 +150,17 @@ const ClientDashboard = () => {
     <div className="space-y-6">
       {/* Welcome section with personalized greeting */}
       <div className="bg-gradient-to-r from-primary/10 to-secondary/10 rounded-lg p-6">
-        <h1 className="text-3xl font-bold tracking-tight">
-          Welcome back, {clientName}
-        </h1>
-        <p className="text-muted-foreground mt-2">
-          Here's an overview of your project status and upcoming activities
-        </p>
+        <div className="flex justify-between items-center">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">
+              Welcome back, {clientName}
+            </h1>
+            <p className="text-muted-foreground mt-2">
+              Here's an overview of your project status and upcoming activities
+            </p>
+          </div>
+          <Button onClick={navigateToNewTask}>Add New Task</Button>
+        </div>
       </div>
 
       {/* Main stats in a more visually distinct layout */}
@@ -210,36 +215,6 @@ const ClientDashboard = () => {
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
-        {/* Project Timeline Section */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Project Timeline</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {upcomingMilestones.length > 0 ? (
-              <div className="space-y-4">
-                {upcomingMilestones.map((milestone) => (
-                  <div key={milestone.id} className="flex items-center space-x-4">
-                    <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center">
-                      <Clock className="h-5 w-5 text-primary" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-medium">{milestone.title}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {format(milestone.date, "MMM dd, yyyy")}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="flex h-[200px] items-center justify-center">
-                <p className="text-muted-foreground">No upcoming milestones</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
         {/* Task Overview Chart */}
         {taskStats.total > 0 ? (
           <Card>
@@ -282,55 +257,6 @@ const ClientDashboard = () => {
             </CardContent>
           </Card>
         )}
-      </div>
-
-      <div className="grid gap-6 md:grid-cols-2">
-        {/* Recent Tasks Section */}
-        <Card>
-          <CardHeader className="border-b">
-            <CardTitle className="flex items-center">
-              <ListTodo className="mr-2 h-5 w-5 text-primary" />
-              Recent Tasks
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="pt-4">
-            {recentTasks.length > 0 ? (
-              <div className="space-y-4">
-                {recentTasks.map((task) => (
-                  <div
-                    key={task.id}
-                    className="flex items-center justify-between rounded-md p-3 hover:bg-muted/50 transition-colors"
-                  >
-                    <div className="flex items-center">
-                      {task.status === "completed" ? (
-                        <CheckCircle className="h-5 w-5 mr-3 text-green-500" />
-                      ) : new Date(task.due_date) < new Date() ? (
-                        <AlertTriangle className="h-5 w-5 mr-3 text-red-500" />
-                      ) : (
-                        <Clock className="h-5 w-5 mr-3 text-blue-500" />
-                      )}
-                      <div>
-                        <div className="font-medium">{task.title}</div>
-                        <div className="text-sm text-muted-foreground">
-                          {task.status.charAt(0).toUpperCase() + task.status.slice(1)}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="text-sm text-muted-foreground">
-                      {task.due_date && format(new Date(task.due_date), "MMM d")}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="flex h-[200px] items-center justify-center rounded-md border border-dashed">
-                <p className="text-sm text-muted-foreground">
-                  No recent tasks
-                </p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
 
         {/* Latest Offers */}
         <Card>
@@ -372,6 +298,53 @@ const ClientDashboard = () => {
         </Card>
       </div>
 
+      {/* Recent Tasks Section */}
+      <Card>
+        <CardHeader className="border-b">
+          <CardTitle className="flex items-center">
+            <ListTodo className="mr-2 h-5 w-5 text-primary" />
+            Recent Tasks
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="pt-4">
+          {recentTasks.length > 0 ? (
+            <div className="space-y-4">
+              {recentTasks.map((task) => (
+                <div
+                  key={task.id}
+                  className="flex items-center justify-between rounded-md p-3 hover:bg-muted/50 transition-colors"
+                >
+                  <div className="flex items-center">
+                    {task.status === "completed" ? (
+                      <CheckCircle className="h-5 w-5 mr-3 text-green-500" />
+                    ) : new Date(task.due_date) < new Date() ? (
+                      <AlertTriangle className="h-5 w-5 mr-3 text-red-500" />
+                    ) : (
+                      <Clock className="h-5 w-5 mr-3 text-blue-500" />
+                    )}
+                    <div>
+                      <div className="font-medium">{task.title}</div>
+                      <div className="text-sm text-muted-foreground">
+                        {task.status.charAt(0).toUpperCase() + task.status.slice(1)}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="text-sm text-muted-foreground">
+                    {task.due_date && format(new Date(task.due_date), "MMM d")}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex h-[200px] items-center justify-center rounded-md border border-dashed">
+              <p className="text-sm text-muted-foreground">
+                No recent tasks
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {unreadMessages > 0 && (
         <Card className="bg-primary/5 border-primary/20">
           <CardContent className="p-4 flex items-center justify-between">
@@ -379,7 +352,7 @@ const ClientDashboard = () => {
               <MessageSquare className="h-5 w-5 mr-2 text-primary" />
               <span>You have {unreadMessages} unread message{unreadMessages > 1 ? 's' : ''}</span>
             </div>
-            <Button size="sm" variant="outline" onClick={() => window.location.href = '/client/chat'}>
+            <Button size="sm" variant="outline" onClick={() => navigate('/client/chat')}>
               View Messages
             </Button>
           </CardContent>
