@@ -51,13 +51,13 @@ const ClientDetail = () => {
   const navigate = useNavigate();
   const { clients, tasks, addTask, updateTask, deleteTask, isLoading } = useData();
 
-  const [newTask, setNewTask] = useState<Omit<Task, "id" | "createdAt" | "completedAt">>({
+  const [newTask, setNewTask] = useState<Omit<Task, "id">>({
     title: "",
     description: "",
-    clientId: id || "",
+    client_id: id || "",
     status: "pending",
     priority: "medium",
-    dueDate: new Date(),
+    due_date: new Date().toISOString(),
   });
   const [isAddTaskDialogOpen, setIsAddTaskDialogOpen] = useState(false);
 
@@ -82,7 +82,7 @@ const ClientDetail = () => {
     );
   }
 
-  const clientTasks = tasks.filter((task) => task.clientId === id);
+  const clientTasks = tasks.filter((task) => task.client_id === id);
   const pendingTasks = clientTasks.filter((task) => task.status === "pending");
   const completedTasks = clientTasks.filter((task) => task.status === "completed");
 
@@ -148,10 +148,10 @@ const ClientDetail = () => {
       setNewTask({
         title: "",
         description: "",
-        clientId: id || "",
+        client_id: id || "",
         status: "pending",
         priority: "medium",
-        dueDate: new Date(),
+        due_date: new Date().toISOString(),
       });
       setIsAddTaskDialogOpen(false);
     } catch (error) {
@@ -214,7 +214,7 @@ const ClientDetail = () => {
             </div>
             <div className="flex items-center">
               <Calendar className="mr-2 h-4 w-4 text-muted-foreground" />
-              <span>Client since {format(new Date(client.createdAt), "MMMM d, yyyy")}</span>
+              <span>Client since {format(new Date(client.created_at || Date.now()), "MMM d, yyyy")}</span>
             </div>
             
             <div className="mt-6 pt-4 border-t">
@@ -311,11 +311,11 @@ const ClientDetail = () => {
                       <Input
                         id="dueDate"
                         type="date"
-                        value={format(new Date(newTask.dueDate), "yyyy-MM-dd")}
+                        value={format(new Date(newTask.due_date), "yyyy-MM-dd")}
                         onChange={(e) =>
                           setNewTask((prev) => ({
                             ...prev,
-                            dueDate: new Date(e.target.value),
+                            due_date: new Date(e.target.value).toISOString(),
                           }))
                         }
                       />
@@ -441,7 +441,7 @@ const TaskCard = ({
   getPriorityBgColor,
 }: TaskCardProps) => {
   const isOverdue =
-    task.status !== "completed" && new Date(task.dueDate) < new Date();
+    task.status !== "completed" && new Date(task.due_date) < new Date();
 
   return (
     <Card className="overflow-hidden">
@@ -477,7 +477,7 @@ const TaskCard = ({
                 ) : (
                   <Clock className="mr-1 h-3 w-3" />
                 )}
-                {format(new Date(task.dueDate), "MMM d, yyyy")}
+                {format(new Date(task.due_date), "MMM d, yyyy")}
               </span>
             </div>
           </div>

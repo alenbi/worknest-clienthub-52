@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { format } from "date-fns";
 import { PlusIcon, SearchIcon, ArrowDown, ArrowUp, Edit, Download, Filter } from "lucide-react";
@@ -83,15 +82,13 @@ export default function Tasks() {
   const [isEditTaskOpen, setIsEditTaskOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
-  const [newTask, setNewTask] = useState<
-    Omit<Task, "id" | "createdAt" | "completedAt">
-  >({
+  const [newTask, setNewTask] = useState<Omit<Task, "id">>({
     title: "",
     description: "",
-    clientId: "",
+    client_id: "",
     status: "pending",
     priority: "medium",
-    dueDate: new Date(),
+    due_date: new Date().toISOString(),
   });
 
   const handleInputChange = (
@@ -107,12 +104,12 @@ export default function Tasks() {
 
   const handleDateChange = (date: Date | undefined) => {
     if (date) {
-      setNewTask((prev) => ({ ...prev, dueDate: date }));
+      setNewTask((prev) => ({ ...prev, due_date: date.toISOString() }));
     }
   };
 
   const handleAddTask = async () => {
-    if (!newTask.title || !newTask.clientId) {
+    if (!newTask.title || !newTask.client_id) {
       toast({
         title: "Missing information",
         description: "Title and client are required.",
@@ -126,10 +123,10 @@ export default function Tasks() {
       setNewTask({
         title: "",
         description: "",
-        clientId: "",
+        client_id: "",
         status: "pending",
         priority: "medium",
-        dueDate: new Date(),
+        due_date: new Date().toISOString(),
       });
       setIsAddTaskOpen(false);
     } catch (error) {
@@ -172,9 +169,9 @@ export default function Tasks() {
       const tasksToExport = [...filteredTasks].sort((a, b) => {
         switch (sortOrder) {
           case "newest":
-            return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+            return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
           case "oldest":
-            return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+            return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
           case "priority-high":
             const priorityOrder = { high: 3, medium: 2, low: 1 };
             return (priorityOrder[b.priority as keyof typeof priorityOrder] || 0) - 
@@ -184,23 +181,23 @@ export default function Tasks() {
             return (priorityOrderReverse[a.priority as keyof typeof priorityOrderReverse] || 0) - 
                    (priorityOrderReverse[b.priority as keyof typeof priorityOrderReverse] || 0);
           case "due-date":
-            return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+            return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
           default:
-            return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+            return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
         }
       });
 
       const formattedTasks = tasksToExport.map(task => {
-        const client = clients.find(c => c.id === task.clientId);
+        const client = clients.find(c => c.id === task.client_id);
         return {
           title: task.title,
           description: task.description,
           client: client ? client.name : "Unknown",
           status: task.status,
           priority: task.priority,
-          dueDate: format(new Date(task.dueDate), "yyyy-MM-dd"),
-          createdAt: format(new Date(task.createdAt), "yyyy-MM-dd"),
-          completedAt: task.completedAt ? format(new Date(task.completedAt), "yyyy-MM-dd") : ""
+          due_date: format(new Date(task.due_date), "yyyy-MM-dd"),
+          created_at: format(new Date(task.created_at), "yyyy-MM-dd"),
+          completed_at: task.completed_at ? format(new Date(task.completed_at), "yyyy-MM-dd") : ""
         };
       });
 
@@ -214,9 +211,9 @@ export default function Tasks() {
             `"${row.client}"`,
             `"${row.status}"`,
             `"${row.priority}"`,
-            row.dueDate,
-            row.createdAt,
-            row.completedAt
+            row.due_date,
+            row.created_at,
+            row.completed_at
           ].join(',')
         )
       ].join('\n');
@@ -262,9 +259,9 @@ export default function Tasks() {
   const sortedTasks = [...filteredTasks].sort((a, b) => {
     switch (sortOrder) {
       case "newest":
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
       case "oldest":
-        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+        return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
       case "priority-high":
         const priorityOrder = { high: 3, medium: 2, low: 1 };
         return (priorityOrder[b.priority as keyof typeof priorityOrder] || 0) - 
@@ -274,9 +271,9 @@ export default function Tasks() {
         return (priorityOrderReverse[a.priority as keyof typeof priorityOrderReverse] || 0) - 
                (priorityOrderReverse[b.priority as keyof typeof priorityOrderReverse] || 0);
       case "due-date":
-        return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+        return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
       default:
-        return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+        return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
     }
   });
 
@@ -331,14 +328,14 @@ export default function Tasks() {
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="clientId">Client</Label>
+                  <Label htmlFor="client_id">Client</Label>
                   <Select
-                    value={newTask.clientId}
+                    value={newTask.client_id}
                     onValueChange={(value) =>
-                      handleSelectChange("clientId", value)
+                      handleSelectChange("client_id", value)
                     }
                   >
-                    <SelectTrigger id="clientId">
+                    <SelectTrigger id="client_id">
                       <SelectValue placeholder="Select client" />
                     </SelectTrigger>
                     <SelectContent>
@@ -393,18 +390,18 @@ export default function Tasks() {
                   </div>
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="dueDate">Due Date</Label>
+                  <Label htmlFor="due_date">Due Date</Label>
                   <Popover>
                     <PopoverTrigger asChild>
                       <Button
                         variant={"outline"}
                         className={cn(
                           "w-full justify-start text-left font-normal",
-                          !newTask.dueDate && "text-muted-foreground"
+                          !newTask.due_date && "text-muted-foreground"
                         )}
                       >
-                        {newTask.dueDate ? (
-                          format(newTask.dueDate, "PPP")
+                        {newTask.due_date ? (
+                          format(new Date(newTask.due_date), "PPP")
                         ) : (
                           <span>Pick a date</span>
                         )}
@@ -413,7 +410,7 @@ export default function Tasks() {
                     <PopoverContent className="w-auto p-0" align="start">
                       <Calendar
                         mode="single"
-                        selected={newTask.dueDate}
+                        selected={newTask.due_date}
                         onSelect={handleDateChange}
                         initialFocus
                       />
@@ -551,7 +548,7 @@ export default function Tasks() {
               </TableRow>
             ) : (
               sortedTasks.map((task, index) => {
-                const client = clients.find((c) => c.id === task.clientId);
+                const client = clients.find((c) => c.id === task.client_id);
                 return (
                   <TableRow key={task.id}>
                     <TableCell className="font-medium">{index + 1}</TableCell>
@@ -569,7 +566,7 @@ export default function Tasks() {
                       )}
                     </TableCell>
                     <TableCell className="hidden md:table-cell">
-                      {format(task.dueDate, "MMM d, yyyy")}
+                      {format(task.due_date, "MMM d, yyyy")}
                     </TableCell>
                     <TableCell>
                       <Badge

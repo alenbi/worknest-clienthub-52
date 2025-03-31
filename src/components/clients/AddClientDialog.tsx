@@ -36,11 +36,13 @@ const clientFormSchema = z.object({
   password: z.string().min(6, "Password must be at least 6 characters").optional(),
 });
 
+type ClientFormValues = z.infer<typeof clientFormSchema>;
+
 export function AddClientDialog() {
   const [open, setOpen] = useState(false);
-  const { createClient } = useData();
+  const { addClient } = useData();
 
-  const form = useForm<z.infer<typeof clientFormSchema>>({
+  const form = useForm<ClientFormValues>({
     resolver: zodResolver(clientFormSchema),
     defaultValues: {
       name: "",
@@ -52,9 +54,19 @@ export function AddClientDialog() {
     },
   });
 
-  async function onSubmit(data: z.infer<typeof clientFormSchema>) {
+  async function onSubmit(data: ClientFormValues) {
     try {
-      await createClient(data);
+      // Convert form data to match Client type requirements
+      const clientData = {
+        name: data.name,
+        email: data.email,
+        phone: data.phone || undefined,
+        company: data.company || undefined,
+        domain: data.domain || undefined,
+        password: data.password
+      };
+      
+      await addClient!(clientData);
       toast.success("Client added successfully");
       form.reset();
       setOpen(false);

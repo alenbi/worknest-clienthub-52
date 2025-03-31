@@ -1,3 +1,4 @@
+
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { v4 as uuidv4 } from 'uuid';
@@ -141,7 +142,7 @@ export const updateDataContext = (data: UpdateData | null = null): Data => {
         .order('created_at', { ascending: false });
 
       if (tasksError) throw tasksError;
-      setTasks((tasksData || []) as Task[]);
+      setTasks(tasksData || []);
 
       const { data: resourcesData, error: resourcesError } = await supabase
         .from("resources")
@@ -239,15 +240,19 @@ export const updateDataContext = (data: UpdateData | null = null): Data => {
 
   const createTask = async (task: Omit<Task, 'id'>): Promise<Task> => {
     try {
-      const taskToInsert = {
-        ...task,
-        due_date: typeof task.due_date === 'string' ? task.due_date : 
-          task.due_date instanceof Date ? task.due_date.toISOString() : undefined
+      const taskToInsert: any = {
+        title: task.title,
+        description: task.description,
+        status: task.status,
+        client_id: task.client_id,
+        priority: task.priority || 'medium',
+        due_date: typeof task.due_date === 'string' ? task.due_date : undefined,
+        created_at: new Date().toISOString()
       };
 
       const { data: newTask, error } = await supabase
         .from("tasks")
-        .insert({ ...taskToInsert, id: uuidv4() })
+        .insert(taskToInsert)
         .select()
         .single();
 
@@ -262,12 +267,11 @@ export const updateDataContext = (data: UpdateData | null = null): Data => {
 
   const updateTask = async (id: string, updates: Partial<Task>): Promise<Task | void> => {
     try {
-      const updatesToSubmit = { 
-        ...updates,
-        due_date: updates.due_date instanceof Date 
-          ? updates.due_date.toISOString() 
-          : updates.due_date
-      };
+      const updatesToSubmit: any = { ...updates };
+      
+      if (updates.due_date && typeof updates.due_date !== 'string') {
+        updatesToSubmit.due_date = new Date(updates.due_date).toISOString();
+      }
 
       const { data: updatedTask, error } = await supabase
         .from("tasks")
@@ -489,10 +493,11 @@ export const updateDataContext = (data: UpdateData | null = null): Data => {
     try {
       const updateData = {
         ...data,
-        created_at: data.created_at ? 
-          (typeof data.created_at === 'string' ? data.created_at : new Date(data.created_at).toISOString()) : 
-          undefined
       };
+
+      if (data.created_at && typeof data.created_at !== 'string') {
+        updateData.created_at = new Date(data.created_at).toISOString();
+      }
 
       const { data: update, error } = await supabase
         .from("updates")

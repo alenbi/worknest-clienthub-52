@@ -50,7 +50,7 @@ const Dashboard = () => {
   
   // Calculate overdue tasks
   const overdueTasks = tasks.filter(
-    (task) => new Date(task.dueDate) < new Date() && task.status !== "completed"
+    (task) => new Date(task.due_date) < new Date() && task.status !== "completed"
   );
 
   // Calculate completion rate
@@ -95,18 +95,18 @@ const Dashboard = () => {
   const upcomingTasks = tasks
     .filter(
       (task) => 
-        new Date(task.dueDate) > today && 
-        new Date(task.dueDate) <= nextWeek && 
+        new Date(task.due_date) > today && 
+        new Date(task.due_date) <= nextWeek && 
         task.status !== "completed"
     )
-    .sort((a, b) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime())
+    .sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime())
     .slice(0, 5);
 
   // Recently completed tasks
   const recentlyCompletedTasks = tasks
     .filter((task) => task.status === "completed")
     .sort((a, b) => 
-      (b.completedAt?.getTime() || 0) - (a.completedAt?.getTime() || 0)
+      (b.completed_at?.getTime() || 0) - (a.completed_at?.getTime() || 0)
     )
     .slice(0, 5);
 
@@ -241,7 +241,7 @@ const Dashboard = () => {
                     <div>
                       <div className="font-medium">{task.title}</div>
                       <div className="text-sm text-muted-foreground">
-                        {clients.find((c) => c.id === task.clientId)?.name}
+                        {clients.find((c) => c.id === task.client_id)?.name}
                       </div>
                     </div>
                     <div className="flex items-center">
@@ -254,7 +254,7 @@ const Dashboard = () => {
                       }`}></div>
                       <div className="flex items-center text-sm">
                         <Clock className="mr-1 h-3 w-3" />
-                        {format(new Date(task.dueDate), "MMM d")}
+                        {format(new Date(task.due_date), "MMM d")}
                       </div>
                     </div>
                   </div>
@@ -288,11 +288,11 @@ const Dashboard = () => {
                     <div>
                       <div className="font-medium">{task.title}</div>
                       <div className="text-sm text-muted-foreground">
-                        {clients.find((c) => c.id === task.clientId)?.name}
+                        {clients.find((c) => c.id === task.client_id)?.name}
                       </div>
                     </div>
                     <div className="text-sm text-muted-foreground">
-                      {task.completedAt && format(new Date(task.completedAt), "MMM d")}
+                      {task.completed_at && format(new Date(task.completed_at), "MMM d")}
                     </div>
                   </div>
                 ))}
