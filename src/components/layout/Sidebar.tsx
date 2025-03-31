@@ -10,6 +10,7 @@ import {
   FileText,
   Video,
   Tag,
+  Bell,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -54,6 +55,11 @@ export function Sidebar() {
       title: "Offers",
       icon: Tag,
       path: "/admin/offers",
+    },
+    {
+      title: "Updates",
+      icon: Bell,
+      path: "/admin/updates",
     },
   ];
 

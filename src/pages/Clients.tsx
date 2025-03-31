@@ -20,21 +20,69 @@ import {
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useData } from "@/contexts/data-context";
-import { Eye, Trash2 } from "lucide-react";
+import { Eye, Trash2, Edit, ChevronUp, ChevronDown, ArrowUpDown } from "lucide-react";
 import { AddClientDialog } from "@/components/clients/AddClientDialog";
 import { ChangePasswordDialog } from "@/components/clients/ChangePasswordDialog";
+import { EditClientDialog } from "@/components/clients/EditClientDialog";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 export default function Clients() {
   const { clients, deleteClient, isLoading } = useData();
   const [searchQuery, setSearchQuery] = useState("");
+  const [sortField, setSortField] = useState<string>("name");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
   const navigate = useNavigate();
 
-  const filteredClients = clients.filter(
-    (client) =>
-      client.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      client.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      client.company?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+      setSortDirection("asc");
+    }
+  };
+
+  const getSortIcon = (field: string) => {
+    if (sortField !== field) return <ArrowUpDown className="h-4 w-4" />;
+    return sortDirection === "asc" ? (
+      <ChevronUp className="h-4 w-4" />
+    ) : (
+      <ChevronDown className="h-4 w-4" />
+    );
+  };
+
+  const filteredClients = clients
+    .filter(
+      (client) =>
+        client.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        client.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        client.company?.toLowerCase().includes(searchQuery.toLowerCase())
+    )
+    .sort((a, b) => {
+      let compareA = a[sortField as keyof typeof a];
+      let compareB = b[sortField as keyof typeof b];
+
+      // Handle null or undefined values
+      if (compareA === null || compareA === undefined) compareA = "";
+      if (compareB === null || compareB === undefined) compareB = "";
+
+      // Convert to string for comparison
+      compareA = String(compareA).toLowerCase();
+      compareB = String(compareB).toLowerCase();
+
+      if (sortDirection === "asc") {
+        return compareA.localeCompare(compareB);
+      } else {
+        return compareB.localeCompare(compareA);
+      }
+    });
 
   const handleViewClient = (id: string) => {
     navigate(`/clients/${id}`);
@@ -59,13 +107,46 @@ export default function Clients() {
           <CardDescription>
             View and manage all your clients in one place.
           </CardDescription>
-          <div className="mt-4">
+          <div className="mt-4 flex flex-col sm:flex-row gap-4">
             <Input
               placeholder="Search clients..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="max-w-sm"
             />
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Sort by:</span>
+              <Select
+                value={sortField}
+                onValueChange={(value) => {
+                  setSortField(value);
+                  setSortDirection("asc");
+                }}
+              >
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Sort by" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectItem value="name">Name</SelectItem>
+                    <SelectItem value="email">Email</SelectItem>
+                    <SelectItem value="company">Company</SelectItem>
+                    <SelectItem value="created_at">Date Added</SelectItem>
+                  </SelectGroup>
+                </SelectContent>
+              </Select>
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setSortDirection(sortDirection === "asc" ? "desc" : "asc")}
+              >
+                {sortDirection === "asc" ? (
+                  <ChevronUp className="h-4 w-4" />
+                ) : (
+                  <ChevronDown className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -73,10 +154,26 @@ export default function Clients() {
             <TableHeader>
               <TableRow>
                 <TableHead className="w-[50px]"></TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Company</TableHead>
-                <TableHead>Domain</TableHead>
+                <TableHead className="cursor-pointer" onClick={() => handleSort("name")}>
+                  <div className="flex items-center gap-1">
+                    Name {getSortIcon("name")}
+                  </div>
+                </TableHead>
+                <TableHead className="cursor-pointer" onClick={() => handleSort("email")}>
+                  <div className="flex items-center gap-1">
+                    Email {getSortIcon("email")}
+                  </div>
+                </TableHead>
+                <TableHead className="cursor-pointer" onClick={() => handleSort("company")}>
+                  <div className="flex items-center gap-1">
+                    Company {getSortIcon("company")}
+                  </div>
+                </TableHead>
+                <TableHead className="cursor-pointer" onClick={() => handleSort("domain")}>
+                  <div className="flex items-center gap-1">
+                    Domain {getSortIcon("domain")}
+                  </div>
+                </TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -115,6 +212,7 @@ export default function Clients() {
                     <TableCell className="text-right">
                       <div className="flex justify-end space-x-2">
                         <ChangePasswordDialog client={client} variant="outline" />
+                        <EditClientDialog client={client} />
                         <Button
                           variant="outline"
                           size="sm"

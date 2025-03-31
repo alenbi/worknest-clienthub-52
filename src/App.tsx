@@ -31,6 +31,7 @@ import ClientResources from "./pages/client/ClientResources";
 import ClientVideos from "./pages/client/ClientVideos";
 import ClientOffers from "./pages/client/ClientOffers";
 import ClientProfile from "./pages/client/ClientProfile";
+import ClientUpdates from "./pages/client/ClientUpdates";
 
 // Admin pages
 import AdminChat from "./pages/admin/AdminChat";
@@ -38,6 +39,7 @@ import AdminChatWithClient from "./pages/admin/AdminChatWithClient";
 import AdminResources from "./pages/admin/AdminResources";
 import AdminVideos from "./pages/admin/AdminVideos";
 import AdminOffers from "./pages/admin/AdminOffers";
+import AdminUpdates from "./pages/admin/AdminUpdates";
 
 // Create query client with default options to avoid state issues on refresh
 const queryClient = new QueryClient({
@@ -80,6 +82,8 @@ const App = () => (
                     <Route path="/admin/resources" element={<AdminResources />} />
                     <Route path="/admin/videos" element={<AdminVideos />} />
                     <Route path="/admin/offers" element={<AdminOffers />} />
+                    <Route path="/admin/updates" element={<AdminUpdates />} />
+                    <Route path="/updates" element={<Navigate to="/admin/updates" replace />} />
                   </Route>
                 </Route>
                 
@@ -93,6 +97,7 @@ const App = () => (
                     <Route path="/client/videos" element={<ClientVideos />} />
                     <Route path="/client/offers" element={<ClientOffers />} />
                     <Route path="/client/profile" element={<ClientProfile />} />
+                    <Route path="/client/updates" element={<ClientUpdates />} />
                   </Route>
                 </Route>
                 
