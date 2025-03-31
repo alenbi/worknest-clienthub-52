@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/auth-context";
-import { ArrowLeft, SendIcon, Paperclip, Image as ImageIcon, Loader2, User } from "lucide-react";
+import { ArrowLeft, SendIcon, Paperclip, Image as ImageIcon, Loader2, User, File } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
@@ -56,7 +56,10 @@ export function AdminChatRoom() {
           .eq("id", clientId)
           .single();
         
-        if (error) throw error;
+        if (error) {
+          console.error("Error fetching client details:", error);
+          throw error;
+        }
         
         setClient(data);
       } catch (error) {
@@ -77,11 +80,14 @@ export function AdminChatRoom() {
         setIsLoading(true);
         const { data, error } = await supabase
           .from("client_messages")
-          .select("*, profiles!client_messages_sender_id_fkey(full_name)")
+          .select("*, profiles(full_name)")
           .eq("client_id", clientId)
           .order("created_at", { ascending: true });
         
-        if (error) throw error;
+        if (error) {
+          console.error("Error fetching messages:", error);
+          throw error;
+        }
         
         // Mark all messages from client as read
         await supabase
@@ -176,15 +182,34 @@ export function AdminChatRoom() {
       let attachmentType = null;
       
       if (file) {
+        // First check if the storage bucket exists
+        const { data: buckets } = await supabase.storage.listBuckets();
+        const chatBucket = buckets?.find(bucket => bucket.name === 'chat-attachments');
+        
+        if (!chatBucket) {
+          console.log("Creating chat-attachments bucket");
+          const { error: bucketError } = await supabase.storage.createBucket('chat-attachments', {
+            public: true
+          });
+          
+          if (bucketError) {
+            console.error("Error creating bucket:", bucketError);
+            throw bucketError;
+          }
+        }
+        
         const fileExt = file.name.split('.').pop();
         const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
         const filePath = `admin-attachments/${clientId}/${fileName}`;
         
-        const { error: uploadError, data } = await supabase.storage
+        const { error: uploadError } = await supabase.storage
           .from('chat-attachments')
           .upload(filePath, file);
         
-        if (uploadError) throw uploadError;
+        if (uploadError) {
+          console.error("Error uploading file:", uploadError);
+          throw uploadError;
+        }
         
         const { data: { publicUrl } } = supabase.storage
           .from('chat-attachments')
@@ -192,6 +217,7 @@ export function AdminChatRoom() {
         
         attachmentUrl = publicUrl;
         attachmentType = file.type.startsWith('image/') ? 'image' : 'file';
+        console.log("File uploaded successfully:", attachmentUrl, attachmentType);
       }
       
       // Insert message
@@ -207,15 +233,18 @@ export function AdminChatRoom() {
           is_read: true // Admin messages are marked as read immediately
         });
       
-      if (error) throw error;
+      if (error) {
+        console.error("Error sending message:", error);
+        throw error;
+      }
       
       // Clear input
       setNewMessage("");
       setFile(null);
       
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error sending message:", error);
-      toast.error("Failed to send message");
+      toast.error(error.message || "Failed to send message");
     } finally {
       setIsSending(false);
     }
@@ -228,9 +257,9 @@ export function AdminChatRoom() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
-      // Check file size (max 5MB)
-      if (selectedFile.size > 5 * 1024 * 1024) {
-        toast.error("File is too large. Maximum size is 5MB.");
+      // Check file size (max 10MB)
+      if (selectedFile.size > 10 * 1024 * 1024) {
+        toast.error("File is too large. Maximum size is 10MB.");
         return;
       }
       setFile(selectedFile);
@@ -314,7 +343,7 @@ export function AdminChatRoom() {
                   }>
                     {msg.is_from_client 
                       ? client.name.charAt(0).toUpperCase()
-                      : user?.name?.charAt(0).toUpperCase() || "S"}
+                      : user?.email?.charAt(0).toUpperCase() || "S"}
                   </AvatarFallback>
                 </Avatar>
                 <div>
@@ -347,7 +376,7 @@ export function AdminChatRoom() {
                         rel="noopener noreferrer"
                         className="flex items-center mb-2 text-blue-500 hover:underline"
                       >
-                        <Paperclip className="h-4 w-4 mr-1" />
+                        <File className="h-4 w-4 mr-1" />
                         Attachment
                       </a>
                     )}
@@ -393,6 +422,13 @@ export function AdminChatRoom() {
       
       <CardFooter className="border-t p-4">
         <div className="flex w-full items-center space-x-2">
+          <input
+            type="file"
+            ref={fileInputRef}
+            className="hidden"
+            onChange={handleFileChange}
+            accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
+          />
           <Button 
             variant="outline" 
             size="icon" 
@@ -402,13 +438,6 @@ export function AdminChatRoom() {
             <Paperclip className="h-5 w-5" />
             <span className="sr-only">Attach file</span>
           </Button>
-          <input
-            type="file"
-            ref={fileInputRef}
-            className="hidden"
-            onChange={handleFileChange}
-            accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
-          />
           <Textarea
             placeholder="Type your message..."
             className="flex-1"

@@ -37,7 +37,10 @@ export function AdminChatList() {
           .from("clients")
           .select("*");
         
-        if (clientsError) throw clientsError;
+        if (clientsError) {
+          console.error("Error fetching clients:", clientsError);
+          throw clientsError;
+        }
         
         // For each client, get the most recent message and unread count
         const clientsWithChatInfo = await Promise.all(clientsData.map(async (client) => {
@@ -49,7 +52,10 @@ export function AdminChatList() {
             .order("created_at", { ascending: false })
             .limit(1);
           
-          if (messagesError) throw messagesError;
+          if (messagesError) {
+            console.error("Error fetching messages for client:", client.id, messagesError);
+            throw messagesError;
+          }
           
           // Count unread messages from client
           const { count, error: countError } = await supabase
@@ -59,7 +65,10 @@ export function AdminChatList() {
             .eq("is_from_client", true)
             .eq("is_read", false);
           
-          if (countError) throw countError;
+          if (countError) {
+            console.error("Error counting unread messages:", countError);
+            throw countError;
+          }
           
           const lastMessage = messagesData?.[0];
           
