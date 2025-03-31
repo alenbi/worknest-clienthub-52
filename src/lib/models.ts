@@ -1,4 +1,3 @@
-
 // Define interfaces for the newly created tables
 export interface ClientMessage {
   id: string;
@@ -9,7 +8,7 @@ export interface ClientMessage {
   attachment_url?: string;
   attachment_type?: string;
   is_read: boolean;
-  created_at: Date;
+  created_at: Date | string;
 }
 
 export interface Resource {

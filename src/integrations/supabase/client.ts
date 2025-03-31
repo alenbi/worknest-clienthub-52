@@ -21,7 +21,7 @@ export interface ClientMessage {
   attachment_url?: string;
   attachment_type?: string;
   is_read: boolean;
-  created_at: Date;
+  created_at: Date | string;
 }
 
 export interface Resource {
@@ -30,7 +30,7 @@ export interface Resource {
   description?: string;
   type: string;
   url: string;
-  created_at: Date;
+  created_at: Date | string;
 }
 
 export interface Video {
@@ -38,7 +38,7 @@ export interface Video {
   title: string;
   description?: string;
   youtube_id: string;
-  created_at: Date;
+  created_at: Date | string;
 }
 
 export interface Offer {
@@ -46,7 +46,7 @@ export interface Offer {
   title: string;
   description?: string;
   discount_percentage?: number;
-  valid_until: Date;
+  valid_until: Date | string;
   code?: string;
-  created_at: Date;
+  created_at: Date | string;
 }

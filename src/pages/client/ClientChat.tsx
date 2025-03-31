@@ -59,6 +59,7 @@ const ClientChat = () => {
         
         if (error) throw error;
         
+        // Explicitly type the data as ClientMessage[] since we updated the interface
         setMessages(data as ClientMessage[]);
         
         // Mark all unread messages from admin as read
