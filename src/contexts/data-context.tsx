@@ -1,8 +1,11 @@
-
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Session } from '@supabase/supabase-js';
 import { Resource, Video, Offer, Client, Task, TaskStatus, TaskPriority, Update } from '@/lib/models';
+
+// Re-export the types so they can be imported from data-context
+export type { Resource, Video, Offer, Client, Task, Update };
+export { TaskStatus, TaskPriority };
 
 interface AuthContextType {
   session: Session | null;
