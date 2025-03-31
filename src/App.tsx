@@ -52,11 +52,13 @@ const queryClient = new QueryClient({
 });
 
 // Add global error handler
-queryClient.getQueryCache().subscribe({
-  onError: (error) => {
-    console.error("Query error:", error);
+queryClient.getQueryCache().subscribe(
+  (event) => {
+    if (event.type === 'error') {
+      console.error("Query error:", event.error);
+    }
   }
-});
+);
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
