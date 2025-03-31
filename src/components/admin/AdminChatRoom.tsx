@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
@@ -43,6 +44,7 @@ export function AdminChatRoom() {
   const [file, setFile] = useState<File | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const channelRef = useRef<any>(null);
 
   useEffect(() => {
     if (!clientId) return;
@@ -53,11 +55,17 @@ export function AdminChatRoom() {
           .from("clients")
           .select("*")
           .eq("id", clientId)
-          .single();
+          .maybeSingle();
         
         if (error) {
           console.error("Error fetching client details:", error);
           throw error;
+        }
+        
+        if (!data) {
+          toast.error("Client not found");
+          navigate("/admin/chat");
+          return;
         }
         
         setClient(data);
@@ -72,7 +80,7 @@ export function AdminChatRoom() {
   }, [clientId, navigate]);
 
   useEffect(() => {
-    if (!clientId) return;
+    if (!clientId || !client) return;
     
     const fetchMessages = async () => {
       try {
@@ -99,6 +107,7 @@ export function AdminChatRoom() {
           throw error;
         }
         
+        // Mark all unread client messages as read
         await supabase
           .from("client_messages")
           .update({ is_read: true })
@@ -114,63 +123,87 @@ export function AdminChatRoom() {
         }));
         
         setMessages(formattedMessages);
-      } catch (error) {
+      } catch (error: any) {
         console.error("Error fetching messages:", error);
-        toast.error("Failed to load chat messages");
+        toast.error(error.message || "Failed to load chat messages");
       } finally {
         setIsLoading(false);
       }
     };
 
-    if (client) {
-      fetchMessages();
-      
-      const channel = supabase
-        .channel('admin_client_messages_changes')
-        .on('postgres_changes', 
-          { 
-            event: 'INSERT', 
-            schema: 'public', 
-            table: 'client_messages',
-            filter: `client_id=eq.${clientId}`
-          }, 
-          async (payload) => {
-            const newMessage = payload.new as ChatMessage;
-            
-            if (newMessage.is_from_client) {
-              await supabase
-                .from("client_messages")
-                .update({ is_read: true })
-                .eq("id", newMessage.id);
-            }
-            
-            let senderName = newMessage.is_from_client ? client?.name || "Client" : "Support Staff";
-            
-            if (!newMessage.is_from_client) {
-              try {
-                const { data } = await supabase
-                  .from("profiles")
-                  .select("full_name")
-                  .eq("id", newMessage.sender_id)
-                  .single();
-                
-                if (data?.full_name) {
-                  senderName = data.full_name;
-                }
-              } catch (error) {
-                console.error("Error fetching sender name:", error);
-              }
-            }
-            
-            setMessages(prev => [...prev, {...newMessage, sender_name: senderName}]);
-          })
-        .subscribe();
+    fetchMessages();
+    setupRealtimeSubscription();
+    
+    return () => {
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
+      }
+    };
+  }, [clientId, client]);
 
-      return () => {
-        supabase.removeChannel(channel);
-      };
+  const setupRealtimeSubscription = () => {
+    if (!clientId || !client) return;
+    
+    // Clean up existing subscription if any
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current);
     }
-  }, [clientId, client, navigate]);
+    
+    // Create a new subscription
+    const channel = supabase
+      .channel(`admin_chat_${clientId}`)
+      .on('postgres_changes', 
+        { 
+          event: 'INSERT', 
+          schema: 'public', 
+          table: 'client_messages',
+          filter: `client_id=eq.${clientId}`
+        }, 
+        async (payload) => {
+          console.log("New message received:", payload);
+          const newMessage = payload.new as any;
+          
+          if (newMessage.is_from_client) {
+            // Mark message as read since admin is viewing it
+            await supabase
+              .from("client_messages")
+              .update({ is_read: true })
+              .eq("id", newMessage.id);
+          }
+          
+          // Get sender name
+          let senderName = newMessage.is_from_client ? client?.name || "Client" : "Support Staff";
+          
+          if (!newMessage.is_from_client) {
+            try {
+              const { data } = await supabase
+                .from("profiles")
+                .select("full_name")
+                .eq("id", newMessage.sender_id)
+                .maybeSingle();
+              
+              if (data?.full_name) {
+                senderName = data.full_name;
+              }
+            } catch (error) {
+              console.error("Error fetching sender name:", error);
+            }
+          }
+          
+          setMessages(prev => [
+            ...prev, 
+            {...newMessage, sender_name: senderName}
+          ]);
+        })
+      .subscribe((status) => {
+        console.log("Realtime subscription status:", status);
+        if (status !== 'SUBSCRIBED') {
+          console.error("Failed to subscribe to realtime updates");
+        }
+      });
+    
+    channelRef.current = channel;
+  };
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -232,17 +265,19 @@ export function AdminChatRoom() {
         }
       }
       
+      const messageData = {
+        client_id: clientId,
+        sender_id: user.id,
+        is_from_client: false,
+        message: newMessage.trim(),
+        attachment_url: attachmentUrl,
+        attachment_type: attachmentType,
+        is_read: true
+      };
+      
       const { error } = await supabase
         .from("client_messages")
-        .insert({
-          client_id: clientId,
-          sender_id: user.id,
-          is_from_client: false,
-          message: newMessage.trim(),
-          attachment_url: attachmentUrl,
-          attachment_type: attachmentType,
-          is_read: true
-        });
+        .insert(messageData);
       
       if (error) {
         console.error("Error sending message:", error);
