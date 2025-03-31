@@ -50,23 +50,20 @@ export function subscribeToChatChannel(
           }
           
           // Get sender name if needed
-          let senderName = "";
+          let senderName = "Unknown User";
           
-          if (newMessage.sender_name) {
-            senderName = newMessage.sender_name;
-          } else {
-            try {
-              const { data } = await supabase
-                .from("profiles")
-                .select("full_name")
-                .eq("id", newMessage.sender_id)
-                .maybeSingle();
-              
-              senderName = data?.full_name || "Unknown User";
-            } catch (error) {
-              console.error("Error fetching sender name:", error);
-              senderName = "Unknown User";
+          try {
+            const { data } = await supabase
+              .from("profiles")
+              .select("full_name")
+              .eq("id", newMessage.sender_id)
+              .single();
+            
+            if (data) {
+              senderName = data.full_name;
             }
+          } catch (error) {
+            console.error("Error fetching sender name:", error);
           }
           
           // Call the message handler with the complete message
@@ -213,8 +210,8 @@ export async function uploadChatFile(
  */
 export async function fetchClientMessages(clientId: string): Promise<ChatMessage[]> {
   try {
-    // Fetch raw messages without joining to profiles
-    const { data, error } = await supabase
+    // Get all messages for this client
+    const { data: messages, error } = await supabase
       .from("client_messages")
       .select("*")
       .eq("client_id", clientId)
@@ -226,9 +223,9 @@ export async function fetchClientMessages(clientId: string): Promise<ChatMessage
     }
     
     // Get unique sender IDs
-    const senderIds = [...new Set(data.map(msg => msg.sender_id))];
+    const senderIds = messages.map(msg => msg.sender_id).filter((id, i, arr) => arr.indexOf(id) === i);
     
-    // Fetch all profile names in one batch
+    // Get all profile data in one request
     const { data: profiles, error: profilesError } = await supabase
       .from("profiles")
       .select("id, full_name")
@@ -238,18 +235,18 @@ export async function fetchClientMessages(clientId: string): Promise<ChatMessage
       console.error("Error fetching profiles:", profilesError);
     }
     
-    // Create a map of sender_id to full_name
-    const senderNames = new Map();
+    // Create sender name lookup
+    const senderNames: Record<string, string> = {};
     if (profiles) {
       profiles.forEach(profile => {
-        senderNames.set(profile.id, profile.full_name);
+        senderNames[profile.id] = profile.full_name;
       });
     }
     
-    // Combine message data with sender names
-    const messagesWithNames = data.map(msg => ({
+    // Add sender names to messages
+    const messagesWithNames = messages.map(msg => ({
       ...msg,
-      sender_name: senderNames.get(msg.sender_id) || "Unknown User"
+      sender_name: senderNames[msg.sender_id] || "Unknown User"
     }));
     
     return messagesWithNames;

@@ -23,7 +23,7 @@ const ClientChat = () => {
   const [isSending, setIsSending] = useState(false);
   const channelRef = useRef<RealtimeChannel | null>(null);
 
-  // First get client ID from user ID
+  // Get client ID from user ID
   useEffect(() => {
     const fetchClientId = async () => {
       if (!user?.id) return;
@@ -34,7 +34,7 @@ const ClientChat = () => {
           .from("clients")
           .select("id")
           .eq("user_id", user.id)
-          .maybeSingle();
+          .single();
           
         if (error) {
           console.error("Error fetching client ID:", error);
@@ -125,7 +125,7 @@ const ClientChat = () => {
       }
       
       // Send message
-      await sendMessage({
+      const sentMessage = await sendMessage({
         clientId,
         senderId: user.id,
         message: messageText,
@@ -133,6 +133,23 @@ const ClientChat = () => {
         attachmentUrl,
         attachmentType
       });
+      
+      // Add sender name to sent message for immediate display
+      if (sentMessage) {
+        const { data } = await supabase
+          .from("profiles")
+          .select("full_name")
+          .eq("id", user.id)
+          .single();
+        
+        const messageWithName = {
+          ...sentMessage,
+          sender_name: data?.full_name || "You"
+        };
+        
+        // Update messages locally for immediate feedback
+        setMessages(prev => [...prev, messageWithName]);
+      }
       
     } catch (error: any) {
       console.error("Error sending message:", error);

@@ -48,7 +48,7 @@ export function AdminChatRoom() {
           .from("clients")
           .select("*")
           .eq("id", clientId)
-          .maybeSingle();
+          .single();
         
         if (error) {
           console.error("Error fetching client details:", error);
@@ -140,7 +140,7 @@ export function AdminChatRoom() {
       }
       
       // Send message
-      await sendMessage({
+      const sentMessage = await sendMessage({
         clientId,
         senderId: user.id,
         message: messageText,
@@ -148,6 +148,23 @@ export function AdminChatRoom() {
         attachmentUrl,
         attachmentType
       });
+
+      // Add sender name to sent message for immediate display
+      if (sentMessage) {
+        const { data } = await supabase
+          .from("profiles")
+          .select("full_name")
+          .eq("id", user.id)
+          .single();
+        
+        const messageWithName = {
+          ...sentMessage,
+          sender_name: data?.full_name || "You"
+        };
+        
+        // Update messages locally for immediate feedback
+        setMessages(prev => [...prev, messageWithName]);
+      }
       
     } catch (error: any) {
       console.error("Error sending message:", error);
