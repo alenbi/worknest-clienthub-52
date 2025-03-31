@@ -16,6 +16,8 @@ import * as z from "zod";
 import { v4 as uuidv4 } from "uuid";
 import { useData } from "@/contexts/data-context";
 import { Resource } from "@/lib/models";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { storage } from "@/integrations/firebase/config";
 
 interface ResourceType {
   id: string;
@@ -55,13 +57,11 @@ const formSchema = z.object({
 });
 
 const AdminResources = () => {
-  const [resources, setResources] = useState<Resource[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [fileUploadStatus, setFileUploadStatus] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
-  const { createResource, deleteResource } = useData();
+  const { resources, createResource, deleteResource, isLoading } = useData();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -75,28 +75,6 @@ const AdminResources = () => {
 
   const resourceType = form.watch("type");
 
-  useEffect(() => {
-    fetchResources();
-  }, []);
-
-  const fetchResources = async () => {
-    try {
-      setIsLoading(true);
-      const { data, error } = await supabase
-        .from("resources")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-      setResources(data as Resource[] || []);
-    } catch (error) {
-      console.error("Error fetching resources:", error);
-      toast.error("Failed to load resources");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const uploadFile = async (file: File): Promise<string> => {
     try {
       setFileUploadStatus("Uploading file...");
@@ -106,39 +84,15 @@ const AdminResources = () => {
       const fileName = `${uuidv4()}.${fileExt}`;
       const filePath = `resources/${fileName}`;
       
-      // Check if storage bucket exists
-      const { data: buckets } = await supabase.storage.listBuckets();
-      const resourcesBucketExists = buckets?.some(bucket => bucket.name === 'resources');
+      // Upload to Firebase Storage
+      const storageReference = ref(storage, filePath);
+      const snapshot = await uploadBytes(storageReference, file);
       
-      // Create bucket if it doesn't exist
-      if (!resourcesBucketExists) {
-        const { error: bucketError } = await supabase.storage.createBucket('resources', {
-          public: true
-        });
-        
-        if (bucketError) {
-          console.error("Error creating bucket:", bucketError);
-          throw bucketError;
-        }
-      }
-      
-      // Upload file to Supabase Storage
-      const { data, error } = await supabase.storage
-        .from('resources')
-        .upload(filePath, file, {
-          cacheControl: '3600',
-          upsert: false
-        });
-      
-      if (error) throw error;
-      
-      // Get public URL for the file
-      const { data: { publicUrl } } = supabase.storage
-        .from('resources')
-        .getPublicUrl(data.path);
+      // Get the download URL
+      const downloadUrl = await getDownloadURL(snapshot.ref);
       
       setFileUploadStatus("File uploaded successfully!");
-      return publicUrl;
+      return downloadUrl;
     } catch (error) {
       console.error("Error uploading file:", error);
       setFileUploadStatus("File upload failed!");
@@ -168,7 +122,6 @@ const AdminResources = () => {
       toast.success("Resource added successfully");
       setIsAddDialogOpen(false);
       form.reset();
-      fetchResources();
     } catch (error) {
       console.error("Error adding resource:", error);
       toast.error("Failed to add resource");
@@ -180,27 +133,8 @@ const AdminResources = () => {
 
   const handleDeleteResource = async (id: string) => {
     try {
-      const resourceToDelete = resources.find(resource => resource.id === id);
-      
-      if (resourceToDelete && resourceToDelete.type === "file") {
-        // Extract the file path from the URL to delete from storage
-        const urlPath = new URL(resourceToDelete.url).pathname;
-        const filePath = urlPath.split('/').slice(2).join('/'); // Remove /storage/v1/object/public/
-        
-        // Delete from storage if it's a file
-        const { error: storageError } = await supabase.storage
-          .from('resources')
-          .remove([filePath]);
-        
-        if (storageError) {
-          console.error("Error deleting file from storage:", storageError);
-        }
-      }
-      
-      // Delete from database using data context
       await deleteResource(id);
       toast.success("Resource deleted successfully");
-      setResources(resources.filter((resource) => resource.id !== id));
     } catch (error) {
       console.error("Error deleting resource:", error);
       toast.error("Failed to delete resource");
@@ -209,7 +143,7 @@ const AdminResources = () => {
 
   const filteredResources = resources.filter((resource) =>
     resource.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    resource.description.toLowerCase().includes(searchTerm.toLowerCase())
+    (resource.description && resource.description.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   return (

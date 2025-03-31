@@ -1,9 +1,25 @@
+
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Session } from '@supabase/supabase-js';
 import { Resource, Video, Offer, Client, Task, TaskStatus, TaskPriority, Update } from '@/lib/models';
 import { useAuth } from '@/contexts/auth-context';
 import { toast } from 'sonner';
+import { 
+  fetchResourcesFromFirebase, 
+  createResourceInFirebase,
+  updateResourceInFirebase,
+  deleteResourceFromFirebase,
+  fetchVideosFromFirebase,
+  createVideoInFirebase,
+  updateVideoInFirebase,
+  deleteVideoFromFirebase,
+  fetchOffersFromFirebase,
+  createOfferInFirebase,
+  updateOfferInFirebase,
+  deleteOfferFromFirebase
+} from '@/lib/firebase-utils';
+import { testFirebaseConnection } from '@/lib/firebase-chat-utils';
 
 // Re-export the types so they can be imported from data-context
 export type { Resource, Video, Offer, Client, Task, Update };
@@ -63,6 +79,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const { session, user } = useAuth();
   const [isAdmin, setIsAdmin] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isFirebaseAvailable, setIsFirebaseAvailable] = useState(false);
   
   // State for data
   const [resources, setResources] = useState<Resource[]>([]);
@@ -71,6 +88,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [clients, setClients] = useState<Client[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [updates, setUpdates] = useState<Update[]>([]);
+
+  useEffect(() => {
+    const checkFirebaseConnection = async () => {
+      const isConnected = await testFirebaseConnection();
+      console.log("Firebase connection status:", isConnected);
+      setIsFirebaseAvailable(isConnected);
+    };
+    
+    checkFirebaseConnection();
+  }, []);
 
   useEffect(() => {
     const checkAdminStatus = async () => {
@@ -131,6 +158,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   // Resource management functions
   const fetchResources = async () => {
     try {
+      if (isFirebaseAvailable) {
+        const firebaseResources = await fetchResourcesFromFirebase();
+        setResources(firebaseResources);
+        return;
+      }
+      
       const { data, error } = await supabase
         .from('resources')
         .select('*')
@@ -150,6 +183,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       // Ensure required fields for insert
       if (!resource.title || !resource.url || !resource.type) {
         throw new Error('Title, URL, and type are required');
+      }
+      
+      if (isFirebaseAvailable) {
+        await createResourceInFirebase(resource);
+        await fetchResources();
+        return;
       }
       
       const newResource = {
@@ -177,6 +216,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const updateResource = async (id: string, resource: Partial<Resource>) => {
     try {
+      if (isFirebaseAvailable) {
+        await updateResourceInFirebase(id, resource);
+        await fetchResources();
+        return;
+      }
+      
       const { error } = await supabase.from('resources').update(resource).eq('id', id);
       if (error) throw error;
       await fetchResources();
@@ -188,6 +233,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const deleteResource = async (id: string) => {
     try {
+      if (isFirebaseAvailable) {
+        await deleteResourceFromFirebase(id);
+        setResources(prevResources => prevResources.filter(r => r.id !== id));
+        return;
+      }
+      
       const { error } = await supabase.from('resources').delete().eq('id', id);
       if (error) throw error;
       setResources(prevResources => prevResources.filter(r => r.id !== id));
@@ -200,6 +251,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   // Video management functions
   const fetchVideos = async () => {
     try {
+      if (isFirebaseAvailable) {
+        const firebaseVideos = await fetchVideosFromFirebase();
+        setVideos(firebaseVideos);
+        return;
+      }
+      
       const { data, error } = await supabase
         .from('videos')
         .select('*')
@@ -219,6 +276,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       // Ensure required fields for insert
       if (!video.title || !video.youtube_id) {
         throw new Error('Title and YouTube ID are required');
+      }
+      
+      if (isFirebaseAvailable) {
+        await createVideoInFirebase(video);
+        await fetchVideos();
+        return;
       }
       
       const newVideo = {
@@ -245,6 +308,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const updateVideo = async (id: string, video: Partial<Video>) => {
     try {
+      if (isFirebaseAvailable) {
+        await updateVideoInFirebase(id, video);
+        await fetchVideos();
+        return;
+      }
+      
       const { error } = await supabase.from('videos').update(video).eq('id', id);
       if (error) throw error;
       await fetchVideos();
@@ -256,6 +325,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const deleteVideo = async (id: string) => {
     try {
+      if (isFirebaseAvailable) {
+        await deleteVideoFromFirebase(id);
+        setVideos(prevVideos => prevVideos.filter(v => v.id !== id));
+        return;
+      }
+      
       const { error } = await supabase.from('videos').delete().eq('id', id);
       if (error) throw error;
       setVideos(prevVideos => prevVideos.filter(v => v.id !== id));
@@ -268,6 +343,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   // Offer management functions
   const fetchOffers = async () => {
     try {
+      if (isFirebaseAvailable) {
+        const firebaseOffers = await fetchOffersFromFirebase();
+        setOffers(firebaseOffers);
+        return;
+      }
+      
       const { data, error } = await supabase
         .from('offers')
         .select('*')
@@ -287,6 +368,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       // Ensure required fields for insert
       if (!offer.title || !offer.valid_until) {
         throw new Error('Title and valid until date are required');
+      }
+      
+      if (isFirebaseAvailable) {
+        await createOfferInFirebase(offer);
+        await fetchOffers();
+        return;
       }
       
       const newOffer = {
@@ -315,6 +402,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const updateOffer = async (id: string, offer: Partial<Offer>) => {
     try {
+      if (isFirebaseAvailable) {
+        await updateOfferInFirebase(id, offer);
+        await fetchOffers();
+        return;
+      }
+      
       const { error } = await supabase.from('offers').update(offer).eq('id', id);
       if (error) throw error;
       await fetchOffers();
@@ -326,6 +419,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const deleteOffer = async (id: string) => {
     try {
+      if (isFirebaseAvailable) {
+        await deleteOfferFromFirebase(id);
+        setOffers(prevOffers => prevOffers.filter(o => o.id !== id));
+        return;
+      }
+      
       const { error } = await supabase.from('offers').delete().eq('id', id);
       if (error) throw error;
       setOffers(prevOffers => prevOffers.filter(o => o.id !== id));

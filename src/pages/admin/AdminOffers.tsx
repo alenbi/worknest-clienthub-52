@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
@@ -7,7 +8,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PlusIcon, Trash2, Loader2, Tag } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { useForm } from "react-hook-form";
@@ -39,12 +39,10 @@ const formSchema = z.object({
 });
 
 const AdminOffers = () => {
-  const [offers, setOffers] = useState<Offer[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const { createOffer, deleteOffer } = useData();
+  const { offers, createOffer, deleteOffer, isLoading } = useData();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -56,28 +54,6 @@ const AdminOffers = () => {
       valid_until: new Date(new Date().setMonth(new Date().getMonth() + 1)),
     },
   });
-
-  useEffect(() => {
-    fetchOffers();
-  }, []);
-
-  const fetchOffers = async () => {
-    try {
-      setIsLoading(true);
-      const { data, error } = await supabase
-        .from("offers")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-      setOffers(data as Offer[] || []);
-    } catch (error) {
-      console.error("Error fetching offers:", error);
-      toast.error("Failed to load offers");
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const addOffer = async (values: z.infer<typeof formSchema>) => {
     try {
@@ -103,7 +79,6 @@ const AdminOffers = () => {
       toast.success("Offer added successfully");
       setIsAddDialogOpen(false);
       form.reset();
-      fetchOffers();
     } catch (error) {
       console.error("Error adding offer:", error);
       toast.error("Failed to add offer");
@@ -117,7 +92,6 @@ const AdminOffers = () => {
       // Use data context method to delete offer
       await deleteOffer(id);
       toast.success("Offer deleted successfully");
-      setOffers(offers.filter((offer) => offer.id !== id));
     } catch (error) {
       console.error("Error deleting offer:", error);
       toast.error("Failed to delete offer");
@@ -130,8 +104,8 @@ const AdminOffers = () => {
 
   const filteredOffers = offers.filter((offer) =>
     offer.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    offer.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    offer.code.toLowerCase().includes(searchTerm.toLowerCase())
+    (offer.description && offer.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (offer.code && offer.code.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   return (

@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
@@ -6,7 +7,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PlusIcon, Trash2, ExternalLink, Loader2, Video } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { useForm } from "react-hook-form";
@@ -24,12 +24,10 @@ const formSchema = z.object({
 });
 
 const AdminVideos = () => {
-  const [videos, setVideos] = useState<VideoType[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const { createVideo, deleteVideo } = useData();
+  const { videos, createVideo, deleteVideo, isLoading } = useData();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -39,28 +37,6 @@ const AdminVideos = () => {
       url: "",
     },
   });
-
-  useEffect(() => {
-    fetchVideos();
-  }, []);
-
-  const fetchVideos = async () => {
-    try {
-      setIsLoading(true);
-      const { data, error } = await supabase
-        .from("videos")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-      setVideos(data as VideoType[] || []);
-    } catch (error) {
-      console.error("Error fetching videos:", error);
-      toast.error("Failed to load videos");
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const extractYoutubeId = (url: string): string | null => {
     if (!url) return null;
@@ -110,7 +86,6 @@ const AdminVideos = () => {
       toast.success("Video added successfully");
       setIsAddDialogOpen(false);
       form.reset();
-      fetchVideos();
     } catch (error) {
       console.error("Error adding video:", error);
       toast.error("Failed to add video");
@@ -123,7 +98,6 @@ const AdminVideos = () => {
     try {
       await deleteVideo(id);
       toast.success("Video deleted successfully");
-      setVideos(videos.filter((video) => video.id !== id));
     } catch (error) {
       console.error("Error deleting video:", error);
       toast.error("Failed to delete video");
