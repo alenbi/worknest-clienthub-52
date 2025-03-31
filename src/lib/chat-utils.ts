@@ -217,13 +217,10 @@ export async function uploadChatFile(
  */
 export async function fetchClientMessages(clientId: string): Promise<ChatMessage[]> {
   try {
-    // Get all messages for this client - Fixed to avoid the ambiguous column reference
+    // Get all messages for this client - Fixed to avoid the ambiguous column reference and fix the relation issue
     const { data: messages, error } = await supabase
       .from("client_messages")
-      .select(`
-        *,
-        profiles:sender_id(full_name)
-      `)
+      .select("*, profiles(full_name)")
       .eq("client_id", clientId)
       .order("created_at", { ascending: true });
     
