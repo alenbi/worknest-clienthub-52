@@ -1,7 +1,6 @@
 
 import { useEffect, useState } from "react";
 import { format } from "date-fns";
-import { useData } from "@/contexts/data-context";
 import { useClientAuth } from "@/contexts/client-auth-context";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -14,19 +13,18 @@ import {
 } from "@/components/ui/table";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { SearchIcon } from "lucide-react";
+import { SearchIcon, Loader2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const ClientTasks = () => {
   const { user } = useClientAuth();
-  const { tasks } = useData();
   const [clientId, setClientId] = useState<string | null>(null);
   const [clientTasks, setClientTasks] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [priorityFilter, setPriorityFilter] = useState<string>("");
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     // Find the client ID based on user ID
@@ -52,12 +50,33 @@ const ClientTasks = () => {
   }, [user]);
 
   useEffect(() => {
-    // Filter tasks for this client
+    // Fetch tasks for this client directly from Supabase
+    const fetchClientTasks = async () => {
+      if (!clientId) return;
+      
+      setIsLoading(true);
+      
+      try {
+        const { data, error } = await supabase
+          .from("tasks")
+          .select("*")
+          .eq("client_id", clientId)
+          .order("created_at", { ascending: false });
+          
+        if (error) throw error;
+        
+        setClientTasks(data || []);
+      } catch (error) {
+        console.error("Error fetching client tasks:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
     if (clientId) {
-      const filteredTasks = tasks.filter(task => task.clientId === clientId);
-      setClientTasks(filteredTasks);
+      fetchClientTasks();
     }
-  }, [clientId, tasks]);
+  }, [clientId]);
 
   // Filter and search tasks
   const filteredTasks = clientTasks.filter((task) => {
@@ -77,6 +96,15 @@ const ClientTasks = () => {
     { value: "medium", label: "Medium" },
     { value: "high", label: "High" },
   ];
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <span className="ml-2">Loading tasks...</span>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -112,7 +140,7 @@ const ClientTasks = () => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Statuses</SelectItem>
-                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="todo">Pending</SelectItem>
                   <SelectItem value="completed">Completed</SelectItem>
                 </SelectContent>
               </Select>
@@ -163,7 +191,7 @@ const ClientTasks = () => {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        {format(new Date(task.dueDate), "PP")}
+                        {format(new Date(task.due_date), "PP")}
                       </TableCell>
                       <TableCell>
                         <Badge 

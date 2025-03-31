@@ -8,7 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Send, PaperclipIcon, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
-import { ClientMessage } from "@/lib/models";
+import type { ClientMessage } from "@/lib/models";
 
 const ClientChat = () => {
   const { user } = useClientAuth();

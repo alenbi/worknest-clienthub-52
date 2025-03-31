@@ -52,17 +52,14 @@ const ClientDashboard = () => {
     }
   }, [user]);
 
-  // Fetch client data (tasks and messages)
+  // Fetch client data (tasks and messages) directly from Supabase
   useEffect(() => {
     const fetchClientData = async () => {
       if (!clientId) return;
 
       setIsLoading(true);
       try {
-        // Get tasks stats
-        const today = new Date().toISOString();
-        
-        // Get all tasks for this client
+        // Get tasks directly from Supabase with RLS applied
         const { data: tasksData, error: tasksError } = await supabase
           .from("tasks")
           .select("*")
@@ -72,7 +69,7 @@ const ClientDashboard = () => {
         
         const tasks = tasksData || [];
         const completedTasks = tasks.filter(task => task.status === 'completed');
-        const pendingTasks = tasks.filter(task => task.status === 'pending');
+        const pendingTasks = tasks.filter(task => task.status !== 'completed');
         const overdueTasks = pendingTasks.filter(task => new Date(task.due_date) < new Date());
         
         setTaskStats({
@@ -99,12 +96,26 @@ const ClientDashboard = () => {
         if (messagesError) throw messagesError;
         setUnreadMessages(unreadCount || 0);
         
-        // Mock data for offers and milestones
-        setLatestOffers([
-          { id: 1, title: "Website Maintenance Plan", discount: "20%", expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) },
-          { id: 2, title: "SEO Package Upgrade", discount: "15%", expires: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000) }
-        ]);
+        // Get latest offers
+        const { data: offersData, error: offersError } = await supabase
+          .from("offers")
+          .select("*")
+          .order("created_at", { ascending: false })
+          .limit(2);
+          
+        if (offersError) throw offersError;
         
+        // Format the offers data
+        const formattedOffers = (offersData || []).map(offer => ({
+          id: offer.id,
+          title: offer.title,
+          discount: offer.discount_percentage ? `${offer.discount_percentage}%` : null,
+          expires: new Date(offer.valid_until)
+        }));
+        
+        setLatestOffers(formattedOffers);
+        
+        // Mock data for milestones (would typically come from a real table in production)
         setUpcomingMilestones([
           { id: 1, title: "Project Phase 1 Completion", date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000) },
           { id: 2, title: "Website Launch", date: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000) }
@@ -199,7 +210,7 @@ const ClientDashboard = () => {
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
-        {/* Project Timeline Section - New */}
+        {/* Project Timeline Section */}
         <Card>
           <CardHeader>
             <CardTitle>Project Timeline</CardTitle>
@@ -229,7 +240,7 @@ const ClientDashboard = () => {
           </CardContent>
         </Card>
 
-        {/* Task Overview Chart - Redesigned */}
+        {/* Task Overview Chart */}
         {taskStats.total > 0 ? (
           <Card>
             <CardHeader>
@@ -274,7 +285,7 @@ const ClientDashboard = () => {
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
-        {/* Recent Tasks Section - Redesigned */}
+        {/* Recent Tasks Section */}
         <Card>
           <CardHeader className="border-b">
             <CardTitle className="flex items-center">
@@ -321,7 +332,7 @@ const ClientDashboard = () => {
           </CardContent>
         </Card>
 
-        {/* Latest Offers - New Section */}
+        {/* Latest Offers */}
         <Card>
           <CardHeader className="border-b">
             <CardTitle className="flex items-center">
@@ -339,7 +350,7 @@ const ClientDashboard = () => {
                   >
                     <div className="font-medium text-primary">{offer.title}</div>
                     <div className="mt-1 flex items-center justify-between">
-                      <div className="text-sm">Save {offer.discount}</div>
+                      {offer.discount && <div className="text-sm">Save {offer.discount}</div>}
                       <div className="text-xs text-muted-foreground">
                         Expires {format(offer.expires, "MMM d, yyyy")}
                       </div>
