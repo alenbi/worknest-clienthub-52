@@ -34,37 +34,68 @@ let isFirebaseAvailable = false;
 export async function testFirebaseConnection(): Promise<boolean> {
   try {
     const testRef = ref(database, '.info/connected');
+    
     return new Promise((resolve) => {
-      // Define the unsubscribe function before using it
-      let timeoutId: number;
+      // Create a timeout ID variable BEFORE creating the onValue callback
+      let timeoutId: number | undefined;
       
-      const unsubscribe = onValue(testRef, (snapshot) => {
-        // Clear timeout since we received a response
-        if (timeoutId) clearTimeout(timeoutId);
+      // Prepare cleanup function
+      const cleanup = () => {
+        if (timeoutId !== undefined) {
+          window.clearTimeout(timeoutId);
+          timeoutId = undefined;
+        }
+      };
+      
+      // Create the onValue function reference first before using it
+      const onValueCallback = (snapshot: any) => {
+        cleanup(); // Clear timeout
         
-        // Now we can safely call unsubscribe
-        unsubscribe();
+        // Now we can safely call unsubscribe because it's defined
+        if (unsubscribe) {
+          unsubscribe();
+        }
         
         const connected = snapshot.val() === true;
         console.log("Firebase connection test:", connected ? "Connected" : "Not connected");
         isFirebaseAvailable = connected;
         resolve(connected);
-      }, (error) => {
-        // Clear timeout since we received an error
-        if (timeoutId) clearTimeout(timeoutId);
+      };
+      
+      // Create the error handler function
+      const onError = (error: any) => {
+        cleanup(); // Clear timeout
         
-        // Now we can safely call unsubscribe
-        unsubscribe();
+        // Now we can safely call unsubscribe because it's defined
+        if (unsubscribe) {
+          unsubscribe();
+        }
         
         console.error("Firebase connection test failed:", error);
         isFirebaseAvailable = false;
         resolve(false);
-      });
+      };
+      
+      // Define unsubscribe BEFORE using it
+      let unsubscribe: (() => void) | null = null;
+      
+      // Assign the actual onValue result to unsubscribe
+      try {
+        unsubscribe = onValue(testRef, onValueCallback, onError);
+      } catch (innerError) {
+        console.error("Error setting up Firebase listener:", innerError);
+        cleanup();
+        isFirebaseAvailable = false;
+        resolve(false);
+        return;
+      }
       
       // Set a timeout in case onValue doesn't fire
       timeoutId = window.setTimeout(() => {
         console.error("Firebase connection test timed out");
-        unsubscribe();
+        if (unsubscribe) {
+          unsubscribe();
+        }
         isFirebaseAvailable = false;
         resolve(false);
       }, 5000);
