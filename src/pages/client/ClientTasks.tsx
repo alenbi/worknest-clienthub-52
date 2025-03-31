@@ -38,7 +38,6 @@ const ClientTasks = () => {
   const [openNewTaskDialog, setOpenNewTaskDialog] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
-  // Form state
   const [newTask, setNewTask] = useState({
     title: "",
     description: "",
@@ -46,16 +45,13 @@ const ClientTasks = () => {
     dueDate: format(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), "yyyy-MM-dd"),
   });
 
-  // Handle task creation dialog based on location state
   useEffect(() => {
     if (location.state?.openNewTask) {
       setOpenNewTaskDialog(true);
-      // Clean up the state
       navigate(location.pathname, { replace: true, state: {} });
     }
   }, [location, navigate]);
 
-  // Fetch client ID based on user ID
   useEffect(() => {
     const fetchClientId = async () => {
       if (!user?.id) return;
@@ -83,7 +79,6 @@ const ClientTasks = () => {
     }
   }, [user]);
 
-  // Fetch tasks based on client ID
   useEffect(() => {
     const fetchTasks = async () => {
       if (!clientId) return;
@@ -135,6 +130,7 @@ const ClientTasks = () => {
         client_id: clientId,
         status: "pending",
         due_date: new Date(newTask.dueDate).toISOString(),
+        created_at: new Date().toISOString(),
       };
       
       const { error, data } = await supabase
@@ -144,12 +140,10 @@ const ClientTasks = () => {
       
       if (error) throw error;
       
-      // Add the new task to the list
       if (data && data[0]) {
         setTasks([data[0], ...tasks]);
       }
       
-      // Reset form and close dialog
       setNewTask({
         title: "",
         description: "",
@@ -168,7 +162,6 @@ const ClientTasks = () => {
     }
   };
 
-  // Filter tasks based on active tab
   const filteredTasks = tasks.filter((task) => {
     switch (activeTab) {
       case "completed":

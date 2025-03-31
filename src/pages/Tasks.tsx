@@ -89,6 +89,7 @@ export default function Tasks() {
     status: "pending",
     priority: "medium",
     due_date: new Date().toISOString(),
+    created_at: new Date().toISOString(),
   });
 
   const handleInputChange = (
@@ -127,6 +128,7 @@ export default function Tasks() {
         status: "pending",
         priority: "medium",
         due_date: new Date().toISOString(),
+        created_at: new Date().toISOString(),
       });
       setIsAddTaskOpen(false);
     } catch (error) {
@@ -410,7 +412,7 @@ export default function Tasks() {
                     <PopoverContent className="w-auto p-0" align="start">
                       <Calendar
                         mode="single"
-                        selected={newTask.due_date}
+                        selected={newTask.due_date ? new Date(newTask.due_date) : undefined}
                         onSelect={handleDateChange}
                         initialFocus
                         min={new Date().toISOString().split('T')[0]}

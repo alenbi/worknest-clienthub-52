@@ -257,9 +257,9 @@ export const updateDataContext = (data: UpdateData | null = null): Data => {
       };
 
       if (task.due_date) {
-        taskToInsert.due_date = typeof task.due_date === 'object' && task.due_date instanceof Date 
-          ? task.due_date.toISOString() 
-          : task.due_date;
+        taskToInsert.due_date = typeof task.due_date === 'string' 
+          ? task.due_date 
+          : new Date(task.due_date).toISOString();
       }
 
       const { data: newTask, error } = await supabase
@@ -282,9 +282,9 @@ export const updateDataContext = (data: UpdateData | null = null): Data => {
       const updatesToSubmit: any = { ...updates };
       
       if (updates.due_date) {
-        updatesToSubmit.due_date = typeof updates.due_date === 'object' && updates.due_date instanceof Date
-          ? updates.due_date.toISOString()
-          : updates.due_date;
+        updatesToSubmit.due_date = typeof updates.due_date === 'string'
+          ? updates.due_date
+          : new Date(updates.due_date).toISOString();
       }
 
       const { data: updatedTask, error } = await supabase

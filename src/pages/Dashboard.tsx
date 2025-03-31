@@ -1,5 +1,5 @@
 import { useAuth } from "@/contexts/auth-context";
-import { useData } from "@/contexts/data-context";
+import { useData, Task } from "@/contexts/data-context";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertTriangle, CheckCircle2, Clock, ListTodo, UserRound } from "lucide-react";
 import { format } from "date-fns";
