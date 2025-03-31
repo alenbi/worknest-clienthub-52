@@ -1,4 +1,3 @@
-
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -41,12 +40,15 @@ import AdminVideos from "./pages/admin/AdminVideos";
 import AdminOffers from "./pages/admin/AdminOffers";
 import AdminUpdates from "./pages/admin/AdminUpdates";
 
-// Create query client with default options to avoid state issues on refresh
+// Create query client with better error handling
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       refetchOnWindowFocus: false,
-      retry: 1,
+      retry: 2,
+      onError: (error) => {
+        console.error("Query error:", error);
+      },
     },
   },
 });

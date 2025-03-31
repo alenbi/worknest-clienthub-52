@@ -130,20 +130,37 @@ export const updateDataContext = (data: UpdateData | null = null): Data => {
   const refreshData = useCallback(async () => {
     try {
       setIsLoading(true);
+      
       const { data: clientsData, error: clientsError } = await supabase
         .from("clients")
         .select("*")
         .order('name', { ascending: true });
 
       if (clientsError) throw clientsError;
+      
+      console.log("Clients data loaded:", clientsData?.length || 0);
       setClients(clientsData || []);
 
       const { data: tasksData, error: tasksError } = await supabase
         .from("tasks")
-        .select("*")
+        .select(`
+          id,
+          title,
+          description,
+          status,
+          client_id,
+          created_at,
+          updated_at,
+          completed_at,
+          priority,
+          due_date
+        `)
         .order('created_at', { ascending: false });
 
       if (tasksError) throw tasksError;
+      
+      console.log("Tasks data loaded:", tasksData?.length || 0);
+      
       const typedTasks = (tasksData || []).map(task => ({
         ...task,
         status: task.status as TaskStatus,
@@ -153,7 +170,7 @@ export const updateDataContext = (data: UpdateData | null = null): Data => {
 
       const { data: resourcesData, error: resourcesError } = await supabase
         .from("resources")
-        .select("*")
+        .select("id, title, description, url, type, created_at")
         .order('created_at', { ascending: false });
 
       if (resourcesError) throw resourcesError;
@@ -161,7 +178,7 @@ export const updateDataContext = (data: UpdateData | null = null): Data => {
 
       const { data: videosData, error: videosError } = await supabase
         .from("videos")
-        .select("*")
+        .select("id, title, description, youtube_id, created_at")
         .order('created_at', { ascending: false });
 
       if (videosError) throw videosError;
@@ -173,7 +190,7 @@ export const updateDataContext = (data: UpdateData | null = null): Data => {
 
       const { data: offersData, error: offersError } = await supabase
         .from("offers")
-        .select("*")
+        .select("id, title, description, discount_percentage, valid_until, code, created_at")
         .order('created_at', { ascending: false });
 
       if (offersError) throw offersError;
@@ -181,7 +198,7 @@ export const updateDataContext = (data: UpdateData | null = null): Data => {
 
       const { data: updatesData, error: updatesError } = await supabase
         .from("updates")
-        .select("*")
+        .select("id, title, content, image_url, is_published, created_at")
         .order('created_at', { ascending: false });
 
       if (updatesError) throw updatesError;

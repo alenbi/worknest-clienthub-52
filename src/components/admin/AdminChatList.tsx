@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -30,56 +31,73 @@ export function AdminChatList() {
     const fetchClientsWithChatInfo = async () => {
       try {
         setIsLoading(true);
+        console.log("Fetching clients with chat info");
         
         // Get all clients
         const { data: clientsData, error: clientsError } = await supabase
           .from("clients")
-          .select("*");
+          .select("id, name, company, avatar, user_id");
         
         if (clientsError) {
           console.error("Error fetching clients:", clientsError);
           throw clientsError;
         }
         
+        console.log(`Found ${clientsData?.length || 0} clients`);
+        
         // For each client, get the most recent message and unread count
-        const clientsWithChatInfo = await Promise.all(clientsData.map(async (client) => {
-          // Get most recent message
-          const { data: messagesData, error: messagesError } = await supabase
-            .from("client_messages")
-            .select("*")
-            .eq("client_id", client.id)
-            .order("created_at", { ascending: false })
-            .limit(1);
-          
-          if (messagesError) {
-            console.error("Error fetching messages for client:", client.id, messagesError);
-            throw messagesError;
+        const clientsWithChatInfo = await Promise.all((clientsData || []).map(async (client) => {
+          try {
+            // Get most recent message
+            const { data: messagesData, error: messagesError } = await supabase
+              .from("client_messages")
+              .select("message, created_at")
+              .eq("client_id", client.id)
+              .order("created_at", { ascending: false })
+              .limit(1);
+            
+            if (messagesError) {
+              console.error("Error fetching messages for client:", client.id, messagesError);
+              throw messagesError;
+            }
+            
+            // Count unread messages from client
+            const { count, error: countError } = await supabase
+              .from("client_messages")
+              .select("*", { count: "exact", head: true })
+              .eq("client_id", client.id)
+              .eq("is_from_client", true)
+              .eq("is_read", false);
+            
+            if (countError) {
+              console.error("Error counting unread messages:", countError);
+              throw countError;
+            }
+            
+            const lastMessage = messagesData?.[0];
+            
+            return {
+              id: client.id,
+              name: client.name,
+              company: client.company || "",
+              avatar: client.avatar,
+              unread_count: count || 0,
+              last_message: lastMessage?.message,
+              last_message_date: lastMessage?.created_at,
+            };
+          } catch (error) {
+            console.error(`Error processing client ${client.id}:`, error);
+            // Return client with default values if there's an error
+            return {
+              id: client.id,
+              name: client.name,
+              company: client.company || "",
+              avatar: client.avatar,
+              unread_count: 0,
+              last_message: undefined,
+              last_message_date: undefined
+            };
           }
-          
-          // Count unread messages from client
-          const { count, error: countError } = await supabase
-            .from("client_messages")
-            .select("*", { count: "exact", head: true })
-            .eq("client_id", client.id)
-            .eq("is_from_client", true)
-            .eq("is_read", false);
-          
-          if (countError) {
-            console.error("Error counting unread messages:", countError);
-            throw countError;
-          }
-          
-          const lastMessage = messagesData?.[0];
-          
-          return {
-            id: client.id,
-            name: client.name,
-            company: client.company || "",
-            avatar: client.avatar,
-            unread_count: count || 0,
-            last_message: lastMessage?.message,
-            last_message_date: lastMessage?.created_at,
-          };
         }));
         
         // Sort clients by unread count first, then by latest message
@@ -93,6 +111,7 @@ export function AdminChatList() {
           return dateB - dateA;
         });
         
+        console.log(`Processed ${clientsWithChatInfo.length} clients with chat info`);
         setClients(clientsWithChatInfo);
       } catch (error) {
         console.error("Error fetching clients with chat info:", error);
@@ -114,6 +133,7 @@ export function AdminChatList() {
           table: 'client_messages'
         }, 
         () => {
+          console.log("Real-time update received for client_messages");
           fetchClientsWithChatInfo();
         })
       .subscribe();

@@ -3,7 +3,7 @@ import { useData, Task } from "@/contexts/data-context";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertTriangle, CheckCircle2, Clock, ListTodo, UserRound } from "lucide-react";
 import { format } from "date-fns";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Chart as ChartJS,
@@ -30,8 +30,14 @@ ChartJS.register(
 
 const Dashboard = () => {
   const { user } = useAuth();
-  const { clients, tasks, isLoading } = useData();
+  const { clients, tasks, isLoading, refreshData } = useData();
   const [timeframe, setTimeframe] = useState<"week" | "month" | "year">("week");
+
+  // Force a data refresh when the dashboard loads
+  useEffect(() => {
+    refreshData();
+    console.log("Dashboard refreshed data");
+  }, [refreshData]);
 
   if (isLoading) {
     return (
@@ -40,6 +46,8 @@ const Dashboard = () => {
       </div>
     );
   }
+
+  console.log("Dashboard render - clients:", clients.length, "tasks:", tasks.length);
 
   // Count tasks by status
   const pendingTasks = tasks.filter((task) => task.status === "pending");
