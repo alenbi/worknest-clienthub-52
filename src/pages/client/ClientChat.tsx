@@ -16,7 +16,7 @@ const ClientChat = () => {
   const [clientId, setClientId] = useState<string | null>(null);
   const [clientName, setClientName] = useState<string | null>(null);
 
-  const unsubscribeRef = useRef<() => void | null>();
+  const unsubscribeRef = useRef<(() => void) | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   
   const scrollToBottom = () => {
@@ -117,17 +117,37 @@ const ClientChat = () => {
     }
   }, [clientId]);
 
-  const handleSendMessage = async (text: string) => {
-    if (!clientId || !user?.id || !text.trim()) return;
+  const handleSendMessage = async (text: string, file: File | null) => {
+    if (!clientId || !user?.id) return;
 
     try {
       setSending(true);
+      
+      let attachmentUrl = null;
+      let attachmentType = null;
+      
+      // If there's a file, upload it first
+      if (file) {
+        try {
+          const result = await uploadChatFile(file, clientId, false);
+          attachmentUrl = result.url;
+          attachmentType = result.type;
+        } catch (error) {
+          console.error("Error uploading file:", error);
+          toast.error("Failed to upload file");
+          setSending(false);
+          return;
+        }
+      }
+      
       await sendMessage({
         clientId,
         senderId: user.id,
         senderName: clientName || "Client",
         message: text,
         isFromClient: true,
+        attachmentUrl,
+        attachmentType
       });
     } catch (error) {
       console.error("Error sending message:", error);
@@ -137,22 +157,6 @@ const ClientChat = () => {
       setTimeout(scrollToBottom, 100);
     }
   };
-
-  const handleFileUpload = useCallback(async (file: File) => {
-    if (!clientId || !user?.id) {
-      toast.error("Cannot upload file: not connected");
-      return null;
-    }
-
-    try {
-      const result = await uploadChatFile(file, clientId, false);
-      return result;
-    } catch (error) {
-      console.error("File upload error:", error);
-      toast.error("Failed to upload file");
-      return null;
-    }
-  }, [clientId, user?.id]);
   
   useEffect(() => {
     scrollToBottom();
@@ -175,33 +179,19 @@ const ClientChat = () => {
         </p>
       </div>
       
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {loading ? (
-          <div className="flex items-center justify-center h-full">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          </div>
-        ) : (
-          <>
-            {messages.length === 0 ? (
-              <div className="flex items-center justify-center h-full">
-                <p className="text-center text-muted-foreground">
-                  No messages yet. Send a message to start the conversation.
-                </p>
-              </div>
-            ) : (
-              <ChatMessageList messages={messages} currentUserId={user?.id || ""} />
-            )}
-          </>
-        )}
+      <div className="flex-1 overflow-y-auto">
+        <ChatMessageList 
+          messages={messages} 
+          currentUserId={user?.id || ""} 
+          isLoading={loading}
+        />
         <div ref={messagesEndRef} />
       </div>
       
-      <div className="border-t p-4">
+      <div>
         <ChatInput 
           onSendMessage={handleSendMessage} 
-          onFileUpload={handleFileUpload}
-          disabled={sending} 
-          placeholder="Type your message..." 
+          isLoading={sending} 
         />
       </div>
     </div>
