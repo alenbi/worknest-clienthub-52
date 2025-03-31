@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Session } from '@supabase/supabase-js';
@@ -201,12 +200,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         throw new Error('Title, URL, and type are required');
       }
       
-      const { error } = await supabase.from('resources').insert({
+      const newResource = {
         title: resource.title,
         description: resource.description || '',
         url: resource.url,
         type: resource.type
-      });
+      };
+      
+      const { error } = await supabase.from('resources').insert(newResource);
       
       if (error) throw error;
       await fetchResources();
@@ -260,11 +261,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         throw new Error('Title and YouTube ID are required');
       }
       
-      const { error } = await supabase.from('videos').insert({
+      const newVideo = {
         title: video.title,
         description: video.description || '',
         youtube_id: video.youtube_id
-      });
+      };
+      
+      const { error } = await supabase.from('videos').insert(newVideo);
       
       if (error) throw error;
       await fetchVideos();
@@ -318,13 +321,15 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         throw new Error('Title and valid until date are required');
       }
       
-      const { error } = await supabase.from('offers').insert({
+      const newOffer = {
         title: offer.title,
         description: offer.description || '',
         discount_percentage: offer.discount_percentage,
         code: offer.code,
         valid_until: offer.valid_until
-      });
+      };
+      
+      const { error } = await supabase.from('offers').insert(newOffer);
       
       if (error) throw error;
       await fetchOffers();
