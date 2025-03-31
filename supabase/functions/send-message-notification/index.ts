@@ -64,6 +64,21 @@ serve(async (req) => {
       isFromClient
     } = await req.json();
 
+    // Validate required fields
+    if (isFromClient && (!clientName || !message)) {
+      return new Response(
+        JSON.stringify({ error: "Missing required fields: clientName and message are required for client messages" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (!isFromClient && (!clientEmail || !senderName || !message)) {
+      return new Response(
+        JSON.stringify({ error: "Missing required fields: clientEmail, senderName, and message are required for admin messages" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Prepare email content based on sender
     if (isFromClient) {
       // Send notification to admin

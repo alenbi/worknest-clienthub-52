@@ -72,38 +72,51 @@ const AdminResources = () => {
       let resourceUrl = url;
       
       if (type === "file" && file) {
-        // Check if resources bucket exists
-        const { data: buckets } = await supabase.storage.listBuckets();
-        const resourceBucket = buckets?.find(b => b.name === 'resources');
-        
-        // Create the bucket if it doesn't exist
-        if (!resourceBucket) {
-          const { error: bucketError } = await supabase.storage
-            .createBucket('resources', { public: true });
+        try {
+          // Check if resources bucket exists
+          const { data: buckets } = await supabase.storage.listBuckets();
+          const resourceBucket = buckets?.find(b => b.name === 'resources');
           
-          if (bucketError) throw bucketError;
+          // Create the bucket if it doesn't exist
+          if (!resourceBucket) {
+            const { error: bucketError } = await supabase.storage
+              .createBucket('resources', { public: true });
+            
+            if (bucketError) {
+              console.error("Error creating bucket:", bucketError);
+              throw bucketError;
+            }
+          }
+          
+          // Upload the file
+          const fileExt = file.name.split('.').pop();
+          const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
+          const filePath = `${fileName}`;
+          
+          const { error: uploadError, data: uploadData } = await supabase.storage
+            .from('resources')
+            .upload(filePath, file, {
+              upsert: true,
+              cacheControl: '3600'
+            });
+          
+          if (uploadError) {
+            console.error("Upload error:", uploadError);
+            throw uploadError;
+          }
+          
+          // Get the public URL
+          const { data } = supabase.storage
+            .from('resources')
+            .getPublicUrl(filePath);
+          
+          resourceUrl = data.publicUrl;
+        } catch (error) {
+          console.error("File upload error:", error);
+          toast.error("File upload failed. Please try again.");
+          setIsSubmitting(false);
+          return;
         }
-        
-        // Upload the file
-        const fileExt = file.name.split('.').pop();
-        const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
-        const filePath = `resources/${fileName}`;
-        
-        const { error: uploadError } = await supabase.storage
-          .from('resources')
-          .upload(filePath, file, {
-            upsert: true,
-            cacheControl: '3600'
-          });
-        
-        if (uploadError) throw uploadError;
-        
-        // Get the public URL
-        const { data } = supabase.storage
-          .from('resources')
-          .getPublicUrl(filePath);
-        
-        resourceUrl = data.publicUrl;
       }
       
       // Insert the resource record
@@ -124,23 +137,14 @@ const AdminResources = () => {
       fetchResources();
     } catch (error) {
       console.error("Error adding resource:", error);
-      toast.error("Failed to add resource");
+      toast.error("Failed to add resource: " + (error instanceof Error ? error.message : "Unknown error"));
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleDeleteResource = async (id: string) => {
+  const handleDeleteResource = async (id: string, resourceType: string, resourceUrl: string) => {
     try {
-      // Get the resource to check if it's a file
-      const { data: resource, error: fetchError } = await supabase
-        .from("resources")
-        .select("*")
-        .eq("id", id)
-        .single();
-      
-      if (fetchError) throw fetchError;
-      
       // Delete the database record first
       const { error } = await supabase
         .from("resources")
@@ -150,16 +154,20 @@ const AdminResources = () => {
       if (error) throw error;
       
       // If it's a file resource, also delete the file from storage
-      if (resource && resource.type === "file" && resource.url) {
-        // Extract the filename from the URL
-        const urlParts = resource.url.split("/");
-        const filePathParts = urlParts[urlParts.length - 1].split("_");
-        const filePath = `resources/${urlParts[urlParts.length - 1]}`;
-        
-        // Delete the file
-        await supabase.storage
-          .from('resources')
-          .remove([filePath]);
+      if (resourceType === "file" && resourceUrl) {
+        try {
+          // Extract the filename from the URL
+          const urlParts = resourceUrl.split("/");
+          const filePath = urlParts[urlParts.length - 1];
+          
+          // Delete the file
+          await supabase.storage
+            .from('resources')
+            .remove([filePath]);
+        } catch (fileError) {
+          // Log but don't fail the whole operation if file deletion fails
+          console.error("Error deleting file:", fileError);
+        }
       }
       
       toast.success("Resource deleted successfully");
@@ -268,7 +276,10 @@ const AdminResources = () => {
               )}
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setIsAddDialogOpen(false)} disabled={isSubmitting}>
+              <Button variant="outline" onClick={() => {
+                resetForm();
+                setIsAddDialogOpen(false);
+              }} disabled={isSubmitting}>
                 Cancel
               </Button>
               <Button onClick={handleAddResource} disabled={isSubmitting}>
@@ -364,7 +375,7 @@ const AdminResources = () => {
                           <Button
                             variant="outline"
                             size="icon"
-                            onClick={() => handleDeleteResource(resource.id)}
+                            onClick={() => handleDeleteResource(resource.id, resource.type, resource.url)}
                           >
                             <Trash2 className="h-4 w-4 text-red-500" />
                             <span className="sr-only">Delete</span>

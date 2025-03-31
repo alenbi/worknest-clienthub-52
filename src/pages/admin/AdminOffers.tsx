@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { supabase } from "@/integrations/supabase/client";
-import { PlusIcon, FileText, Link as LinkIcon, Trash2, ExternalLink, Loader2 } from "lucide-react";
+import { PlusIcon, FileText, Trash2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { useForm } from "react-hook-form";
@@ -95,7 +95,10 @@ const AdminOffers = () => {
         .from("offers")
         .insert(offerData);
       
-      if (error) throw error;
+      if (error) {
+        console.error("Supabase insert error:", error);
+        throw error;
+      }
       
       toast.success("Offer added successfully");
       setIsAddDialogOpen(false);
@@ -103,7 +106,7 @@ const AdminOffers = () => {
       fetchOffers();
     } catch (error) {
       console.error("Error adding offer:", error);
-      toast.error("Failed to add offer");
+      toast.error("Failed to add offer: " + (error instanceof Error ? error.message : "Unknown error"));
     } finally {
       setIsSubmitting(false);
     }

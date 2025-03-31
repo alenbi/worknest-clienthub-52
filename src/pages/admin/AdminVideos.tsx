@@ -28,7 +28,7 @@ const formSchema = z.object({
     message: "Title must be at least 2 characters.",
   }),
   description: z.string().optional(),
-  url: z.string().optional(),
+  url: z.string().url("Please enter a valid URL").optional().or(z.string().length(0)),
   youtube_id: z.string().optional(),
 });
 
@@ -73,6 +73,8 @@ const AdminVideos = () => {
   };
 
   const extractYoutubeId = (url: string): string | null => {
+    if (!url) return null;
+    
     const youtubeRegex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
     const match = url.match(youtubeRegex);
     return match && match[1] ? match[1] : null;
@@ -83,9 +85,9 @@ const AdminVideos = () => {
       setIsSubmitting(true);
       
       // Extract YouTube ID from URL if provided
-      let youtubeId = values.youtube_id;
+      let youtubeId = values.youtube_id || "";
       
-      if (values.url && !youtubeId) {
+      if (values.url) {
         const extractedId = extractYoutubeId(values.url);
         
         if (extractedId) {
@@ -95,6 +97,7 @@ const AdminVideos = () => {
       
       if (!youtubeId) {
         toast.error("Please enter a valid YouTube URL or ID");
+        setIsSubmitting(false);
         return;
       }
       
@@ -187,6 +190,9 @@ const AdminVideos = () => {
                   {...form.register("url")}
                   disabled={isSubmitting}
                 />
+                {form.formState.errors.url && (
+                  <p className="text-sm text-red-500">{form.formState.errors.url?.message}</p>
+                )}
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setIsAddDialogOpen(false)} disabled={isSubmitting}>
