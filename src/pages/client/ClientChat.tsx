@@ -68,12 +68,14 @@ const ClientChat = () => {
         const messages = await fetchClientMessages(clientId);
         
         // Mark all unread admin messages as read
-        await supabase
-          .from("client_messages")
-          .update({ is_read: true })
-          .eq("client_id", clientId)
-          .eq("is_from_client", false)
-          .eq("is_read", false);
+        if (messages.length > 0) {
+          await supabase
+            .from("client_messages")
+            .update({ is_read: true })
+            .eq("client_id", clientId)
+            .eq("is_from_client", false)
+            .eq("is_read", false);
+        }
         
         console.log("Messages fetched:", messages.length);
         setMessages(messages);

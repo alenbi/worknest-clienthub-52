@@ -1,4 +1,3 @@
-
 import { RealtimeChannel } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -120,11 +119,19 @@ export async function sendMessage({
   attachmentType?: string | null;
 }): Promise<ChatMessage | null> {
   try {
+    // Trim message but keep it if it's only an attachment
+    const finalMessage = message ? message.trim() : '';
+    
+    // If no message and no attachment, don't send anything
+    if (!finalMessage && !attachmentUrl) {
+      return null;
+    }
+    
     const messageData = {
       client_id: clientId,
       sender_id: senderId,
       is_from_client: isFromClient,
-      message: message.trim(),
+      message: finalMessage,
       attachment_url: attachmentUrl,
       attachment_type: attachmentType,
       is_read: false
@@ -210,7 +217,7 @@ export async function uploadChatFile(
  */
 export async function fetchClientMessages(clientId: string): Promise<ChatMessage[]> {
   try {
-    // Get all messages for this client
+    // Get all messages for this client - FIXED to avoid the ambiguous column reference
     const { data: messages, error } = await supabase
       .from("client_messages")
       .select("*")
@@ -220,6 +227,10 @@ export async function fetchClientMessages(clientId: string): Promise<ChatMessage
     if (error) {
       console.error("Error fetching messages:", error);
       throw error;
+    }
+
+    if (!messages || messages.length === 0) {
+      return [];
     }
     
     // Get unique sender IDs
