@@ -217,12 +217,19 @@ export async function uploadChatFile(
  */
 export async function fetchClientMessages(clientId: string): Promise<ChatMessage[]> {
   try {
-    // Get all messages for this client - FIXED to avoid the ambiguous column reference
+    // Get all messages for this client - Fixed to avoid the ambiguous column reference
     const { data: messages, error } = await supabase
       .from("client_messages")
-      .select("*")
-      .eq("client_id", clientId)
-      .order("created_at", { ascending: true });
+      .select("client_messages.*, profiles.full_name as sender_name")
+      .eq("client_messages.client_id", clientId)
+      .order("client_messages.created_at", { ascending: true })
+      .join("profiles", { 
+        foreignTable: "profiles", 
+        columns: ["full_name"], 
+        type: "left", 
+        onColumn: "id", 
+        referencedColumn: "client_messages.sender_id" 
+      });
     
     if (error) {
       console.error("Error fetching messages:", error);
@@ -233,34 +240,21 @@ export async function fetchClientMessages(clientId: string): Promise<ChatMessage
       return [];
     }
     
-    // Get unique sender IDs
-    const senderIds = messages.map(msg => msg.sender_id).filter((id, i, arr) => arr.indexOf(id) === i);
-    
-    // Get all profile data in one request
-    const { data: profiles, error: profilesError } = await supabase
-      .from("profiles")
-      .select("id, full_name")
-      .in("id", senderIds);
-    
-    if (profilesError) {
-      console.error("Error fetching profiles:", profilesError);
-    }
-    
-    // Create sender name lookup
-    const senderNames: Record<string, string> = {};
-    if (profiles) {
-      profiles.forEach(profile => {
-        senderNames[profile.id] = profile.full_name;
-      });
-    }
-    
-    // Add sender names to messages
-    const messagesWithNames = messages.map(msg => ({
-      ...msg,
-      sender_name: senderNames[msg.sender_id] || "Unknown User"
+    // Format the messages to match the ChatMessage interface
+    const formattedMessages = messages.map(msg => ({
+      id: msg.id,
+      message: msg.message,
+      sender_id: msg.sender_id,
+      client_id: msg.client_id,
+      is_from_client: msg.is_from_client,
+      created_at: msg.created_at,
+      is_read: msg.is_read,
+      sender_name: msg.sender_name || "Unknown User",
+      attachment_url: msg.attachment_url,
+      attachment_type: msg.attachment_type
     }));
     
-    return messagesWithNames;
+    return formattedMessages;
   } catch (error) {
     console.error("Error in fetchClientMessages:", error);
     throw error;
