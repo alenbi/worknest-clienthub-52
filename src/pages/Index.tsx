@@ -4,27 +4,45 @@ import { useNavigate } from 'react-router-dom';
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/contexts/auth-context";
 import { useClientAuth } from "@/contexts/client-auth-context";
+import { supabase } from "@/integrations/supabase/client";
 
 const Index = () => {
   const navigate = useNavigate();
-  const { isAuthenticated: isAdminAuthenticated, isLoading: isAdminLoading } = useAuth();
+  const { isAuthenticated: isAdminAuthenticated, isLoading: isAdminLoading, user: adminUser } = useAuth();
   const { isAuthenticated: isClientAuthenticated, isLoading: isClientLoading } = useClientAuth();
   
   useEffect(() => {
-    // Only redirect if both auth states have been determined
-    if (!isAdminLoading && !isClientLoading) {
-      if (isAdminAuthenticated) {
-        // Admin is authenticated, go to admin dashboard
-        navigate('/dashboard', { replace: true });
-      } else if (isClientAuthenticated) {
-        // Client is authenticated, go to client dashboard 
-        navigate('/client/dashboard', { replace: true });
-      } else {
-        // No one is authenticated, go to admin login
-        navigate('/login', { replace: true });
+    const checkUserRole = async () => {
+      if (!isAdminLoading && !isClientLoading) {
+        // Check if admin is authenticated and has admin role
+        if (isAdminAuthenticated && adminUser) {
+          try {
+            const { data: isAdmin } = await supabase.rpc('is_admin', {
+              user_id: adminUser.id
+            });
+            
+            if (isAdmin) {
+              // User is an admin, go to admin dashboard
+              navigate('/dashboard', { replace: true });
+              return;
+            }
+          } catch (error) {
+            console.error('Error checking admin status:', error);
+          }
+        }
+        
+        // If not admin but client is authenticated, go to client dashboard
+        if (isClientAuthenticated) {
+          navigate('/client/dashboard', { replace: true });
+        } else {
+          // No one is authenticated, go to admin login
+          navigate('/login', { replace: true });
+        }
       }
-    }
-  }, [navigate, isAdminAuthenticated, isClientAuthenticated, isAdminLoading, isClientLoading]);
+    };
+    
+    checkUserRole();
+  }, [navigate, isAdminAuthenticated, isClientAuthenticated, isAdminLoading, isClientLoading, adminUser]);
 
   // Display a loading skeleton while redirecting
   return (

@@ -10,5 +10,53 @@ const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiO
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
-export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+  }
+});
+
+// Utility function to check if current user is an admin
+export const isUserAdmin = async (): Promise<boolean> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return false;
+    
+    const { data, error } = await supabase.rpc('is_admin', { user_id: user.id });
+    if (error) {
+      console.error('Error checking admin status:', error);
+      return false;
+    }
+    
+    return !!data;
+  } catch (error) {
+    console.error('Error in isUserAdmin:', error);
+    return false;
+  }
+};
+
+// Utility function to get client ID for the current user
+export const getCurrentClientId = async (): Promise<string | null> => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return null;
+    
+    const { data, error } = await supabase
+      .from('clients')
+      .select('id')
+      .eq('user_id', user.id)
+      .single();
+      
+    if (error || !data) {
+      return null;
+    }
+    
+    return data.id;
+  } catch (error) {
+    console.error('Error in getCurrentClientId:', error);
+    return null;
+  }
+};
+
 export type { ClientMessage };

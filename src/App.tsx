@@ -3,7 +3,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 import { ThemeProvider } from "@/components/theme-provider";
 import { AuthProvider } from "@/contexts/auth-context";
 import { ClientAuthProvider } from "@/contexts/client-auth-context";
@@ -93,6 +93,10 @@ const App = () => (
                     <Route path="/client/videos" element={<ClientVideos />} />
                     <Route path="/client/offers" element={<ClientOffers />} />
                     <Route path="/client/profile" element={<ClientProfile />} />
+                    {/* Redirect any admin paths to client dashboard if accessed by client */}
+                    <Route path="/dashboard" element={<Navigate to="/client/dashboard" replace />} />
+                    <Route path="/clients" element={<Navigate to="/client/dashboard" replace />} />
+                    <Route path="/tasks" element={<Navigate to="/client/tasks" replace />} />
                   </Route>
                 </Route>
                 
