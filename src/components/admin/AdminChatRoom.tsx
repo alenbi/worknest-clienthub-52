@@ -135,7 +135,7 @@ export function AdminChatRoom() {
     
     return () => {
       if (channelRef.current) {
-        supabase.removeChannel(channelRef.current);
+        supabase.removeChannel(channel);
       }
     };
   }, [clientId, client, user?.id]);

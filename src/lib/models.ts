@@ -1,62 +1,70 @@
-// Define interfaces for the newly created tables
-export interface ClientMessage {
-  id: string;
-  client_id: string;
-  sender_id: string;
-  is_from_client: boolean;
-  message: string;
-  attachment_url?: string;
-  attachment_type?: string;
-  is_read: boolean;
-  created_at: Date | string;
-}
 
-export interface Resource {
-  id: string;
-  title: string;
-  description?: string;
-  type: "file" | "link" | string; // Allow string to handle database values
-  url: string;
-  created_at: Date | string;
-}
+// Define shared types
+export type TaskStatus = 'open' | 'in progress' | 'done' | 'pending' | 'completed';
+export type TaskPriority = 'low' | 'medium' | 'high';
 
-export interface Video {
-  id: string;
-  title: string;
-  description?: string;
-  youtube_id: string;
-  created_at: Date | string;
-}
-
-export interface Offer {
-  id: string;
-  title: string;
-  description?: string;
-  discount_percentage?: number;
-  valid_until: Date | string;
-  code?: string;
-  created_at: Date | string;
-}
-
-// Client creation/update form types
-export interface ClientFormData {
-  name: string;
-  email: string;
-  phone: string;
-  company: string;
-  domain?: string;
-  password?: string;
-}
-
-// Client profile
-export interface ClientProfile {
+export interface Client {
   id: string;
   name: string;
   email: string;
   phone?: string;
   company?: string;
   domain?: string;
-  user_id: string;
+  user_id?: string;
+  created_at?: string;
+  updated_at?: string;
+  avatar?: string;
+}
+
+export interface Task {
+  id: string;
+  title: string;
+  description?: string;
+  status: TaskStatus;
+  client_id: string;
   created_at: string;
-  updated_at: string;
+  completed_at?: string;
+  updated_at?: string;
+  priority?: TaskPriority;
+  due_date?: string;
+}
+
+export interface Resource {
+  id: string;
+  title: string;
+  description?: string;
+  url: string;
+  type: 'document' | 'video' | 'link' | string;
+  created_at?: string;
+}
+
+export interface Video {
+  id: string;
+  title: string;
+  description?: string;
+  url?: string;
+  youtube_id?: string;
+  created_at?: string;
+}
+
+export interface Offer {
+  id: string;
+  title: string;
+  description?: string;
+  price?: number;
+  discount?: number;
+  active?: boolean;
+  code?: string;
+  discount_percentage?: number;
+  valid_until?: string;
+  created_at?: string;
+}
+
+export interface Update {
+  id: string;
+  title: string;
+  content: string;
+  image_url?: string;
+  is_published: boolean;
+  created_at?: string;
 }
