@@ -1,26 +1,19 @@
-
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { PlusIcon, FileText, Link as LinkIcon, Trash2, ExternalLink, Loader2, Video } from "lucide-react";
+import { PlusIcon, Trash2, ExternalLink, Loader2, Video } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-
-interface VideoType {
-  id: string;
-  title: string;
-  description?: string;
-  youtube_id: string;
-  created_at: string;
-}
+import { useData } from "@/contexts/data-context";
+import { Video as VideoType } from "@/lib/models";
 
 const formSchema = z.object({
   title: z.string().min(2, {
@@ -28,7 +21,6 @@ const formSchema = z.object({
   }),
   description: z.string().optional(),
   url: z.string().url("Please enter a valid URL").or(z.string().length(0)),
-  youtube_id: z.string().optional(),
 });
 
 const AdminVideos = () => {
@@ -37,6 +29,7 @@ const AdminVideos = () => {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const { createVideo, deleteVideo } = useData();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -44,7 +37,6 @@ const AdminVideos = () => {
       title: "",
       description: "",
       url: "",
-      youtube_id: "",
     },
   });
 
@@ -93,34 +85,27 @@ const AdminVideos = () => {
     try {
       setIsSubmitting(true);
       
-      // Extract YouTube ID from URL if provided
-      let youtubeId = values.youtube_id || "";
-      
-      if (values.url) {
-        const extractedId = extractYoutubeId(values.url);
-        
-        if (extractedId) {
-          youtubeId = extractedId;
-        } else {
-          toast.error("Please enter a valid YouTube URL or ID");
-          setIsSubmitting(false);
-          return;
-        }
-      } else {
+      if (!values.url) {
         toast.error("Please enter a YouTube URL");
         setIsSubmitting(false);
         return;
       }
       
-      const { error } = await supabase
-        .from("videos")
-        .insert({
-          title: values.title,
-          description: values.description || "",
-          youtube_id: youtubeId
-        });
+      // Extract YouTube ID from URL
+      const youtubeId = extractYoutubeId(values.url);
       
-      if (error) throw error;
+      if (!youtubeId) {
+        toast.error("Please enter a valid YouTube URL or ID");
+        setIsSubmitting(false);
+        return;
+      }
+      
+      // Use the context method to create the video
+      await createVideo({
+        title: values.title,
+        description: values.description || "",
+        youtube_id: youtubeId
+      });
       
       toast.success("Video added successfully");
       setIsAddDialogOpen(false);
@@ -134,10 +119,9 @@ const AdminVideos = () => {
     }
   };
 
-  const deleteVideo = async (id: string) => {
+  const handleDeleteVideo = async (id: string) => {
     try {
-      const { error } = await supabase.from("videos").delete().eq("id", id);
-      if (error) throw error;
+      await deleteVideo(id);
       toast.success("Video deleted successfully");
       setVideos(videos.filter((video) => video.id !== id));
     } catch (error) {
@@ -295,7 +279,7 @@ const AdminVideos = () => {
                           <Button
                             variant="outline"
                             size="icon"
-                            onClick={() => deleteVideo(video.id)}
+                            onClick={() => handleDeleteVideo(video.id)}
                           >
                             <Trash2 className="h-4 w-4 text-red-500" />
                             <span className="sr-only">Delete</span>

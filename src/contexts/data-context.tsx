@@ -1,599 +1,247 @@
-import { createContext, useContext, useState, useEffect, useCallback } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import { v4 as uuidv4 } from 'uuid';
-import { Client, Task, Resource, Video, Offer, Update, TaskStatus, TaskPriority } from "@/lib/models";
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { Session } from '@supabase/supabase-js';
+import { Resource, Video, Offer } from '@/lib/models';
 
-export type { Client, Task, Resource, Video, Offer, Update };
-export { TaskStatus, TaskPriority };
-
-export interface Data {
-  clients: Client[];
-  tasks: Task[];
-  resources: Resource[];
-  videos: Video[];
-  offers: Offer[];
-  updates: Update[];
-  refreshData: () => Promise<void>;
-  createClient: (client: Omit<Client, 'id' | 'created_at' | 'updated_at'>) => Promise<Client>;
-  updateClient: (id: string, updates: Partial<Client>) => Promise<Client | void>;
-  deleteClient: (id: string) => Promise<void>;
-  createTask: (task: Omit<Task, 'id'>) => Promise<Task>;
-  updateTask: (id: string, updates: Partial<Task>) => Promise<Task | void>;
-  deleteTask: (id: string) => Promise<void>;
-  createResource: (resource: Omit<Resource, 'id'>) => Promise<Resource>;
-  updateResource: (id: string, updates: Partial<Resource>) => Promise<Resource | void>;
-  deleteResource: (id: string) => Promise<void>;
-  createVideo: (video: Omit<Video, 'id'>) => Promise<Video>;
-  updateVideo: (id: string, updates: Partial<Video>) => Promise<Video | void>;
-  deleteVideo: (id: string) => Promise<void>;
-  createOffer: (offer: Omit<Offer, 'id'>) => Promise<Offer>;
-  updateOffer: (id: string, updates: Partial<Offer>) => Promise<Offer | void>;
-  deleteOffer: (id: string) => Promise<void>;
-  createUpdate: (data: { title: string; content: string; image_url?: string; is_published?: boolean }) => Promise<Update>;
-  updateUpdate: (id: string, data: { title?: string; content?: string; image_url?: string; is_published?: boolean; created_at?: string }) => Promise<Update | void>;
-  deleteUpdate: (id: string) => Promise<void>;
-  isLoading?: boolean;
-  toggleUpdatePublished: (id: string, isPublished: boolean) => Promise<void>;
-  addTask: (task: Omit<Task, 'id'>) => Promise<Task>;
-  updateClientPassword?: (clientId: string, newPassword: string) => Promise<void>;
-  addClient?: (client: Omit<Client, 'id' | 'created_at' | 'updated_at'>) => Promise<Client>;
+interface AuthContextType {
+  session: Session | null;
+  user: Session['user'] | null;
+  signIn: (email: string) => Promise<void>;
+  signOut: () => Promise<void>;
 }
 
-const DataContext = createContext<Data | undefined>(undefined);
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-interface DataProviderProps {
-  children: React.ReactNode;
-}
-
-interface UpdateData {
-  title: string;
-  content: string;
-  image_url?: string;
-  is_published?: boolean;
-  created_at?: string;
-}
-
-export const updateDataContext = (data: UpdateData | null = null): Data => {
-  const [clients, setClients] = useState<Client[]>([]);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [resources, setResources] = useState<Resource[]>([]);
-  const [videos, setVideos] = useState<Video[]>([]);
-  const [offers, setOffers] = useState<Offer[]>([]);
-  const [updates, setUpdates] = useState<Update[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
-  const refreshData = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      
-      const { data: clientsData, error: clientsError } = await supabase
-        .from("clients")
-        .select("*")
-        .order('name', { ascending: true });
-
-      if (clientsError) throw clientsError;
-      
-      console.log("Clients data loaded:", clientsData?.length || 0);
-      setClients(clientsData || []);
-
-      const { data: tasksData, error: tasksError } = await supabase
-        .from("tasks")
-        .select(`
-          id,
-          title,
-          description,
-          status,
-          client_id,
-          created_at,
-          updated_at,
-          completed_at,
-          priority,
-          due_date
-        `)
-        .order('created_at', { ascending: false });
-
-      if (tasksError) throw tasksError;
-      
-      console.log("Tasks data loaded:", tasksData?.length || 0);
-      
-      const typedTasks = (tasksData || []).map(task => ({
-        ...task,
-        status: task.status as TaskStatus,
-        priority: task.priority as TaskPriority,
-      }));
-      setTasks(typedTasks);
-
-      const { data: resourcesData, error: resourcesError } = await supabase
-        .from("resources")
-        .select("id, title, description, url, type, created_at")
-        .order('created_at', { ascending: false });
-
-      if (resourcesError) throw resourcesError;
-      setResources(resourcesData || []);
-
-      const { data: videosData, error: videosError } = await supabase
-        .from("videos")
-        .select("id, title, description, youtube_id, created_at")
-        .order('created_at', { ascending: false });
-
-      if (videosError) throw videosError;
-      const formattedVideos = (videosData || []).map(video => ({
-        ...video,
-        url: video.youtube_id ? `https://youtube.com/watch?v=${video.youtube_id}` : ''
-      }));
-      setVideos(formattedVideos);
-
-      const { data: offersData, error: offersError } = await supabase
-        .from("offers")
-        .select("id, title, description, discount_percentage, valid_until, code, created_at")
-        .order('created_at', { ascending: false });
-
-      if (offersError) throw offersError;
-      setOffers(offersData || []);
-
-      const { data: updatesData, error: updatesError } = await supabase
-        .from("updates")
-        .select("id, title, content, image_url, is_published, created_at")
-        .order('created_at', { ascending: false });
-
-      if (updatesError) throw updatesError;
-      setUpdates(updatesData || []);
-    } catch (error) {
-      console.error("Error fetching data:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [session, setSession] = useState<Session | null>(null);
+  const [user, setUser] = useState<Session['user'] | null>(null);
 
   useEffect(() => {
-    refreshData();
-  }, [refreshData]);
-    
-  const createClient = async (client: Omit<Client, 'id' | 'created_at' | 'updated_at'>): Promise<Client> => {
-    try {
-      const { data: newClient, error } = await supabase
-        .from("clients")
-        .insert([{ 
-          ...client, 
-          id: uuidv4(),
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        }])
-        .select()
-        .single();
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user || null);
+    });
 
-      if (error) throw error;
-      setClients((prevClients) => [...prevClients, newClient]);
-      return newClient;
+    supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      setUser(session?.user || null);
+    });
+  }, []);
+
+  const signIn = async (email: string) => {
+    try {
+      await supabase.auth.signInWithOtp({ email });
+      alert('Check your email for the magic link to sign in.');
     } catch (error) {
-      console.error("Error creating client:", error);
-      throw error;
+      console.error('Error signing in:', error);
     }
   };
 
-  const updateClient = async (id: string, updates: Partial<Client>): Promise<Client | void> => {
+  const signOut = async () => {
     try {
-      const { data: updatedClient, error } = await supabase
-        .from("clients")
-        .update(updates)
-        .eq("id", id)
-        .select()
-        .single();
-
-      if (error) throw error;
-      setClients((prevClients) =>
-        prevClients.map((client) => (client.id === id ? updatedClient : client))
-      );
-      return updatedClient;
+      await supabase.auth.signOut();
     } catch (error) {
-      console.error("Error updating client:", error);
-      throw error;
+      console.error('Error signing out:', error);
     }
   };
 
-  const deleteClient = async (id: string): Promise<void> => {
-    try {
-      const { error } = await supabase.from("clients").delete().eq("id", id);
-      if (error) throw error;
-      setClients((prevClients) => prevClients.filter((client) => client.id !== id));
-    } catch (error) {
-      console.error("Error deleting client:", error);
-      throw error;
-    }
-  };
+  return (
+    <AuthContext.Provider value={{ session, user, signIn, signOut }}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
 
-  const createTask = async (task: Omit<Task, 'id'>): Promise<Task> => {
-    try {
-      const taskToInsert: any = {
-        title: task.title,
-        description: task.description,
-        status: task.status,
-        client_id: task.client_id,
-        priority: task.priority || 'medium',
-        created_at: new Date().toISOString()
-      };
-
-      if (task.due_date) {
-        taskToInsert.due_date = typeof task.due_date === 'string' 
-          ? task.due_date 
-          : new Date(task.due_date).toISOString();
-      }
-
-      const { data: newTask, error } = await supabase
-        .from("tasks")
-        .insert(taskToInsert)
-        .select()
-        .single();
-
-      if (error) throw error;
-      setTasks((prevTasks) => [...prevTasks, newTask as Task]);
-      return newTask as Task;
-    } catch (error) {
-      console.error("Error creating task:", error);
-      throw error;
-    }
-  };
-
-  const updateTask = async (id: string, updates: Partial<Task>): Promise<Task | void> => {
-    try {
-      const updatesToSubmit: any = { ...updates };
-      
-      if (updates.due_date) {
-        updatesToSubmit.due_date = typeof updates.due_date === 'string'
-          ? updates.due_date
-          : new Date(updates.due_date).toISOString();
-      }
-
-      const { data: updatedTask, error } = await supabase
-        .from("tasks")
-        .update(updatesToSubmit)
-        .eq("id", id)
-        .select()
-        .single();
-
-      if (error) throw error;
-      setTasks((prevTasks) =>
-        prevTasks.map((task) => (task.id === id ? updatedTask as Task : task))
-      );
-      return updatedTask as Task;
-    } catch (error) {
-      console.error("Error updating task:", error);
-      throw error;
-    }
-  };
-
-  const deleteTask = async (id: string): Promise<void> => {
-    try {
-      const { error } = await supabase.from("tasks").delete().eq("id", id);
-      if (error) throw error;
-      setTasks((prevTasks) => prevTasks.filter((task) => task.id !== id));
-    } catch (error) {
-      console.error("Error deleting task:", error);
-      throw error;
-    }
-  };
-
-  const createResource = async (resource: Omit<Resource, 'id'>): Promise<Resource> => {
-    try {
-      const { data: newResource, error } = await supabase
-        .from("resources")
-        .insert([{ ...resource, id: uuidv4(), created_at: new Date().toISOString() }])
-        .select()
-        .single();
-
-      if (error) throw error;
-      setResources((prevResources) => [...prevResources, newResource as Resource]);
-      return newResource as Resource;
-    } catch (error) {
-      console.error("Error creating resource:", error);
-      throw error;
-    }
-  };
-
-  const updateResource = async (id: string, updates: Partial<Resource>): Promise<Resource | void> => {
-    try {
-      const { data: updatedResource, error } = await supabase
-        .from("resources")
-        .update(updates)
-        .eq("id", id)
-        .select()
-        .single();
-
-      if (error) throw error;
-      setResources((prevResources) =>
-        prevResources.map((resource) => (resource.id === id ? updatedResource as Resource : resource))
-      );
-      return updatedResource as Resource;
-    } catch (error) {
-      console.error("Error updating resource:", error);
-      throw error;
-    }
-  };
-
-  const deleteResource = async (id: string): Promise<void> => {
-    try {
-      const { error } = await supabase.from("resources").delete().eq("id", id);
-      if (error) throw error;
-      setResources((prevResources) => prevResources.filter((resource) => resource.id !== id));
-    } catch (error) {
-      console.error("Error deleting resource:", error);
-      throw error;
-    }
-  };
-
-  const createVideo = async (video: Omit<Video, 'id'>): Promise<Video> => {
-    try {
-      const videoToInsert = {
-        title: video.title,
-        description: video.description,
-        url: video.url,
-        youtube_id: video.youtube_id,
-        created_at: new Date().toISOString()
-      };
-
-      const { data: newVideo, error } = await supabase
-        .from("videos")
-        .insert([{ ...videoToInsert, id: uuidv4() }])
-        .select()
-        .single();
-
-      if (error) throw error;
-      setVideos((prevVideos) => [...prevVideos, newVideo as Video]);
-      return newVideo as Video;
-    } catch (error) {
-      console.error("Error creating video:", error);
-      throw error;
-    }
-  };
-
-  const updateVideo = async (id: string, updates: Partial<Video>): Promise<Video | void> => {
-    try {
-      const { data: updatedVideo, error } = await supabase
-        .from("videos")
-        .update(updates)
-        .eq("id", id)
-        .select()
-        .single();
-
-      if (error) throw error;
-      setVideos((prevVideos) =>
-        prevVideos.map((video) => (video.id === id ? updatedVideo as Video : video))
-      );
-      return updatedVideo as Video;
-    } catch (error) {
-      console.error("Error updating video:", error);
-      throw error;
-    }
-  };
-
-  const deleteVideo = async (id: string): Promise<void> => {
-    try {
-      const { error } = await supabase.from("videos").delete().eq("id", id);
-      if (error) throw error;
-      setVideos((prevVideos) => prevVideos.filter((video) => video.id !== id));
-    } catch (error) {
-      console.error("Error deleting video:", error);
-      throw error;
-    }
-  };
-
-  const createOffer = async (offer: Omit<Offer, 'id'>): Promise<Offer> => {
-    try {
-      const offerToInsert = {
-        title: offer.title,
-        description: offer.description,
-        price: offer.price,
-        discount: offer.discount,
-        active: offer.active !== undefined ? offer.active : true,
-        code: offer.code,
-        discount_percentage: offer.discount_percentage,
-        valid_until: offer.valid_until,
-        created_at: new Date().toISOString()
-      };
-
-      const { data: newOffer, error } = await supabase
-        .from("offers")
-        .insert([{ ...offerToInsert, id: uuidv4() }])
-        .select()
-        .single();
-
-      if (error) throw error;
-      setOffers((prevOffers) => [...prevOffers, newOffer as Offer]);
-      return newOffer as Offer;
-    } catch (error) {
-      console.error("Error creating offer:", error);
-      throw error;
-    }
-  };
-
-  const updateOffer = async (id: string, updates: Partial<Offer>): Promise<Offer | void> => {
-    try {
-      const { data: updatedOffer, error } = await supabase
-        .from("offers")
-        .update(updates)
-        .eq("id", id)
-        .select()
-        .single();
-
-      if (error) throw error;
-      setOffers((prevOffers) =>
-        prevOffers.map((offer) => (offer.id === id ? updatedOffer as Offer : offer))
-      );
-      return updatedOffer as Offer;
-    } catch (error) {
-      console.error("Error updating offer:", error);
-      throw error;
-    }
-  };
-
-  const deleteOffer = async (id: string): Promise<void> => {
-    try {
-      const { error } = await supabase.from("offers").delete().eq("id", id);
-      if (error) throw error;
-      setOffers((prevOffers) => prevOffers.filter((offer) => offer.id !== id));
-    } catch (error) {
-      console.error("Error deleting offer:", error);
-      throw error;
-    }
-  };
-
-  const createUpdate = async (data: { title: string; content: string; image_url?: string; is_published?: boolean }) => {
-    try {
-      const { data: update, error } = await supabase
-        .from("updates")
-        .insert({
-          title: data.title,
-          content: data.content,
-          image_url: data.image_url,
-          is_published: data.is_published || false,
-          created_at: new Date().toISOString(),
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-      setUpdates((prevUpdates) => [...prevUpdates, update as Update]);
-      return update as Update;
-    } catch (error) {
-      console.error("Error creating update:", error);
-      throw error;
-    }
-  };
-
-  const updateUpdate = async (id: string, data: { title?: string; content?: string; image_url?: string; is_published?: boolean; created_at?: string }) => {
-    try {
-      const updateData = {
-        ...data,
-      };
-
-      if (data.created_at && typeof data.created_at !== 'string') {
-        updateData.created_at = new Date(data.created_at).toISOString();
-      }
-
-      const { data: update, error } = await supabase
-        .from("updates")
-        .update(updateData)
-        .eq("id", id)
-        .select()
-        .single();
-
-      if (error) throw error;
-      
-      setUpdates(prevUpdates => 
-        prevUpdates.map(item => item.id === id ? update as Update : item)
-      );
-      
-      return update as Update;
-    } catch (error) {
-      console.error("Error updating update:", error);
-      throw error;
-    }
-  };
-
-  const deleteUpdate = async (id: string): Promise<void> => {
-    try {
-      const { error } = await supabase.from("updates").delete().eq("id", id);
-      if (error) throw error;
-      setUpdates((prevUpdates) => prevUpdates.filter((update) => update.id !== id));
-    } catch (error) {
-      console.error("Error deleting update:", error);
-      throw error;
-    }
-  };
-
-  const toggleUpdatePublished = async (id: string, isPublished: boolean): Promise<void> => {
-    try {
-      const { error } = await supabase
-        .from("updates")
-        .update({ is_published: isPublished })
-        .eq("id", id);
-      
-      if (error) throw error;
-      
-      setUpdates(prevUpdates => 
-        prevUpdates.map(update => 
-          update.id === id ? { ...update, is_published: isPublished } : update
-        )
-      );
-    } catch (error) {
-      console.error("Error toggling update published status:", error);
-      throw error;
-    }
-  };
-
-  const addTask = createTask;
-
-  const updateClientPassword = async (clientId: string, newPassword: string): Promise<void> => {
-    try {
-      const { data: client, error: clientError } = await supabase
-        .from("clients")
-        .select("user_id")
-        .eq("id", clientId)
-        .single();
-      
-      if (clientError) throw clientError;
-      
-      if (!client.user_id) {
-        throw new Error("Client does not have a user account");
-      }
-      
-      const { error } = await supabase.auth.admin.updateUserById(client.user_id, {
-        password: newPassword
-      });
-      
-      if (error) throw error;
-    } catch (error) {
-      console.error("Error updating client password:", error);
-      throw error;
-    }
-  };
-
-  const addClient = createClient;
-
-  return {
-    clients,
-    tasks,
-    resources,
-    videos,
-    offers,
-    updates,
-    refreshData,
-    createClient,
-    updateClient,
-    deleteClient,
-    createTask,
-    updateTask,
-    deleteTask,
-    createResource,
-    updateResource,
-    deleteResource,
-    createVideo,
-    updateVideo,
-    deleteVideo,
-    createOffer,
-    updateOffer,
-    deleteOffer,
-    createUpdate,
-    updateUpdate,
-    deleteUpdate,
-    isLoading,
-    toggleUpdatePublished,
-    addTask,
-    updateClientPassword,
-    addClient
-  };
-};
-
-export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
-  const data = updateDataContext();
-
-  return <DataContext.Provider value={data}>{children}</DataContext.Provider>;
-};
-
-export const useData = () => {
-  const context = useContext(DataContext);
+export function useAuth() {
+  const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error("useData must be used within a DataProvider");
+    throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
-};
+}
+
+interface DataContextType {
+  session: Session | null;
+  user: Session['user'] | null;
+  isAdmin: boolean;
+  isLoading: boolean;
+  
+  // Resource management
+  createResource: (resource: Partial<Resource>) => Promise<void>;
+  updateResource: (id: string, resource: Partial<Resource>) => Promise<void>;
+  deleteResource: (id: string) => Promise<void>;
+  
+  // Video management
+  createVideo: (video: Partial<Video>) => Promise<void>;
+  updateVideo: (id: string, video: Partial<Video>) => Promise<void>;
+  deleteVideo: (id: string) => Promise<void>;
+  
+  // Offer management
+  createOffer: (offer: Partial<Offer>) => Promise<void>;
+  updateOffer: (id: string, offer: Partial<Offer>) => Promise<void>;
+  deleteOffer: (id: string) => Promise<void>;
+}
+
+const DataContext = createContext<DataContextType | undefined>(undefined);
+
+export function DataProvider({ children }: { children: React.ReactNode }) {
+  const { session, user } = useAuth();
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const checkAdminStatus = async () => {
+      if (user) {
+        try {
+          setIsLoading(true);
+          const { data, error } = await supabase
+            .from('admins')
+            .select('*')
+            .eq('user_id', user.id)
+            .single();
+
+          if (error) {
+            console.error('Error fetching admin status:', error);
+            setIsAdmin(false);
+          } else {
+            setIsAdmin(!!data);
+          }
+        } catch (error) {
+          console.error('Error checking admin status:', error);
+          setIsAdmin(false);
+        } finally {
+          setIsLoading(false);
+        }
+      } else {
+        setIsAdmin(false);
+        setIsLoading(false);
+      }
+    };
+
+    checkAdminStatus();
+  }, [user]);
+  
+  // Resource management functions
+  const createResource = async (resource: Partial<Resource>) => {
+    try {
+      const { error } = await supabase.from('resources').insert(resource);
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error creating resource:', error);
+      throw error;
+    }
+  };
+
+  const updateResource = async (id: string, resource: Partial<Resource>) => {
+    try {
+      const { error } = await supabase.from('resources').update(resource).eq('id', id);
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error updating resource:', error);
+      throw error;
+    }
+  };
+
+  const deleteResource = async (id: string) => {
+    try {
+      const { error } = await supabase.from('resources').delete().eq('id', id);
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error deleting resource:', error);
+      throw error;
+    }
+  };
+  
+  // Video management functions
+  const createVideo = async (video: Partial<Video>) => {
+    try {
+      const { error } = await supabase.from('videos').insert(video);
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error creating video:', error);
+      throw error;
+    }
+  };
+
+  const updateVideo = async (id: string, video: Partial<Video>) => {
+    try {
+      const { error } = await supabase.from('videos').update(video).eq('id', id);
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error updating video:', error);
+      throw error;
+    }
+  };
+
+  const deleteVideo = async (id: string) => {
+    try {
+      const { error } = await supabase.from('videos').delete().eq('id', id);
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error deleting video:', error);
+      throw error;
+    }
+  };
+  
+  // Offer management functions
+  const createOffer = async (offer: Partial<Offer>) => {
+    try {
+      const { error } = await supabase.from('offers').insert(offer);
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error creating offer:', error);
+      throw error;
+    }
+  };
+
+  const updateOffer = async (id: string, offer: Partial<Offer>) => {
+    try {
+      const { error } = await supabase.from('offers').update(offer).eq('id', id);
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error updating offer:', error);
+      throw error;
+    }
+  };
+
+  const deleteOffer = async (id: string) => {
+    try {
+      const { error } = await supabase.from('offers').delete().eq('id', id);
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error deleting offer:', error);
+      throw error;
+    }
+  };
+
+  // Add these to the value object passed to the provider
+  return (
+    <DataContext.Provider
+      value={{
+        session,
+        user,
+        isAdmin,
+        isLoading,
+        createResource,
+        updateResource,
+        deleteResource,
+        createVideo,
+        updateVideo,
+        deleteVideo,
+        createOffer,
+        updateOffer,
+        deleteOffer,
+      }}
+    >
+      {children}
+    </DataContext.Provider>
+  );
+}
+
+export function useData() {
+  const context = useContext(DataContext);
+  if (context === undefined) {
+    throw new Error('useData must be used within a DataProvider');
+  }
+  return context;
+}

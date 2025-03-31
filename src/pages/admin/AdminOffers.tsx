@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,13 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { 
-  PlusIcon, 
-  Trash2, 
-  Pencil,
-  Loader2, 
-  Tag
-} from "lucide-react";
+import { PlusIcon, Trash2, Loader2, Tag } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -24,16 +17,8 @@ import { Badge } from "@/components/ui/badge";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-
-interface Offer {
-  id: string;
-  title: string;
-  description: string;
-  discount_percentage: number;
-  valid_until: string;
-  code: string;
-  created_at: string;
-}
+import { useData } from "@/contexts/data-context";
+import { Offer } from "@/lib/models";
 
 const formSchema = z.object({
   title: z.string().min(2, {
@@ -59,6 +44,7 @@ const AdminOffers = () => {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
+  const { createOffer, deleteOffer } = useData();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -105,17 +91,14 @@ const AdminOffers = () => {
         return;
       }
       
-      const { error } = await supabase
-        .from("offers")
-        .insert({
-          title: values.title,
-          description: values.description,
-          discount_percentage: discount,
-          code: values.code.toUpperCase(),
-          valid_until: values.valid_until.toISOString(),
-        });
-      
-      if (error) throw error;
+      // Use data context method to create offer
+      await createOffer({
+        title: values.title,
+        description: values.description,
+        discount_percentage: discount,
+        code: values.code.toUpperCase(),
+        valid_until: values.valid_until.toISOString(),
+      });
       
       toast.success("Offer added successfully");
       setIsAddDialogOpen(false);
@@ -129,10 +112,10 @@ const AdminOffers = () => {
     }
   };
 
-  const deleteOffer = async (id: string) => {
+  const handleDeleteOffer = async (id: string) => {
     try {
-      const { error } = await supabase.from("offers").delete().eq("id", id);
-      if (error) throw error;
+      // Use data context method to delete offer
+      await deleteOffer(id);
       toast.success("Offer deleted successfully");
       setOffers(offers.filter((offer) => offer.id !== id));
     } catch (error) {
@@ -362,7 +345,7 @@ const AdminOffers = () => {
                             <Button
                               variant="outline"
                               size="icon"
-                              onClick={() => deleteOffer(offer.id)}
+                              onClick={() => handleDeleteOffer(offer.id)}
                             >
                               <Trash2 className="h-4 w-4 text-red-500" />
                               <span className="sr-only">Delete</span>

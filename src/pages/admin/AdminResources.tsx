@@ -1,21 +1,12 @@
-
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { 
-  PlusIcon, 
-  FileText, 
-  Link as LinkIcon, 
-  Trash2, 
-  ExternalLink, 
-  Loader2, 
-  FileUp 
-} from "lucide-react";
+import { PlusIcon, FileText, Link as LinkIcon, Trash2, ExternalLink, Loader2, FileUp } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -23,6 +14,8 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { v4 as uuidv4 } from "uuid";
+import { useData } from "@/contexts/data-context";
+import { Resource } from "@/lib/models";
 
 interface ResourceType {
   id: string;
@@ -62,12 +55,13 @@ const formSchema = z.object({
 });
 
 const AdminResources = () => {
-  const [resources, setResources] = useState<ResourceType[]>([]);
+  const [resources, setResources] = useState<Resource[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [fileUploadStatus, setFileUploadStatus] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const { createResource, deleteResource } = useData();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -94,7 +88,7 @@ const AdminResources = () => {
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      setResources(data as ResourceType[] || []);
+      setResources(data as Resource[] || []);
     } catch (error) {
       console.error("Error fetching resources:", error);
       toast.error("Failed to load resources");
@@ -111,6 +105,22 @@ const AdminResources = () => {
       const fileExt = file.name.split('.').pop();
       const fileName = `${uuidv4()}.${fileExt}`;
       const filePath = `resources/${fileName}`;
+      
+      // Check if storage bucket exists
+      const { data: buckets } = await supabase.storage.listBuckets();
+      const resourcesBucketExists = buckets?.some(bucket => bucket.name === 'resources');
+      
+      // Create bucket if it doesn't exist
+      if (!resourcesBucketExists) {
+        const { error: bucketError } = await supabase.storage.createBucket('resources', {
+          public: true
+        });
+        
+        if (bucketError) {
+          console.error("Error creating bucket:", bucketError);
+          throw bucketError;
+        }
+      }
       
       // Upload file to Supabase Storage
       const { data, error } = await supabase.storage
@@ -147,16 +157,13 @@ const AdminResources = () => {
         resourceUrl = await uploadFile(values.file);
       }
       
-      const { error } = await supabase
-        .from("resources")
-        .insert({
-          title: values.title,
-          description: values.description,
-          url: resourceUrl,
-          type: values.type,
-        });
-      
-      if (error) throw error;
+      // Use data context to create the resource
+      await createResource({
+        title: values.title,
+        description: values.description,
+        url: resourceUrl,
+        type: values.type,
+      });
       
       toast.success("Resource added successfully");
       setIsAddDialogOpen(false);
@@ -171,7 +178,7 @@ const AdminResources = () => {
     }
   };
 
-  const deleteResource = async (id: string) => {
+  const handleDeleteResource = async (id: string) => {
     try {
       const resourceToDelete = resources.find(resource => resource.id === id);
       
@@ -190,10 +197,8 @@ const AdminResources = () => {
         }
       }
       
-      // Delete from database
-      const { error } = await supabase.from("resources").delete().eq("id", id);
-      if (error) throw error;
-      
+      // Delete from database using data context
+      await deleteResource(id);
       toast.success("Resource deleted successfully");
       setResources(resources.filter((resource) => resource.id !== id));
     } catch (error) {
