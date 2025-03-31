@@ -1,7 +1,14 @@
+
 import { ref, push, set, onValue, off, get, query, orderByChild, update } from "firebase/database";
 import { database } from "@/integrations/firebase/config";
 import { v4 as uuidv4 } from "uuid";
 import { toast } from "sonner";
+import { 
+  fetchClientMessages as fetchSupabaseClientMessages,
+  sendMessage as sendSupabaseMessage,
+  uploadChatFile as uploadSupabaseChatFile,
+  markMessageAsRead as markSupabaseMessageAsRead
+} from "@/lib/chat-utils";
 
 export interface ChatMessage {
   id: string;
@@ -18,6 +25,9 @@ export interface ChatMessage {
 
 export type MessageHandler = (message: ChatMessage) => void;
 
+// Track if Firebase is available
+let isFirebaseAvailable = false;
+
 /**
  * Tests the Firebase connection
  */
@@ -29,9 +39,11 @@ export async function testFirebaseConnection(): Promise<boolean> {
         unsubscribe();
         const connected = snapshot.val() === true;
         console.log("Firebase connection test:", connected ? "Connected" : "Not connected");
+        isFirebaseAvailable = connected;
         resolve(connected);
       }, (error) => {
         console.error("Firebase connection test failed:", error);
+        isFirebaseAvailable = false;
         resolve(false);
       });
       
@@ -39,14 +51,19 @@ export async function testFirebaseConnection(): Promise<boolean> {
       setTimeout(() => {
         unsubscribe();
         console.error("Firebase connection test timed out");
+        isFirebaseAvailable = false;
         resolve(false);
       }, 5000);
     });
   } catch (error) {
     console.error("Error testing Firebase connection:", error);
+    isFirebaseAvailable = false;
     return false;
   }
 }
+
+// Test Firebase connection when module is loaded
+testFirebaseConnection();
 
 /**
  * Subscribes to chat messages for a specific client
@@ -56,6 +73,29 @@ export function subscribeToChatMessages(
   onNewMessage: MessageHandler
 ): () => void {
   try {
+    if (!isFirebaseAvailable) {
+      console.log("Firebase not available, using Supabase for chat subscription");
+      const channel = supabase
+        .channel(`client_chat_${clientId}`)
+        .on('postgres_changes', 
+          { 
+            event: 'INSERT', 
+            schema: 'public', 
+            table: 'client_messages',
+            filter: `client_id=eq.${clientId}`
+          }, 
+          async (payload) => {
+            console.log("New message received via Supabase realtime:", payload);
+            const newMessage = payload.new as ChatMessage;
+            onNewMessage(newMessage);
+          })
+        .subscribe();
+      
+      return () => {
+        supabase.removeChannel(channel);
+      };
+    }
+    
     console.log("Setting up Firebase messages subscription for client:", clientId);
     const messagesRef = ref(database, `messages/${clientId}`);
     const messageQuery = query(messagesRef, orderByChild('created_at'));
@@ -93,7 +133,8 @@ export function subscribeToChatMessages(
     console.log("Attaching Firebase onValue listener");
     onValue(messageQuery, handleNewMessage, (error) => {
       console.error("Firebase onValue error:", error);
-      toast.error("Chat connection lost. Please refresh the page.");
+      isFirebaseAvailable = false;
+      toast.error("Chat connection lost, trying alternative connection...");
     });
     
     // Return unsubscribe function
@@ -103,9 +144,28 @@ export function subscribeToChatMessages(
     };
   } catch (error) {
     console.error("Error in subscribeToChatMessages:", error);
-    toast.error("Failed to connect to chat service");
-    // Return a no-op function so the caller doesn't crash
-    return () => {};
+    isFirebaseAvailable = false;
+    toast.error("Failed to connect to chat service, trying alternative...");
+    // Switch to Supabase if Firebase fails
+    const channel = supabase
+      .channel(`client_chat_${clientId}`)
+      .on('postgres_changes', 
+        { 
+          event: 'INSERT', 
+          schema: 'public', 
+          table: 'client_messages',
+          filter: `client_id=eq.${clientId}`
+        }, 
+        async (payload) => {
+          console.log("New message received via Supabase realtime:", payload);
+          const newMessage = payload.new as ChatMessage;
+          onNewMessage(newMessage);
+        })
+      .subscribe();
+    
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }
 }
 
@@ -113,8 +173,14 @@ export function subscribeToChatMessages(
  * Fetches chat messages for a client
  */
 export async function fetchClientMessages(clientId: string): Promise<ChatMessage[]> {
-  console.log("Fetching Firebase messages for client:", clientId);
+  console.log("Fetching messages for client:", clientId);
   try {
+    if (!isFirebaseAvailable) {
+      console.log("Firebase not available, using Supabase for fetching messages");
+      return await fetchSupabaseClientMessages(clientId);
+    }
+    
+    console.log("Fetching Firebase messages for client:", clientId);
     const messagesRef = ref(database, `messages/${clientId}`);
     console.log("Firebase messages ref path:", `messages/${clientId}`);
     
@@ -137,7 +203,16 @@ export async function fetchClientMessages(clientId: string): Promise<ChatMessage
     
   } catch (error) {
     console.error("Error fetching Firebase messages:", error);
-    throw new Error(`Failed to load messages: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    isFirebaseAvailable = false;
+    
+    // Fallback to Supabase
+    try {
+      console.log("Falling back to Supabase for fetching messages");
+      return await fetchSupabaseClientMessages(clientId);
+    } catch (fallbackError) {
+      console.error("Fallback to Supabase also failed:", fallbackError);
+      throw new Error(`Failed to load messages: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
   }
 }
 
@@ -146,12 +221,26 @@ export async function fetchClientMessages(clientId: string): Promise<ChatMessage
  */
 export async function markMessageAsRead(clientId: string, messageId: string): Promise<void> {
   try {
+    if (!isFirebaseAvailable) {
+      console.log("Firebase not available, using Supabase for marking message as read");
+      await markSupabaseMessageAsRead(messageId);
+      return;
+    }
+    
     console.log("Marking Firebase message as read:", messageId);
     const messageRef = ref(database, `messages/${clientId}/${messageId}`);
     await update(messageRef, { is_read: true });
     console.log("Firebase message marked as read successfully");
   } catch (error) {
     console.error("Error marking Firebase message as read:", error);
+    isFirebaseAvailable = false;
+    
+    // Fallback to Supabase
+    try {
+      await markSupabaseMessageAsRead(messageId);
+    } catch (fallbackError) {
+      console.error("Fallback to Supabase also failed:", fallbackError);
+    }
   }
 }
 
@@ -176,6 +265,18 @@ export async function sendMessage({
   attachmentType?: string | null;
 }): Promise<ChatMessage | null> {
   try {
+    if (!isFirebaseAvailable) {
+      console.log("Firebase not available, using Supabase for sending message");
+      return await sendSupabaseMessage({
+        clientId, 
+        senderId, 
+        message, 
+        isFromClient, 
+        attachmentUrl, 
+        attachmentType
+      });
+    }
+    
     console.log("Sending Firebase message", {
       clientId,
       senderId,
@@ -217,8 +318,24 @@ export async function sendMessage({
     };
   } catch (error) {
     console.error("Error sending Firebase message:", error);
-    toast.error("Failed to send message. Please try again.");
-    throw error;
+    isFirebaseAvailable = false;
+    
+    // Fallback to Supabase
+    try {
+      console.log("Falling back to Supabase for sending message");
+      return await sendSupabaseMessage({
+        clientId, 
+        senderId, 
+        message, 
+        isFromClient, 
+        attachmentUrl, 
+        attachmentType
+      });
+    } catch (fallbackError) {
+      console.error("Fallback to Supabase also failed:", fallbackError);
+      toast.error("Failed to send message. Please try again.");
+      throw error;
+    }
   }
 }
 
@@ -233,6 +350,11 @@ export async function uploadChatFile(
   isAdmin: boolean
 ): Promise<{ url: string; type: string }> {
   try {
+    if (!isFirebaseAvailable) {
+      console.log("Firebase not available, using Supabase for file upload");
+      return await uploadSupabaseChatFile(file, clientId, isAdmin);
+    }
+    
     console.log("Uploading chat file (mock implementation)");
     // Simulate file upload with a delay
     await new Promise(resolve => setTimeout(resolve, 1000));
@@ -255,7 +377,19 @@ export async function uploadChatFile(
     };
   } catch (error) {
     console.error("File upload failed:", error);
-    toast.error("Failed to upload file. Please try again.");
-    throw error;
+    isFirebaseAvailable = false;
+    
+    // Fallback to Supabase
+    try {
+      console.log("Falling back to Supabase for file upload");
+      return await uploadSupabaseChatFile(file, clientId, isAdmin);
+    } catch (fallbackError) {
+      console.error("Fallback to Supabase also failed:", fallbackError);
+      toast.error("Failed to upload file. Please try again.");
+      throw error;
+    }
   }
 }
+
+// Import Supabase for fallback
+import { supabase } from "@/integrations/supabase/client";

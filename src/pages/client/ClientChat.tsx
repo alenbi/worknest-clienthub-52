@@ -10,10 +10,13 @@ import {
   fetchClientMessages, 
   sendMessage,
   uploadChatFile,
-  markMessageAsRead 
+  markMessageAsRead,
+  testFirebaseConnection 
 } from "@/lib/firebase-chat-utils";
 import { ChatMessageList } from "@/components/chat/ChatMessageList";
 import { ChatInput } from "@/components/chat/ChatInput";
+import { Button } from "@/components/ui/button";
+import { RefreshCw } from "lucide-react";
 
 const ClientChat = () => {
   const { user } = useClientAuth();
@@ -22,6 +25,7 @@ const ClientChat = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [connectionTested, setConnectionTested] = useState(false);
   const unsubscribeRef = useRef<(() => void) | null>(null);
 
   // Get client ID from user ID
@@ -57,12 +61,38 @@ const ClientChat = () => {
     fetchClientId();
   }, [user]);
 
+  // Test connection to Firebase
+  useEffect(() => {
+    if (!clientId) return;
+    
+    const testConnection = async () => {
+      try {
+        const isConnected = await testFirebaseConnection();
+        console.log("Firebase connection test result:", isConnected);
+        setConnectionTested(true);
+        
+        if (!isConnected) {
+          console.log("Firebase connection failed, will use Supabase fallback");
+        }
+      } catch (error) {
+        console.error("Error testing Firebase connection:", error);
+      }
+    };
+    
+    testConnection();
+  }, [clientId]);
+
   // Fetch messages and set up subscription once we have clientId
   useEffect(() => {
     if (!clientId) {
       if (user) {
         console.log("No client ID yet, waiting...");
       }
+      return;
+    }
+
+    if (!connectionTested) {
+      console.log("Connection test not completed yet, waiting...");
       return;
     }
 
@@ -128,7 +158,7 @@ const ClientChat = () => {
         unsubscribeRef.current();
       }
     };
-  }, [clientId]);
+  }, [clientId, connectionTested]);
 
   const handleSendMessage = async (messageText: string, file: File | null) => {
     if ((!messageText.trim() && !file) || !user?.id || !clientId) {
@@ -183,6 +213,27 @@ const ClientChat = () => {
     }
   };
 
+  const handleRetry = () => {
+    if (!clientId) return;
+    
+    setError(null);
+    setIsLoading(true);
+    
+    // Test connection and reload messages
+    testFirebaseConnection().then(() => {
+      fetchClientMessages(clientId)
+        .then(messages => {
+          setMessages(messages);
+          setIsLoading(false);
+        })
+        .catch(error => {
+          console.error("Error reloading messages:", error);
+          setError("Failed to reload messages: " + (error.message || "Unknown error"));
+          setIsLoading(false);
+        });
+    });
+  };
+
   if (!clientId && !isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -214,12 +265,14 @@ const ClientChat = () => {
               <div className="text-center p-4">
                 <p className="text-destructive font-semibold mb-2">Error</p>
                 <p className="text-muted-foreground">{error}</p>
-                <button 
-                  className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
-                  onClick={() => window.location.reload()}
+                <Button 
+                  className="mt-4"
+                  onClick={handleRetry}
+                  variant="outline"
                 >
+                  <RefreshCw className="h-4 w-4 mr-2" />
                   Try Again
-                </button>
+                </Button>
               </div>
             </div>
           ) : (
