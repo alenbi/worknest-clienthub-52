@@ -1,27 +1,23 @@
 
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { supabase } from "@/integrations/supabase/client";
+import { ArrowLeft, User } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
-import { ArrowLeft, SendIcon, Paperclip, Image as ImageIcon, Loader2, User, File } from "lucide-react";
-import { format } from "date-fns";
 import { toast } from "sonner";
-
-interface ChatMessage {
-  id: string;
-  message: string;
-  sender_id: string;
-  client_id: string;
-  is_from_client: boolean;
-  created_at: string;
-  sender_name: string;
-  attachment_url?: string;
-  attachment_type?: string;
-}
+import { RealtimeChannel } from "@supabase/supabase-js";
+import { supabase } from "@/integrations/supabase/client";
+import { 
+  ChatMessage, 
+  subscribeToChatChannel, 
+  fetchClientMessages, 
+  sendMessage,
+  uploadChatFile 
+} from "@/lib/chat-utils";
+import { ChatMessageList } from "@/components/chat/ChatMessageList";
+import { ChatInput } from "@/components/chat/ChatInput";
 
 interface Client {
   id: string;
@@ -37,15 +33,12 @@ export function AdminChatRoom() {
   const navigate = useNavigate();
   
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [newMessage, setNewMessage] = useState("");
   const [client, setClient] = useState<Client | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
-  const [file, setFile] = useState<File | null>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const channelRef = useRef<any>(null);
+  const channelRef = useRef<RealtimeChannel | null>(null);
 
+  // Fetch client details
   useEffect(() => {
     if (!clientId) return;
     
@@ -79,33 +72,16 @@ export function AdminChatRoom() {
     fetchClientDetails();
   }, [clientId, navigate]);
 
+  // Fetch messages and set up realtime subscription
   useEffect(() => {
-    if (!clientId || !client) return;
+    if (!clientId || !client || !user?.id) return;
     
-    const fetchMessages = async () => {
+    const loadMessages = async () => {
       try {
         setIsLoading(true);
-        const { data, error } = await supabase
-          .from("client_messages")
-          .select(`
-            id,
-            message,
-            sender_id,
-            client_id,
-            is_from_client,
-            is_read,
-            created_at,
-            attachment_url,
-            attachment_type,
-            profiles(full_name)
-          `)
-          .eq("client_id", clientId)
-          .order("created_at", { ascending: true });
         
-        if (error) {
-          console.error("Error fetching messages:", error);
-          throw error;
-        }
+        // Fetch messages
+        const messages = await fetchClientMessages(clientId);
         
         // Mark all unread client messages as read
         await supabase
@@ -115,104 +91,33 @@ export function AdminChatRoom() {
           .eq("is_from_client", true)
           .eq("is_read", false);
         
-        const formattedMessages = data.map((msg: any) => ({
-          ...msg,
-          sender_name: msg.is_from_client 
-            ? (client?.name || "Client") 
-            : (msg.profiles?.full_name || "Support Staff")
-        }));
-        
-        setMessages(formattedMessages);
-      } catch (error: any) {
-        console.error("Error fetching messages:", error);
-        toast.error(error.message || "Failed to load chat messages");
+        setMessages(messages);
+      } catch (error) {
+        console.error("Error loading messages:", error);
+        toast.error("Failed to load chat messages");
       } finally {
         setIsLoading(false);
       }
     };
-
-    fetchMessages();
-    setupRealtimeSubscription();
+    
+    loadMessages();
+    
+    // Set up realtime subscription
+    const channel = subscribeToChatChannel(clientId, true, (newMessage) => {
+      setMessages(prev => [...prev, newMessage]);
+    });
+    
+    channelRef.current = channel;
     
     return () => {
       if (channelRef.current) {
         supabase.removeChannel(channelRef.current);
       }
     };
-  }, [clientId, client]);
+  }, [clientId, client, user?.id]);
 
-  const setupRealtimeSubscription = () => {
-    if (!clientId || !client) return;
-    
-    // Clean up existing subscription if any
-    if (channelRef.current) {
-      supabase.removeChannel(channelRef.current);
-    }
-    
-    // Create a new subscription
-    const channel = supabase
-      .channel(`admin_chat_${clientId}`)
-      .on('postgres_changes', 
-        { 
-          event: 'INSERT', 
-          schema: 'public', 
-          table: 'client_messages',
-          filter: `client_id=eq.${clientId}`
-        }, 
-        async (payload) => {
-          console.log("New message received:", payload);
-          const newMessage = payload.new as any;
-          
-          if (newMessage.is_from_client) {
-            // Mark message as read since admin is viewing it
-            await supabase
-              .from("client_messages")
-              .update({ is_read: true })
-              .eq("id", newMessage.id);
-          }
-          
-          // Get sender name
-          let senderName = newMessage.is_from_client ? client?.name || "Client" : "Support Staff";
-          
-          if (!newMessage.is_from_client) {
-            try {
-              const { data } = await supabase
-                .from("profiles")
-                .select("full_name")
-                .eq("id", newMessage.sender_id)
-                .maybeSingle();
-              
-              if (data?.full_name) {
-                senderName = data.full_name;
-              }
-            } catch (error) {
-              console.error("Error fetching sender name:", error);
-            }
-          }
-          
-          setMessages(prev => [
-            ...prev, 
-            {...newMessage, sender_name: senderName}
-          ]);
-        })
-      .subscribe((status) => {
-        console.log("Realtime subscription status:", status);
-        if (status !== 'SUBSCRIBED') {
-          console.error("Failed to subscribe to realtime updates");
-        }
-      });
-    
-    channelRef.current = channel;
-  };
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
-  const handleSendMessage = async () => {
-    if (!newMessage.trim() && !file) return;
-    if (!clientId || !user) {
-      toast.error("Not connected. Please reload the page.");
+  const handleSendMessage = async (messageText: string, file: File | null) => {
+    if ((!messageText.trim() && !file) || !clientId || !user?.id) {
       return;
     }
     
@@ -222,98 +127,33 @@ export function AdminChatRoom() {
       let attachmentUrl = null;
       let attachmentType = null;
       
+      // Upload file if provided
       if (file) {
         try {
-          const { data: buckets } = await supabase.storage.listBuckets();
-          const chatBucket = buckets?.find(bucket => bucket.name === 'chat-attachments');
-          
-          if (!chatBucket) {
-            console.log("Creating chat-attachments bucket");
-            const { error: bucketError } = await supabase.storage.createBucket('chat-attachments', {
-              public: true
-            });
-            
-            if (bucketError) {
-              console.error("Error creating bucket:", bucketError);
-              throw bucketError;
-            }
-          }
-          
-          const fileExt = file.name.split('.').pop();
-          const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
-          const filePath = `admin-attachments/${clientId}/${fileName}`;
-          
-          const { error: uploadError } = await supabase.storage
-            .from('chat-attachments')
-            .upload(filePath, file);
-          
-          if (uploadError) {
-            console.error("Error uploading file:", uploadError);
-            throw uploadError;
-          }
-          
-          const { data: { publicUrl } } = supabase.storage
-            .from('chat-attachments')
-            .getPublicUrl(filePath);
-          
-          attachmentUrl = publicUrl;
-          attachmentType = file.type.startsWith('image/') ? 'image' : 'file';
-          console.log("File uploaded successfully:", attachmentUrl, attachmentType);
-        } catch (uploadError) {
-          console.error("File upload failed:", uploadError);
+          const uploadResult = await uploadChatFile(file, clientId, true);
+          attachmentUrl = uploadResult.url;
+          attachmentType = uploadResult.type;
+        } catch (error) {
+          console.error("File upload failed:", error);
           toast.error("Failed to upload file. Please try again.");
         }
       }
       
-      const messageData = {
-        client_id: clientId,
-        sender_id: user.id,
-        is_from_client: false,
-        message: newMessage.trim(),
-        attachment_url: attachmentUrl,
-        attachment_type: attachmentType,
-        is_read: true
-      };
-      
-      const { error } = await supabase
-        .from("client_messages")
-        .insert(messageData);
-      
-      if (error) {
-        console.error("Error sending message:", error);
-        throw error;
-      }
-      
-      setNewMessage("");
-      setFile(null);
+      // Send message
+      await sendMessage({
+        clientId,
+        senderId: user.id,
+        message: messageText,
+        isFromClient: false,
+        attachmentUrl,
+        attachmentType
+      });
       
     } catch (error: any) {
       console.error("Error sending message:", error);
       toast.error(error.message || "Failed to send message");
     } finally {
       setIsSending(false);
-    }
-  };
-
-  const handleFileSelect = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0];
-    if (selectedFile) {
-      if (selectedFile.size > 10 * 1024 * 1024) {
-        toast.error("File is too large. Maximum size is 10MB.");
-        return;
-      }
-      setFile(selectedFile);
-    }
-  };
-
-  const removeSelectedFile = () => {
-    setFile(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
     }
   };
 
@@ -328,8 +168,8 @@ export function AdminChatRoom() {
   if (isLoading || !client) {
     return (
       <div className="flex items-center justify-center h-full">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <span className="ml-2">Loading chat...</span>
+        <div className="animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-primary mr-2"></div>
+        <span>Loading chat...</span>
       </div>
     );
   }
@@ -362,154 +202,20 @@ export function AdminChatRoom() {
           </div>
         </div>
       </CardHeader>
-      <CardContent className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-64 text-center">
-            <p className="text-muted-foreground">No messages yet.</p>
-            <p className="text-sm text-muted-foreground mt-2">
-              Start the conversation by sending a message below.
-            </p>
-          </div>
-        ) : (
-          messages.map((msg) => (
-            <div 
-              key={msg.id} 
-              className={`flex ${msg.is_from_client ? 'justify-start' : 'justify-end'}`}
-            >
-              <div 
-                className={`flex max-w-[80%] ${msg.is_from_client ? 'flex-row' : 'flex-row-reverse'}`}
-              >
-                <Avatar className={`h-8 w-8 ${msg.is_from_client ? 'mr-2' : 'ml-2'}`}>
-                  <AvatarFallback className={
-                    msg.is_from_client 
-                      ? "bg-blue-500 text-white" 
-                      : "bg-primary text-primary-foreground"
-                  }>
-                    {msg.is_from_client 
-                      ? client.name.charAt(0).toUpperCase()
-                      : user?.email?.charAt(0).toUpperCase() || "S"}
-                  </AvatarFallback>
-                </Avatar>
-                <div>
-                  <div 
-                    className={`rounded-lg px-4 py-2 ${
-                      msg.is_from_client 
-                        ? 'bg-muted' 
-                        : 'bg-primary text-primary-foreground'
-                    }`}
-                  >
-                    {msg.attachment_url && msg.attachment_type === 'image' && (
-                      <a 
-                        href={msg.attachment_url} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="block mb-2"
-                      >
-                        <img 
-                          src={msg.attachment_url} 
-                          alt="Attachment" 
-                          className="rounded max-h-60 max-w-full"
-                        />
-                      </a>
-                    )}
-                    
-                    {msg.attachment_url && msg.attachment_type !== 'image' && (
-                      <a 
-                        href={msg.attachment_url} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="flex items-center mb-2 text-blue-500 hover:underline"
-                      >
-                        <File className="h-4 w-4 mr-1" />
-                        Attachment
-                      </a>
-                    )}
-                    
-                    {msg.message}
-                  </div>
-                  <div 
-                    className={`text-xs text-muted-foreground mt-1 ${
-                      msg.is_from_client ? 'text-left' : 'text-right'
-                    }`}
-                  >
-                    {msg.sender_name} • {format(new Date(msg.created_at), "p")}
-                  </div>
-                </div>
-              </div>
-            </div>
-          ))
-        )}
-        <div ref={messagesEndRef} />
+      
+      <CardContent className="flex-1 overflow-y-auto p-0">
+        <ChatMessageList 
+          messages={messages} 
+          currentUserId={user?.id || ''} 
+          isLoading={isLoading}
+          emptyMessage="No messages yet. Start the conversation by sending a message below."
+        />
       </CardContent>
       
-      {file && (
-        <div className="px-4 py-2 border-t">
-          <div className="flex items-center justify-between bg-muted rounded p-2">
-            <div className="flex items-center">
-              {file.type.startsWith('image/') ? (
-                <ImageIcon className="h-4 w-4 mr-2" />
-              ) : (
-                <Paperclip className="h-4 w-4 mr-2" />
-              )}
-              <span className="text-sm truncate max-w-[200px]">{file.name}</span>
-            </div>
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              onClick={removeSelectedFile}
-            >
-              &times;
-            </Button>
-          </div>
-        </div>
-      )}
-      
-      <CardFooter className="border-t p-4">
-        <div className="flex w-full items-center space-x-2">
-          <input
-            type="file"
-            ref={fileInputRef}
-            className="hidden"
-            onChange={handleFileChange}
-            accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.txt"
-          />
-          <Button 
-            variant="outline" 
-            size="icon" 
-            onClick={handleFileSelect}
-            disabled={isSending}
-          >
-            <Paperclip className="h-5 w-5" />
-            <span className="sr-only">Attach file</span>
-          </Button>
-          <Textarea
-            placeholder="Type your message..."
-            className="flex-1"
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSendMessage();
-              }
-            }}
-            disabled={isSending}
-          />
-          <Button 
-            type="submit" 
-            size="icon" 
-            onClick={handleSendMessage}
-            disabled={isSending || (!newMessage.trim() && !file)}
-          >
-            {isSending ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
-            ) : (
-              <SendIcon className="h-5 w-5" />
-            )}
-            <span className="sr-only">Send</span>
-          </Button>
-        </div>
-      </CardFooter>
+      <ChatInput 
+        onSendMessage={handleSendMessage}
+        isLoading={isSending}
+      />
     </Card>
   );
 }
