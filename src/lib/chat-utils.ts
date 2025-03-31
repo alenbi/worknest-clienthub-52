@@ -220,16 +220,12 @@ export async function fetchClientMessages(clientId: string): Promise<ChatMessage
     // Get all messages for this client - Fixed to avoid the ambiguous column reference
     const { data: messages, error } = await supabase
       .from("client_messages")
-      .select("client_messages.*, profiles.full_name as sender_name")
-      .eq("client_messages.client_id", clientId)
-      .order("client_messages.created_at", { ascending: true })
-      .join("profiles", { 
-        foreignTable: "profiles", 
-        columns: ["full_name"], 
-        type: "left", 
-        onColumn: "id", 
-        referencedColumn: "client_messages.sender_id" 
-      });
+      .select(`
+        *,
+        profiles:sender_id(full_name)
+      `)
+      .eq("client_id", clientId)
+      .order("created_at", { ascending: true });
     
     if (error) {
       console.error("Error fetching messages:", error);
@@ -249,7 +245,7 @@ export async function fetchClientMessages(clientId: string): Promise<ChatMessage
       is_from_client: msg.is_from_client,
       created_at: msg.created_at,
       is_read: msg.is_read,
-      sender_name: msg.sender_name || "Unknown User",
+      sender_name: msg.profiles?.full_name || "Unknown User",
       attachment_url: msg.attachment_url,
       attachment_type: msg.attachment_type
     }));
