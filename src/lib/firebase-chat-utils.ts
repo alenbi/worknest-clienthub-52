@@ -1,6 +1,6 @@
-
 import { ref, push, set, onValue, off, get, query, orderByChild, update } from "firebase/database";
-import { database } from "@/integrations/firebase/config";
+import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
+import { database, storage } from "@/integrations/firebase/config";
 import { v4 as uuidv4 } from "uuid";
 import { toast } from "sonner";
 import { 
@@ -153,26 +153,15 @@ export function subscribeToChatMessages(
         return;
       }
       
-      // Only process new messages (added in the last 5 seconds)
-      const now = new Date();
-      const fiveSecondsAgo = new Date(now.getTime() - 5000);
-      let processedMessageCount = 0;
-      
+      // Process all messages as they come in
       Object.keys(data).forEach(key => {
         const message = data[key];
-        const messageDate = new Date(message.created_at);
-        
-        if (messageDate >= fiveSecondsAgo) {
-          console.log("Processing new Firebase message:", key);
-          onNewMessage({
-            id: key,
-            ...message,
-          });
-          processedMessageCount++;
-        }
+        console.log("Processing Firebase message:", key);
+        onNewMessage({
+          id: key,
+          ...message,
+        });
       });
-      
-      console.log(`Processed ${processedMessageCount} new Firebase messages`);
     };
     
     console.log("Attaching Firebase onValue listener");
@@ -386,8 +375,6 @@ export async function sendMessage({
 
 /**
  * Uploads a file to Firebase Storage
- * Note: This is a mock implementation that returns a public placeholder URL
- * In a real implementation, you would upload to Firebase Storage
  */
 export async function uploadChatFile(
   file: File,
@@ -400,24 +387,29 @@ export async function uploadChatFile(
       return await uploadSupabaseChatFile(file, clientId, isAdmin);
     }
     
-    console.log("Uploading chat file (mock implementation)");
-    // Simulate file upload with a delay
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    console.log("Uploading file to Firebase Storage");
     
-    // Generate a mock URL
+    // Determine file type
     const fileType = file.type.startsWith('image/') ? 'image' : 'file';
-    let mockUrl = '';
     
-    if (fileType === 'image') {
-      mockUrl = 'https://source.unsplash.com/random/300x200';
-    } else {
-      mockUrl = 'https://example.com/files/document.pdf';
-    }
+    // Create a unique file path
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${uuidv4()}.${fileExt}`;
+    const prefix = isAdmin ? 'admin-attachments' : 'client-attachments';
+    const filePath = `${prefix}/${clientId}/${fileName}`;
     
-    console.log("File upload complete (mock):", mockUrl);
+    // Upload file to Firebase Storage
+    const fileRef = storageRef(storage, `chat/${filePath}`);
+    
+    // Upload the file
+    const snapshot = await uploadBytes(fileRef, file);
+    console.log("File uploaded successfully:", snapshot.metadata.name);
+    
+    // Get the download URL
+    const downloadUrl = await getDownloadURL(fileRef);
     
     return {
-      url: mockUrl,
+      url: downloadUrl,
       type: fileType
     };
   } catch (error) {
