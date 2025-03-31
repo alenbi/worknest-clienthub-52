@@ -218,7 +218,7 @@ export async function uploadChatFile(
  */
 export async function fetchClientMessages(clientId: string): Promise<ChatMessage[]> {
   try {
-    // Get all messages for this client - Fixed to avoid the ambiguous column reference
+    // Get all messages for this client - specify table name to avoid ambiguous column reference
     const { data: messages, error } = await supabase
       .from("client_messages")
       .select("*")
