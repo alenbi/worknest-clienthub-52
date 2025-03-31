@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -35,7 +36,7 @@ const formSchema = z.object({
   }, {
     message: "Discount percentage must be a number between 0 and 100.",
   }),
-  valid_until: z.date().optional(),
+  valid_until: z.string().optional(),
 });
 
 const AdminOffers = () => {
@@ -78,19 +79,21 @@ const AdminOffers = () => {
     }
   };
 
-  const addOffer = async (values: any) => {
+  const addOffer = async (values: z.infer<typeof formSchema>) => {
     try {
       setIsSubmitting(true);
       
+      const offerData = {
+        title: values.title,
+        description: values.description || "",
+        code: values.code || null,
+        discount_percentage: parseInt(values.discount_percentage),
+        valid_until: values.valid_until ? new Date(values.valid_until).toISOString() : null
+      };
+      
       const { error } = await supabase
         .from("offers")
-        .insert({
-          title: values.title,
-          description: values.description || "",
-          code: values.code,
-          discount_percentage: parseInt(values.discount_percentage),
-          valid_until: values.valid_until ? new Date(values.valid_until).toISOString() : undefined
-        });
+        .insert(offerData);
       
       if (error) throw error;
       
@@ -203,9 +206,7 @@ const AdminOffers = () => {
                 <Input
                   id="valid_until"
                   type="date"
-                  {...form.register("valid_until", {
-                    valueAsDate: true,
-                  })}
+                  {...form.register("valid_until")}
                   disabled={isSubmitting}
                 />
                 {form.formState.errors.valid_until && (
@@ -292,7 +293,7 @@ const AdminOffers = () => {
                         {offer.valid_until ? format(new Date(offer.valid_until), "PP") : "-"}
                       </TableCell>
                       <TableCell>
-                        {format(new Date(offer.created_at), "PP")}
+                        {offer.created_at && format(new Date(offer.created_at), "PP")}
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end space-x-2">

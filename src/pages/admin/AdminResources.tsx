@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -71,9 +72,11 @@ const AdminResources = () => {
       let resourceUrl = url;
       
       if (type === "file" && file) {
+        // Check if resources bucket exists
         const { data: buckets } = await supabase.storage.listBuckets();
         const resourceBucket = buckets?.find(b => b.name === 'resources');
         
+        // Create the bucket if it doesn't exist
         if (!resourceBucket) {
           const { error: bucketError } = await supabase.storage
             .createBucket('resources', { public: true });
@@ -81,6 +84,7 @@ const AdminResources = () => {
           if (bucketError) throw bucketError;
         }
         
+        // Upload the file
         const fileExt = file.name.split('.').pop();
         const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
         const filePath = `resources/${fileName}`;
@@ -94,13 +98,15 @@ const AdminResources = () => {
         
         if (uploadError) throw uploadError;
         
-        const { data: { publicUrl } } = supabase.storage
+        // Get the public URL
+        const { data } = supabase.storage
           .from('resources')
           .getPublicUrl(filePath);
         
-        resourceUrl = publicUrl;
+        resourceUrl = data.publicUrl;
       }
       
+      // Insert the resource record
       const { error } = await supabase
         .from("resources")
         .insert({
@@ -126,6 +132,7 @@ const AdminResources = () => {
 
   const handleDeleteResource = async (id: string) => {
     try {
+      // Get the resource to check if it's a file
       const { data: resource, error: fetchError } = await supabase
         .from("resources")
         .select("*")
@@ -134,6 +141,7 @@ const AdminResources = () => {
       
       if (fetchError) throw fetchError;
       
+      // Delete the database record first
       const { error } = await supabase
         .from("resources")
         .delete()
@@ -141,19 +149,20 @@ const AdminResources = () => {
       
       if (error) throw error;
       
-      if (resource.type === "file") {
+      // If it's a file resource, also delete the file from storage
+      if (resource && resource.type === "file" && resource.url) {
+        // Extract the filename from the URL
         const urlParts = resource.url.split("/");
-        const fileName = urlParts[urlParts.length - 1];
-        const filePath = `resources/${fileName}`;
+        const filePathParts = urlParts[urlParts.length - 1].split("_");
+        const filePath = `resources/${urlParts[urlParts.length - 1]}`;
         
+        // Delete the file
         await supabase.storage
           .from('resources')
-          .remove([filePath])
-          .catch(err => console.error("Error removing file from storage:", err));
+          .remove([filePath]);
       }
       
       toast.success("Resource deleted successfully");
-      
       setResources(resources.filter(r => r.id !== id));
     } catch (error) {
       console.error("Error deleting resource:", error);
