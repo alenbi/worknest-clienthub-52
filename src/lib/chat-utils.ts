@@ -213,6 +213,7 @@ export async function uploadChatFile(
  */
 export async function fetchClientMessages(clientId: string): Promise<ChatMessage[]> {
   try {
+    // Fix the ambiguous user_id issue by not selecting profiles directly
     const { data, error } = await supabase
       .from("client_messages")
       .select(`
@@ -224,8 +225,7 @@ export async function fetchClientMessages(clientId: string): Promise<ChatMessage
         is_read,
         created_at,
         attachment_url,
-        attachment_type,
-        profiles(full_name)
+        attachment_type
       `)
       .eq("client_id", clientId)
       .order("created_at", { ascending: true });
@@ -235,11 +235,31 @@ export async function fetchClientMessages(clientId: string): Promise<ChatMessage
       throw error;
     }
     
-    // Format the messages
-    return data.map((msg: any) => ({
-      ...msg,
-      sender_name: msg.profiles?.full_name || "Unknown"
-    }));
+    // Now fetch sender names separately to avoid the ambiguous column issue
+    const messagesWithNames = await Promise.all(
+      data.map(async (msg: any) => {
+        try {
+          const { data: profileData } = await supabase
+            .from("profiles")
+            .select("full_name")
+            .eq("id", msg.sender_id)
+            .maybeSingle();
+          
+          return {
+            ...msg,
+            sender_name: profileData?.full_name || "Unknown"
+          };
+        } catch (error) {
+          console.error("Error fetching sender name:", error);
+          return {
+            ...msg,
+            sender_name: "Unknown"
+          };
+        }
+      })
+    );
+    
+    return messagesWithNames;
   } catch (error) {
     console.error("Error in fetchClientMessages:", error);
     throw error;
