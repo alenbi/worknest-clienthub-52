@@ -21,6 +21,8 @@ const ClientDashboard = () => {
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [clientName, setClientName] = useState(user?.name || "Client");
+  const [latestOffers, setLatestOffers] = useState<any[]>([]);
+  const [upcomingMilestones, setUpcomingMilestones] = useState<any[]>([]);
 
   // Fetch client ID based on user ID
   useEffect(() => {
@@ -96,6 +98,17 @@ const ClientDashboard = () => {
 
         if (messagesError) throw messagesError;
         setUnreadMessages(unreadCount || 0);
+        
+        // Mock data for offers and milestones
+        setLatestOffers([
+          { id: 1, title: "Website Maintenance Plan", discount: "20%", expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) },
+          { id: 2, title: "SEO Package Upgrade", discount: "15%", expires: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000) }
+        ]);
+        
+        setUpcomingMilestones([
+          { id: 1, title: "Project Phase 1 Completion", date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000) },
+          { id: 2, title: "Website Launch", date: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000) }
+        ]);
 
       } catch (error) {
         console.error("Error fetching client data:", error);
@@ -124,73 +137,102 @@ const ClientDashboard = () => {
 
   return (
     <div className="space-y-6">
-      <div>
+      {/* Welcome section with personalized greeting */}
+      <div className="bg-gradient-to-r from-primary/10 to-secondary/10 rounded-lg p-6">
         <h1 className="text-3xl font-bold tracking-tight">
-          Welcome, {clientName}
+          Welcome back, {clientName}
         </h1>
-        <p className="text-muted-foreground">
-          Here's an overview of your project status
+        <p className="text-muted-foreground mt-2">
+          Here's an overview of your project status and upcoming activities
         </p>
       </div>
 
+      {/* Main stats in a more visually distinct layout */}
       <div className="grid gap-6 md:grid-cols-4">
-        <Card>
+        <Card className="border-l-4 border-l-blue-500">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium">Total Tasks</CardTitle>
-            <ListTodo className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{taskStats.total}</div>
-            <p className="text-xs text-muted-foreground">
-              Tasks assigned to you
-            </p>
+            <div className="flex justify-between items-center">
+              <div className="text-2xl font-bold">{taskStats.total}</div>
+              <ListTodo className="h-8 w-8 text-blue-500" />
+            </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-l-4 border-l-green-500">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Completed Tasks</CardTitle>
-            <CheckCircle className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Completed</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{taskStats.completed}</div>
-            <p className="text-xs text-muted-foreground">
-              Tasks you've completed
-            </p>
+            <div className="flex justify-between items-center">
+              <div className="text-2xl font-bold">{taskStats.completed}</div>
+              <CheckCircle className="h-8 w-8 text-green-500" />
+            </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-l-4 border-l-yellow-500">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Pending Tasks</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">In Progress</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{taskStats.pending}</div>
-            <p className="text-xs text-muted-foreground">
-              Tasks in progress
-            </p>
+            <div className="flex justify-between items-center">
+              <div className="text-2xl font-bold">{taskStats.pending - taskStats.overdue}</div>
+              <Clock className="h-8 w-8 text-yellow-500" />
+            </div>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="border-l-4 border-l-red-500">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">Overdue Tasks</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-destructive" />
+            <CardTitle className="text-sm font-medium">Overdue</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{taskStats.overdue}</div>
-            <p className="text-xs text-muted-foreground">
-              Tasks past due date
-            </p>
+            <div className="flex justify-between items-center">
+              <div className="text-2xl font-bold">{taskStats.overdue}</div>
+              <AlertTriangle className="h-8 w-8 text-red-500" />
+            </div>
           </CardContent>
         </Card>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
+        {/* Project Timeline Section - New */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Project Timeline</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {upcomingMilestones.length > 0 ? (
+              <div className="space-y-4">
+                {upcomingMilestones.map((milestone) => (
+                  <div key={milestone.id} className="flex items-center space-x-4">
+                    <div className="h-10 w-10 rounded-full bg-primary/20 flex items-center justify-center">
+                      <Clock className="h-5 w-5 text-primary" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-medium">{milestone.title}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {format(milestone.date, "MMM dd, yyyy")}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex h-[200px] items-center justify-center">
+                <p className="text-muted-foreground">No upcoming milestones</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Task Overview Chart - Redesigned */}
         {taskStats.total > 0 ? (
           <Card>
-            <CardHeader className="pb-2">
+            <CardHeader>
               <CardTitle>Task Overview</CardTitle>
             </CardHeader>
             <CardContent>
@@ -221,7 +263,7 @@ const ClientDashboard = () => {
           </Card>
         ) : (
           <Card>
-            <CardHeader className="pb-2">
+            <CardHeader>
               <CardTitle>Task Overview</CardTitle>
             </CardHeader>
             <CardContent className="flex h-[250px] items-center justify-center text-muted-foreground">
@@ -229,23 +271,38 @@ const ClientDashboard = () => {
             </CardContent>
           </Card>
         )}
+      </div>
 
+      <div className="grid gap-6 md:grid-cols-2">
+        {/* Recent Tasks Section - Redesigned */}
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle>Recent Activities</CardTitle>
+          <CardHeader className="border-b">
+            <CardTitle className="flex items-center">
+              <ListTodo className="mr-2 h-5 w-5 text-primary" />
+              Recent Tasks
+            </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="pt-4">
             {recentTasks.length > 0 ? (
               <div className="space-y-4">
                 {recentTasks.map((task) => (
                   <div
                     key={task.id}
-                    className="flex items-center justify-between rounded-md border p-3"
+                    className="flex items-center justify-between rounded-md p-3 hover:bg-muted/50 transition-colors"
                   >
-                    <div>
-                      <div className="font-medium">{task.title}</div>
-                      <div className="text-sm text-muted-foreground">
-                        Status: {task.status === "completed" ? "Completed" : "In Progress"}
+                    <div className="flex items-center">
+                      {task.status === "completed" ? (
+                        <CheckCircle className="h-5 w-5 mr-3 text-green-500" />
+                      ) : new Date(task.due_date) < new Date() ? (
+                        <AlertTriangle className="h-5 w-5 mr-3 text-red-500" />
+                      ) : (
+                        <Clock className="h-5 w-5 mr-3 text-blue-500" />
+                      )}
+                      <div>
+                        <div className="font-medium">{task.title}</div>
+                        <div className="text-sm text-muted-foreground">
+                          {task.status.charAt(0).toUpperCase() + task.status.slice(1)}
+                        </div>
                       </div>
                     </div>
                     <div className="text-sm text-muted-foreground">
@@ -258,6 +315,45 @@ const ClientDashboard = () => {
               <div className="flex h-[200px] items-center justify-center rounded-md border border-dashed">
                 <p className="text-sm text-muted-foreground">
                   No recent tasks
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Latest Offers - New Section */}
+        <Card>
+          <CardHeader className="border-b">
+            <CardTitle className="flex items-center">
+              <MessageSquare className="mr-2 h-5 w-5 text-primary" />
+              Special Offers
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-4">
+            {latestOffers.length > 0 ? (
+              <div className="space-y-4">
+                {latestOffers.map((offer) => (
+                  <div
+                    key={offer.id}
+                    className="rounded-md border border-primary/20 bg-primary/5 p-4"
+                  >
+                    <div className="font-medium text-primary">{offer.title}</div>
+                    <div className="mt-1 flex items-center justify-between">
+                      <div className="text-sm">Save {offer.discount}</div>
+                      <div className="text-xs text-muted-foreground">
+                        Expires {format(offer.expires, "MMM d, yyyy")}
+                      </div>
+                    </div>
+                    <Button size="sm" variant="outline" className="mt-2 w-full">
+                      View Details
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex h-[200px] items-center justify-center rounded-md border border-dashed">
+                <p className="text-sm text-muted-foreground">
+                  No special offers available
                 </p>
               </div>
             )}
