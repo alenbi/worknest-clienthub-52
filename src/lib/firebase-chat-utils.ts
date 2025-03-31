@@ -1,4 +1,3 @@
-
 import { ref, push, set, onValue, off, get, query, orderByChild, update } from "firebase/database";
 import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
 import { database, storage } from "@/integrations/firebase/config";
@@ -295,6 +294,7 @@ export async function sendMessage({
       const result = await sendSupabaseMessage({
         clientId, 
         senderId, 
+        senderName,
         message, 
         isFromClient, 
         attachmentUrl, 
@@ -359,6 +359,7 @@ export async function sendMessage({
       const result = await sendSupabaseMessage({
         clientId, 
         senderId, 
+        senderName,
         message, 
         isFromClient, 
         attachmentUrl, 

@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -39,7 +38,6 @@ export function AdminChatRoom() {
   const [error, setError] = useState<string | null>(null);
   const cleanupFunctionRef = useRef<(() => void) | null>(null);
 
-  // Fetch client details
   useEffect(() => {
     if (!clientId) return;
     
@@ -73,7 +71,6 @@ export function AdminChatRoom() {
     fetchClientDetails();
   }, [clientId, navigate]);
 
-  // Fetch messages and set up realtime subscription
   useEffect(() => {
     if (!clientId || !client || !user?.id) return;
     
@@ -82,10 +79,8 @@ export function AdminChatRoom() {
         setIsLoading(true);
         setError(null);
         
-        // Fetch messages
         const messages = await fetchClientMessages(clientId);
         
-        // Mark messages from client as read
         for (const msg of messages) {
           if (msg.is_from_client && !msg.is_read) {
             await markMessageAsRead(clientId, msg.id);
@@ -104,18 +99,15 @@ export function AdminChatRoom() {
     
     loadMessages();
     
-    // Set up realtime subscription
     try {
       const unsubscribe = subscribeToChatMessages(
         clientId,
         (newMessage) => {
           setMessages(prev => {
-            // Check if message already exists
             if (prev.some(msg => msg.id === newMessage.id)) {
               return prev;
             }
             
-            // Mark message as read if it's from client
             if (newMessage.is_from_client) {
               markMessageAsRead(clientId, newMessage.id);
             }
@@ -151,7 +143,6 @@ export function AdminChatRoom() {
       let attachmentUrl = null;
       let attachmentType = null;
       
-      // Upload file if provided
       if (file) {
         try {
           const uploadResult = await uploadChatFile(file, clientId, true);
@@ -164,11 +155,10 @@ export function AdminChatRoom() {
         }
       }
       
-      // Send message
       await sendMessage({
         clientId,
         senderId: user.id,
-        senderName: user.full_name || 'Support Agent',
+        senderName: user.user_metadata?.full_name || user.email || 'Support Agent',
         message: messageText,
         isFromClient: false,
         attachmentUrl,

@@ -3,6 +3,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { v4 as uuidv4 } from 'uuid';
 import { Client, Task, Resource, Video, Offer, Update, TaskStatus, TaskPriority } from "@/lib/models";
 
+export type { Client, Task, Resource, Video, Offer, Update };
+export { TaskStatus, TaskPriority };
+
 export interface Data {
   clients: Client[];
   tasks: Task[];
@@ -11,7 +14,7 @@ export interface Data {
   offers: Offer[];
   updates: Update[];
   refreshData: () => Promise<void>;
-  createClient: (client: Omit<Client, 'id'>) => Promise<Client>;
+  createClient: (client: Omit<Client, 'id' | 'created_at' | 'updated_at'>) => Promise<Client>;
   updateClient: (id: string, updates: Partial<Client>) => Promise<Client | void>;
   deleteClient: (id: string) => Promise<void>;
   createTask: (task: Omit<Task, 'id'>) => Promise<Task>;
@@ -33,7 +36,7 @@ export interface Data {
   toggleUpdatePublished: (id: string, isPublished: boolean) => Promise<void>;
   addTask: (task: Omit<Task, 'id'>) => Promise<Task>;
   updateClientPassword?: (clientId: string, newPassword: string) => Promise<void>;
-  addClient?: (client: Omit<Client, 'id'>) => Promise<Client>;
+  addClient?: (client: Omit<Client, 'id' | 'created_at' | 'updated_at'>) => Promise<Client>;
 }
 
 const DataContext = createContext<Data | undefined>(undefined);
@@ -146,11 +149,16 @@ export const updateDataContext = (data: UpdateData | null = null): Data => {
     refreshData();
   }, [refreshData]);
     
-  const createClient = async (client: Omit<Client, 'id'>): Promise<Client> => {
+  const createClient = async (client: Omit<Client, 'id' | 'created_at' | 'updated_at'>): Promise<Client> => {
     try {
       const { data: newClient, error } = await supabase
         .from("clients")
-        .insert([{ ...client, id: uuidv4() }])
+        .insert([{ 
+          ...client, 
+          id: uuidv4(),
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }])
         .select()
         .single();
 
