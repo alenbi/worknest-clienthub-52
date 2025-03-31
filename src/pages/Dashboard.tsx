@@ -1,3 +1,4 @@
+
 import { useAuth } from "@/contexts/auth-context";
 import { useData, Task } from "@/contexts/data-context";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,6 +33,12 @@ const Dashboard = () => {
   const { user } = useAuth();
   const { clients, tasks, isLoading, refreshData } = useData();
   const [timeframe, setTimeframe] = useState<"week" | "month" | "year">("week");
+
+  // Helper function to get task completion time - defined BEFORE usage
+  const getTaskCompletionTime = (task: Task) => {
+    if (!task.completed_at) return null;
+    return new Date(task.completed_at).getTime();
+  };
 
   // Force a data refresh when the dashboard loads
   useEffect(() => {
@@ -117,11 +124,6 @@ const Dashboard = () => {
       (getTaskCompletionTime(b) || 0) - (getTaskCompletionTime(a) || 0)
     )
     .slice(0, 5);
-
-  const getTaskCompletionTime = (task: Task) => {
-    if (!task.completed_at) return null;
-    return new Date(task.completed_at).getTime();
-  };
 
   return (
     <div className="space-y-6">
