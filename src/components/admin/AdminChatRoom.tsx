@@ -7,15 +7,15 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ArrowLeft } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 import { toast } from "sonner";
-import { RealtimeChannel } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { 
   ChatMessage, 
-  subscribeToChatChannel, 
+  subscribeToChatMessages, 
   fetchClientMessages, 
   sendMessage,
-  uploadChatFile 
-} from "@/lib/chat-utils";
+  uploadChatFile,
+  markMessageAsRead
+} from "@/lib/firebase-chat-utils";
 import { ChatMessageList } from "@/components/chat/ChatMessageList";
 import { ChatInput } from "@/components/chat/ChatInput";
 
@@ -36,7 +36,7 @@ export function AdminChatRoom() {
   const [client, setClient] = useState<Client | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
-  const channelRef = useRef<RealtimeChannel | null>(null);
+  const unsubscribeRef = useRef<(() => void) | null>(null);
 
   // Fetch client details
   useEffect(() => {
@@ -83,13 +83,12 @@ export function AdminChatRoom() {
         // Fetch messages
         const messages = await fetchClientMessages(clientId);
         
-        // Mark all unread client messages as read
-        await supabase
-          .from("client_messages")
-          .update({ is_read: true })
-          .eq("client_id", clientId)
-          .eq("is_from_client", true)
-          .eq("is_read", false);
+        // Mark messages from client as read
+        messages.forEach(msg => {
+          if (msg.is_from_client && !msg.is_read) {
+            markMessageAsRead(clientId, msg.id);
+          }
+        });
         
         setMessages(messages);
       } catch (error) {
@@ -103,15 +102,27 @@ export function AdminChatRoom() {
     loadMessages();
     
     // Set up realtime subscription
-    const channel = subscribeToChatChannel(clientId, true, (newMessage) => {
-      setMessages(prev => [...prev, newMessage]);
+    const unsubscribe = subscribeToChatMessages(clientId, (newMessage) => {
+      setMessages(prev => {
+        // Check if message already exists
+        if (prev.some(msg => msg.id === newMessage.id)) {
+          return prev;
+        }
+        
+        // Mark message as read if it's from client
+        if (newMessage.is_from_client) {
+          markMessageAsRead(clientId, newMessage.id);
+        }
+        
+        return [...prev, newMessage];
+      });
     });
     
-    channelRef.current = channel;
+    unsubscribeRef.current = unsubscribe;
     
     return () => {
-      if (channelRef.current) {
-        supabase.removeChannel(channelRef.current);
+      if (unsubscribeRef.current) {
+        unsubscribeRef.current();
       }
     };
   }, [clientId, client, user?.id]);
@@ -139,32 +150,25 @@ export function AdminChatRoom() {
         }
       }
       
+      // Get user name
+      const { data } = await supabase
+        .from("profiles")
+        .select("full_name")
+        .eq("id", user.id)
+        .single();
+      
+      const senderName = data?.full_name || "Admin";
+      
       // Send message
-      const sentMessage = await sendMessage({
+      await sendMessage({
         clientId,
         senderId: user.id,
+        senderName,
         message: messageText,
         isFromClient: false,
         attachmentUrl,
         attachmentType
       });
-
-      // Add sender name to sent message for immediate display
-      if (sentMessage) {
-        const { data } = await supabase
-          .from("profiles")
-          .select("full_name")
-          .eq("id", user.id)
-          .single();
-        
-        const messageWithName = {
-          ...sentMessage,
-          sender_name: data?.full_name || "You"
-        };
-        
-        // Update messages locally for immediate feedback
-        setMessages(prev => [...prev, messageWithName]);
-      }
       
     } catch (error: any) {
       console.error("Error sending message:", error);
@@ -205,17 +209,21 @@ export function AdminChatRoom() {
             <span className="sr-only">Back</span>
           </Button>
           <Avatar className="h-8 w-8 mr-2">
-            {client.avatar ? (
+            {client?.avatar ? (
               <img src={client.avatar} alt={client.name} />
             ) : (
               <AvatarFallback>
-                {getInitials(client.name)}
+                {client?.name
+                  .split(" ")
+                  .map((n) => n[0])
+                  .join("")
+                  .toUpperCase()}
               </AvatarFallback>
             )}
           </Avatar>
           <div>
-            <CardTitle className="text-lg">{client.name}</CardTitle>
-            <p className="text-sm text-muted-foreground">{client.company}</p>
+            <CardTitle className="text-lg">{client?.name}</CardTitle>
+            <p className="text-sm text-muted-foreground">{client?.company}</p>
           </div>
         </div>
       </CardHeader>

@@ -1,17 +1,17 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { RealtimeChannel } from "@supabase/supabase-js";
-import { supabase } from "@/integrations/supabase/client";
 import { useClientAuth } from "@/contexts/client-auth-context";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 import { 
   ChatMessage, 
-  subscribeToChatChannel,
+  subscribeToChatMessages,
   fetchClientMessages, 
   sendMessage,
-  uploadChatFile 
-} from "@/lib/chat-utils";
+  uploadChatFile,
+  markMessageAsRead 
+} from "@/lib/firebase-chat-utils";
 import { ChatMessageList } from "@/components/chat/ChatMessageList";
 import { ChatInput } from "@/components/chat/ChatInput";
 
@@ -21,7 +21,7 @@ const ClientChat = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
-  const channelRef = useRef<RealtimeChannel | null>(null);
+  const unsubscribeRef = useRef<(() => void) | null>(null);
 
   // Get client ID from user ID
   useEffect(() => {
@@ -68,14 +68,11 @@ const ClientChat = () => {
         const messages = await fetchClientMessages(clientId);
         
         // Mark all unread admin messages as read
-        if (messages.length > 0) {
-          await supabase
-            .from("client_messages")
-            .update({ is_read: true })
-            .eq("client_id", clientId)
-            .eq("is_from_client", false)
-            .eq("is_read", false);
-        }
+        messages.forEach(msg => {
+          if (!msg.is_from_client && !msg.is_read) {
+            markMessageAsRead(clientId, msg.id);
+          }
+        });
         
         console.log("Messages fetched:", messages.length);
         setMessages(messages);
@@ -90,15 +87,27 @@ const ClientChat = () => {
     loadMessages();
     
     // Set up realtime subscription
-    const channel = subscribeToChatChannel(clientId, false, (newMessage) => {
-      setMessages(prev => [...prev, newMessage]);
+    const unsubscribe = subscribeToChatMessages(clientId, (newMessage) => {
+      setMessages(prev => {
+        // Check if message already exists
+        if (prev.some(msg => msg.id === newMessage.id)) {
+          return prev;
+        }
+        
+        // Mark message as read if it's from admin
+        if (!newMessage.is_from_client) {
+          markMessageAsRead(clientId, newMessage.id);
+        }
+        
+        return [...prev, newMessage];
+      });
     });
     
-    channelRef.current = channel;
+    unsubscribeRef.current = unsubscribe;
     
     return () => {
-      if (channelRef.current) {
-        supabase.removeChannel(channelRef.current);
+      if (unsubscribeRef.current) {
+        unsubscribeRef.current();
       }
     };
   }, [clientId]);
@@ -126,32 +135,25 @@ const ClientChat = () => {
         }
       }
       
+      // Get user name
+      const { data } = await supabase
+        .from("profiles")
+        .select("full_name")
+        .eq("id", user.id)
+        .single();
+      
+      const senderName = data?.full_name || "Client";
+      
       // Send message
-      const sentMessage = await sendMessage({
+      await sendMessage({
         clientId,
         senderId: user.id,
+        senderName,
         message: messageText,
         isFromClient: true,
         attachmentUrl,
         attachmentType
       });
-      
-      // Add sender name to sent message for immediate display
-      if (sentMessage) {
-        const { data } = await supabase
-          .from("profiles")
-          .select("full_name")
-          .eq("id", user.id)
-          .single();
-        
-        const messageWithName = {
-          ...sentMessage,
-          sender_name: data?.full_name || "You"
-        };
-        
-        // Update messages locally for immediate feedback
-        setMessages(prev => [...prev, messageWithName]);
-      }
       
     } catch (error: any) {
       console.error("Error sending message:", error);
