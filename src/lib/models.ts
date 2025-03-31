@@ -43,7 +43,7 @@ export enum TaskStatus {
   IN_PROGRESS = 'in_progress',
   COMPLETED = 'completed',
   BLOCKED = 'blocked',
-  PENDING = 'pending' // Adding pending to match usage in components
+  PENDING = 'pending' // Adding pending status to match usage in components
 }
 
 export enum TaskPriority {

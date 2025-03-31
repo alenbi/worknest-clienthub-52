@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { useClientAuth } from "@/contexts/client-auth-context";
@@ -13,14 +12,16 @@ const statusColors: Record<TaskStatus, string> = {
   [TaskStatus.TODO]: "bg-gray-100 text-gray-800",
   [TaskStatus.IN_PROGRESS]: "bg-blue-100 text-blue-800",
   [TaskStatus.COMPLETED]: "bg-green-100 text-green-800",
-  [TaskStatus.BLOCKED]: "bg-red-100 text-red-800"
+  [TaskStatus.BLOCKED]: "bg-red-100 text-red-800",
+  [TaskStatus.PENDING]: "bg-orange-100 text-orange-800"
 };
 
 const statusLabels: Record<TaskStatus, string> = {
   [TaskStatus.TODO]: "To Do",
   [TaskStatus.IN_PROGRESS]: "In Progress",
   [TaskStatus.COMPLETED]: "Completed",
-  [TaskStatus.BLOCKED]: "Blocked"
+  [TaskStatus.BLOCKED]: "Blocked",
+  [TaskStatus.PENDING]: "Pending"
 };
 
 const ClientTasks = () => {
@@ -29,7 +30,6 @@ const ClientTasks = () => {
   const [loading, setLoading] = useState(true);
   const [clientId, setClientId] = useState<string | null>(null);
 
-  // Get clientId from user
   useEffect(() => {
     const fetchClientId = async () => {
       if (!user?.id) return;
@@ -52,7 +52,6 @@ const ClientTasks = () => {
     fetchClientId();
   }, [user]);
 
-  // Fetch tasks once we have clientId
   useEffect(() => {
     const fetchTasks = async () => {
       if (!clientId) return;

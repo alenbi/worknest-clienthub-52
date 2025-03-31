@@ -247,7 +247,7 @@ export async function markMessageAsRead(clientId: string, messageId: string): Pr
   try {
     if (!isFirebaseAvailable) {
       console.log("Firebase not available, using Supabase for marking message as read");
-      await markSupabaseMessageAsRead(messageId);
+      await markSupabaseMessageAsRead(clientId, messageId);
       return;
     }
     
@@ -261,7 +261,7 @@ export async function markMessageAsRead(clientId: string, messageId: string): Pr
     
     // Fallback to Supabase
     try {
-      await markSupabaseMessageAsRead(messageId);
+      await markSupabaseMessageAsRead(clientId, messageId);
     } catch (fallbackError) {
       console.error("Fallback to Supabase also failed:", fallbackError);
     }

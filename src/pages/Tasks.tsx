@@ -47,7 +47,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
-import { useData, Task, TaskStatus } from "@/contexts/data-context";
+import { useData, Task, TaskStatus, TaskPriority } from "@/contexts/data-context";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "react-router-dom";
 import { TaskEditDialog } from "@/components/TaskEditDialog";
@@ -71,16 +71,20 @@ const sortOptions = [
   { value: "due-date", label: "Due Date" },
 ];
 
-const getStatusColor = (status: TaskStatus) => {
+const getStatusColor = (status: TaskStatus | string) => {
   switch (status) {
-    case "open":
+    case TaskStatus.TODO:
+    case 'open':
       return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300";
-    case "in progress":
+    case TaskStatus.IN_PROGRESS:
+    case 'in progress':
       return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300";
-    case "pending":
+    case TaskStatus.PENDING:
+    case 'pending':
       return "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300";
-    case "completed":
-    case "done":
+    case TaskStatus.COMPLETED:
+    case 'completed':
+    case 'done':
       return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300";
     default:
       return "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300";
@@ -102,10 +106,11 @@ export default function Tasks() {
     title: "",
     description: "",
     client_id: "",
-    status: "pending",
-    priority: "medium",
+    status: TaskStatus.PENDING,
+    priority: TaskPriority.MEDIUM,
     due_date: new Date().toISOString(),
     created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
   });
 
   const handleInputChange = (
@@ -141,10 +146,11 @@ export default function Tasks() {
         title: "",
         description: "",
         client_id: "",
-        status: "pending",
-        priority: "medium",
+        status: TaskStatus.PENDING,
+        priority: TaskPriority.MEDIUM,
         due_date: new Date().toISOString(),
         created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       });
       setIsAddTaskOpen(false);
     } catch (error) {
@@ -154,7 +160,13 @@ export default function Tasks() {
 
   const handleStatusChange = async (id: string, status: string) => {
     try {
-      await updateTask(id, { status: status as "pending" | "completed" });
+      const taskStatus = status === "pending" ? TaskStatus.PENDING : 
+                         status === "completed" ? TaskStatus.COMPLETED :
+                         status === "todo" ? TaskStatus.TODO :
+                         status === "in_progress" ? TaskStatus.IN_PROGRESS :
+                         status === "blocked" ? TaskStatus.BLOCKED : TaskStatus.PENDING;
+      
+      await updateTask(id, { status: taskStatus });
     } catch (error) {
       console.error("Error updating task status:", error);
     }

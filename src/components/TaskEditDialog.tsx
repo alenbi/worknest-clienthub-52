@@ -1,7 +1,6 @@
-
 import { useState, useEffect } from "react";
 import { format } from "date-fns";
-import { Task, Client } from "@/contexts/data-context";
+import { Task, Client, TaskStatus, TaskPriority } from "@/lib/models";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -65,7 +64,7 @@ export function TaskEditDialog({
         description: task.description,
         client_id: task.client_id,
         status: task.status,
-        priority: task.priority || 'medium',
+        priority: task.priority || TaskPriority.MEDIUM,
         due_date: task.due_date,
       });
     }

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { useData, Task } from "@/contexts/data-context";
+import { useData } from "@/contexts/data-context";
+import { Task, TaskStatus, TaskPriority } from "@/lib/models";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -55,10 +56,11 @@ const ClientDetail = () => {
     title: "",
     description: "",
     client_id: id || "",
-    status: "pending",
-    priority: "medium",
+    status: TaskStatus.PENDING,
+    priority: TaskPriority.MEDIUM,
     due_date: new Date().toISOString(),
     created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
   });
   const [isAddTaskDialogOpen, setIsAddTaskDialogOpen] = useState(false);
 
@@ -84,8 +86,8 @@ const ClientDetail = () => {
   }
 
   const clientTasks = tasks.filter((task) => task.client_id === id);
-  const pendingTasks = clientTasks.filter((task) => task.status === "pending");
-  const completedTasks = clientTasks.filter((task) => task.status === "completed");
+  const pendingTasks = clientTasks.filter((task) => task.status === TaskStatus.PENDING);
+  const completedTasks = clientTasks.filter((task) => task.status === TaskStatus.COMPLETED);
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
@@ -150,10 +152,11 @@ const ClientDetail = () => {
         title: "",
         description: "",
         client_id: id || "",
-        status: "pending",
-        priority: "medium",
+        status: TaskStatus.PENDING,
+        priority: TaskPriority.MEDIUM,
         due_date: new Date().toISOString(),
         created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       });
       setIsAddTaskDialogOpen(false);
     } catch (error) {
@@ -161,7 +164,7 @@ const ClientDetail = () => {
     }
   };
 
-  const handleUpdateTaskStatus = async (taskId: string, newStatus: "pending" | "completed") => {
+  const handleUpdateTaskStatus = async (taskId: string, newStatus: TaskStatus) => {
     try {
       await updateTask(taskId, { status: newStatus });
       toast.success(`Task marked as ${newStatus}`);
@@ -425,7 +428,7 @@ const ClientDetail = () => {
 
 interface TaskCardProps {
   task: Task;
-  onUpdateStatus: (id: string, status: "pending" | "completed") => void;
+  onUpdateStatus: (id: string, status: TaskStatus) => void;
   onDelete: (id: string) => void;
   getStatusColor: (status: string) => string;
   getStatusBgColor: (status: string) => string;
@@ -507,7 +510,7 @@ const TaskCard = ({
           <div className="mt-4 flex space-x-2">
             <Button
               size="sm"
-              onClick={() => onUpdateStatus(task.id, "completed")}
+              onClick={() => onUpdateStatus(task.id, TaskStatus.COMPLETED)}
               variant="outline"
               className="text-success"
             >
