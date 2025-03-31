@@ -72,10 +72,13 @@ const ClientChat = () => {
         setConnectionTested(true);
         
         if (!isConnected) {
-          console.log("Firebase connection failed, will use Supabase fallback");
+          setError("Failed to connect to chat service. Please refresh the page and try again.");
+          console.log("Firebase connection failed");
         }
       } catch (error) {
         console.error("Error testing Firebase connection:", error);
+        setError("Failed to connect to chat service. Please refresh the page and try again.");
+        setConnectionTested(true);
       }
     };
     
@@ -96,6 +99,12 @@ const ClientChat = () => {
       return;
     }
 
+    // If connection test failed, don't try to fetch messages
+    if (error && error.includes("Failed to connect")) {
+      setIsLoading(false);
+      return;
+    }
+
     const loadMessages = async () => {
       try {
         setIsLoading(true);
@@ -106,19 +115,19 @@ const ClientChat = () => {
         const messages = await fetchClientMessages(clientId);
         
         // Mark all unread admin messages as read
-        messages.forEach(msg => {
+        for (const msg of messages) {
           if (!msg.is_from_client && !msg.is_read) {
-            markMessageAsRead(clientId, msg.id);
+            await markMessageAsRead(clientId, msg.id);
           }
-        });
+        }
         
         console.log("Messages fetched:", messages.length);
         setMessages(messages);
+        setIsLoading(false);
       } catch (error: any) {
         console.error("Error fetching messages:", error);
         toast.error("Could not load messages");
         setError("Could not load messages: " + (error.message || "Unknown error"));
-      } finally {
         setIsLoading(false);
       }
     };
@@ -158,7 +167,7 @@ const ClientChat = () => {
         unsubscribeRef.current();
       }
     };
-  }, [clientId, connectionTested]);
+  }, [clientId, connectionTested, error]);
 
   const handleSendMessage = async (messageText: string, file: File | null) => {
     if ((!messageText.trim() && !file) || !user?.id || !clientId) {
@@ -218,9 +227,17 @@ const ClientChat = () => {
     
     setError(null);
     setIsLoading(true);
+    setConnectionTested(false);
     
     // Test connection and reload messages
-    testFirebaseConnection().then(() => {
+    testFirebaseConnection().then((connected) => {
+      setConnectionTested(true);
+      if (!connected) {
+        setError("Failed to connect to chat service. Please refresh the page and try again.");
+        setIsLoading(false);
+        return;
+      }
+      
       fetchClientMessages(clientId)
         .then(messages => {
           setMessages(messages);

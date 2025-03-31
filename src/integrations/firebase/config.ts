@@ -2,15 +2,16 @@
 import { initializeApp } from "firebase/app";
 import { getDatabase, connectDatabaseEmulator } from "firebase/database";
 
-// Firebase configuration - using public API keys which are safe to be in client code
+// Firebase configuration - using the provided configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyBi_1c5r9wuig28-iIIJAGDCVJKuTT1UdM",
-  authDomain: "lovable-chat-demo.firebaseapp.com",
-  databaseURL: "https://lovable-chat-demo-default-rtdb.firebaseio.com",
-  projectId: "lovable-chat-demo",
-  storageBucket: "lovable-chat-demo.appspot.com",
-  messagingSenderId: "850569471086",
-  appId: "1:850569471086:web:d9e80ff7c3936b5dddf35f"
+  apiKey: "AIzaSyA38e5-IDgPca-WgQHmooVPOx2f9LV63xk",
+  authDomain: "clientchat-943e8.firebaseapp.com",
+  projectId: "clientchat-943e8",
+  storageBucket: "clientchat-943e8.firebasestorage.app",
+  messagingSenderId: "109525729312",
+  appId: "1:109525729312:web:485adbfca9e24f4bc23c45",
+  measurementId: "G-VR6JSBFELT",
+  databaseURL: "https://clientchat-943e8-default-rtdb.firebaseio.com" // Added the databaseURL you provided
 };
 
 // Create a fallback database object that logs errors instead of crashing
@@ -32,7 +33,6 @@ const createErrorHandlerDatabase = () => {
   } as any;
 };
 
-// Declare the database variable at module level to be exported
 let database;
 
 // Initialize Firebase

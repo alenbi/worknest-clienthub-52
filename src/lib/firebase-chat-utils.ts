@@ -1,4 +1,3 @@
-
 import { ref, push, set, onValue, off, get, query, orderByChild, update } from "firebase/database";
 import { database } from "@/integrations/firebase/config";
 import { v4 as uuidv4 } from "uuid";
