@@ -2,12 +2,13 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { PieChart, BarChart } from "@/components/ui/chart";
+import { ChartContainer } from "@/components/ui/chart";
 import { useClientAuth } from "@/contexts/client-auth-context";
 import { supabase } from "@/integrations/supabase/client";
+import { PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
 
 const ClientDashboard = () => {
-  const { client } = useClientAuth();
+  const { user } = useClientAuth();
   const [taskStats, setTaskStats] = useState({
     completed: 0,
     pending: 0,
@@ -15,14 +16,14 @@ const ClientDashboard = () => {
 
   useEffect(() => {
     const fetchTaskStats = async () => {
-      if (!client?.id) return;
+      if (!user?.id) return;
 
       try {
         // Get completed tasks count
         const { count: completedCount, error: completedError } = await supabase
           .from("tasks")
           .select("*", { count: "exact", head: true })
-          .eq("client_id", client.id)
+          .eq("client_id", user.id)
           .eq("status", "completed");
 
         if (completedError) throw completedError;
@@ -31,7 +32,7 @@ const ClientDashboard = () => {
         const { count: pendingCount, error: pendingError } = await supabase
           .from("tasks")
           .select("*", { count: "exact", head: true })
-          .eq("client_id", client.id)
+          .eq("client_id", user.id)
           .neq("status", "completed");
 
         if (pendingError) throw pendingError;
@@ -46,13 +47,18 @@ const ClientDashboard = () => {
     };
 
     fetchTaskStats();
-  }, [client]);
+  }, [user]);
+
+  const chartData = [
+    { name: "Completed", value: taskStats.completed, color: "#16a34a" },
+    { name: "Pending", value: taskStats.pending, color: "#f59e0b" },
+  ];
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold tracking-tight">
-          Welcome, {client?.name || "Client"}
+          Welcome, {user?.name || "Client"}
         </h1>
         <p className="text-muted-foreground">
           Here's an overview of your project status
@@ -65,26 +71,27 @@ const ClientDashboard = () => {
             <CardTitle>Tasks Status</CardTitle>
           </CardHeader>
           <CardContent>
-            <PieChart
-              data={{
-                labels: ["Completed", "Pending"],
-                datasets: [
-                  {
-                    data: [taskStats.completed, taskStats.pending],
-                    backgroundColor: ["#16a34a", "#f59e0b"],
-                  },
-                ],
-              }}
-              options={{
-                plugins: {
-                  legend: {
-                    position: "bottom",
-                  },
-                },
-                maintainAspectRatio: false,
-              }}
-              className="h-80"
-            />
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={chartData}
+                    cx="50%"
+                    cy="50%"
+                    outerRadius={80}
+                    fill="#8884d8"
+                    dataKey="value"
+                    label={({ name, percent }) => 
+                      `${name}: ${(percent * 100).toFixed(0)}%`
+                    }
+                  >
+                    {chartData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
           </CardContent>
         </Card>
 

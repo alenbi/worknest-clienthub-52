@@ -5,12 +5,12 @@ import { Bell, MessageSquare, LogOut, Menu, User } from "lucide-react";
 import { useClientAuth } from "@/contexts/client-auth-context";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { useMobile } from "@/hooks/use-mobile";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { ClientThemeToggle } from "./ClientThemeToggle";
 
 export function ClientHeader() {
   const { user, logout } = useClientAuth();
-  const isMobile = useMobile();
+  const isMobile = useIsMobile();
   const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
 
   useEffect(() => {

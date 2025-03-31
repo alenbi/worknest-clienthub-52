@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { FileText, ExternalLink, Download, Loader2 } from "lucide-react";
@@ -6,15 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-
-interface Resource {
-  id: string;
-  title: string;
-  description: string;
-  type: "file" | "link";
-  url: string;
-  created_at: string;
-}
+import { Resource } from "@/lib/models";
 
 const ClientResources = () => {
   const [resources, setResources] = useState<Resource[]>([]);
@@ -31,7 +22,7 @@ const ClientResources = () => {
           .order("created_at", { ascending: false });
         
         if (error) throw error;
-        setResources(data || []);
+        setResources(data as Resource[] || []);
       } catch (error) {
         console.error("Error fetching resources:", error);
         toast.error("Failed to load resources");
@@ -52,7 +43,6 @@ const ClientResources = () => {
     if (resource.type === "link") {
       window.open(resource.url, "_blank", "noopener,noreferrer");
     } else {
-      // For files, open in new tab or download
       window.open(resource.url, "_blank");
     }
   };

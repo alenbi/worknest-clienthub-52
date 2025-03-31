@@ -8,12 +8,14 @@ import { toast } from "sonner";
 interface ClientUserWithProfile extends User {
   name?: string;
   company?: string;
+  id: string; // Ensure id is required
 }
 
 interface ClientAuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   user: ClientUserWithProfile | null;
+  client: ClientUserWithProfile | null; // Add client property
   session: Session | null;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -183,6 +185,7 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
         isAuthenticated: !!user,
         isLoading,
         user,
+        client: user, // Add client property aliased to user
         session,
         login,
         logout,

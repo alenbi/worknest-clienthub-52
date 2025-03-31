@@ -16,9 +16,9 @@ export interface Resource {
   id: string;
   title: string;
   description?: string;
-  type: string;
+  type: "file" | "link" | string; // Allow string to handle database values
   url: string;
-  created_at: Date;
+  created_at: Date | string;
 }
 
 export interface Video {
@@ -26,7 +26,7 @@ export interface Video {
   title: string;
   description?: string;
   youtube_id: string;
-  created_at: Date;
+  created_at: Date | string;
 }
 
 export interface Offer {
@@ -34,7 +34,7 @@ export interface Offer {
   title: string;
   description?: string;
   discount_percentage?: number;
-  valid_until: Date;
+  valid_until: Date | string;
   code?: string;
-  created_at: Date;
+  created_at: Date | string;
 }

@@ -23,3 +23,6 @@ export const useIsMobile = () => {
 
   return isMobile;
 };
+
+// Legacy alias for backward compatibility
+export const useMobile = useIsMobile;
