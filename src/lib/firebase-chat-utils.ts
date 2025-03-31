@@ -1,3 +1,4 @@
+
 import { ref, push, set, onValue, off, get, query, orderByChild, update } from "firebase/database";
 import { database } from "@/integrations/firebase/config";
 import { v4 as uuidv4 } from "uuid";
@@ -34,22 +35,36 @@ export async function testFirebaseConnection(): Promise<boolean> {
   try {
     const testRef = ref(database, '.info/connected');
     return new Promise((resolve) => {
+      // Define the unsubscribe function before using it
+      let timeoutId: number;
+      
       const unsubscribe = onValue(testRef, (snapshot) => {
+        // Clear timeout since we received a response
+        if (timeoutId) clearTimeout(timeoutId);
+        
+        // Now we can safely call unsubscribe
         unsubscribe();
+        
         const connected = snapshot.val() === true;
         console.log("Firebase connection test:", connected ? "Connected" : "Not connected");
         isFirebaseAvailable = connected;
         resolve(connected);
       }, (error) => {
+        // Clear timeout since we received an error
+        if (timeoutId) clearTimeout(timeoutId);
+        
+        // Now we can safely call unsubscribe
+        unsubscribe();
+        
         console.error("Firebase connection test failed:", error);
         isFirebaseAvailable = false;
         resolve(false);
       });
       
       // Set a timeout in case onValue doesn't fire
-      setTimeout(() => {
-        unsubscribe();
+      timeoutId = window.setTimeout(() => {
         console.error("Firebase connection test timed out");
+        unsubscribe();
         isFirebaseAvailable = false;
         resolve(false);
       }, 5000);

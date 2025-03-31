@@ -33,9 +33,9 @@ const createErrorHandlerDatabase = () => {
   } as any;
 };
 
+// Initialize Firebase outside of try/catch for better error visibility
 let database;
 
-// Initialize Firebase
 try {
   console.log("Initializing Firebase app...");
   const app = initializeApp(firebaseConfig);
