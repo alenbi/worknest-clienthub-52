@@ -21,6 +21,7 @@ const ClientChat = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const unsubscribeRef = useRef<(() => void) | null>(null);
 
   // Get client ID from user ID
@@ -39,6 +40,8 @@ const ClientChat = () => {
         if (error) {
           console.error("Error fetching client ID:", error);
           toast.error("Could not load client profile");
+          setError("Could not load client profile");
+          setIsLoading(false);
           return;
         }
         
@@ -46,6 +49,8 @@ const ClientChat = () => {
         setClientId(data?.id || null);
       } catch (error) {
         console.error("Failed to fetch client ID:", error);
+        setError("An error occurred while loading your profile");
+        setIsLoading(false);
       }
     };
     
@@ -55,13 +60,16 @@ const ClientChat = () => {
   // Fetch messages and set up subscription once we have clientId
   useEffect(() => {
     if (!clientId) {
-      console.log("No client ID yet, skipping message fetch");
+      if (user) {
+        console.log("No client ID yet, waiting...");
+      }
       return;
     }
 
     const loadMessages = async () => {
       try {
         setIsLoading(true);
+        setError(null);
         console.log("Fetching messages for client:", clientId);
         
         // Fetch messages
@@ -76,9 +84,10 @@ const ClientChat = () => {
         
         console.log("Messages fetched:", messages.length);
         setMessages(messages);
-      } catch (error) {
+      } catch (error: any) {
         console.error("Error fetching messages:", error);
         toast.error("Could not load messages");
+        setError("Could not load messages: " + (error.message || "Unknown error"));
       } finally {
         setIsLoading(false);
       }
@@ -87,26 +96,35 @@ const ClientChat = () => {
     loadMessages();
     
     // Set up realtime subscription
-    const unsubscribe = subscribeToChatMessages(clientId, (newMessage) => {
-      setMessages(prev => {
-        // Check if message already exists
-        if (prev.some(msg => msg.id === newMessage.id)) {
-          return prev;
-        }
-        
-        // Mark message as read if it's from admin
-        if (!newMessage.is_from_client) {
-          markMessageAsRead(clientId, newMessage.id);
-        }
-        
-        return [...prev, newMessage];
+    try {
+      console.log("Setting up message subscription for client:", clientId);
+      const unsubscribe = subscribeToChatMessages(clientId, (newMessage) => {
+        console.log("New message received:", newMessage);
+        setMessages(prev => {
+          // Check if message already exists
+          if (prev.some(msg => msg.id === newMessage.id)) {
+            return prev;
+          }
+          
+          // Mark message as read if it's from admin
+          if (!newMessage.is_from_client) {
+            markMessageAsRead(clientId, newMessage.id);
+          }
+          
+          return [...prev, newMessage];
+        });
       });
-    });
-    
-    unsubscribeRef.current = unsubscribe;
+      
+      unsubscribeRef.current = unsubscribe;
+    } catch (error: any) {
+      console.error("Error setting up message subscription:", error);
+      toast.error("Failed to connect to chat service");
+      setError("Failed to connect to chat service: " + (error.message || "Unknown error"));
+    }
     
     return () => {
       if (unsubscribeRef.current) {
+        console.log("Cleaning up message subscription");
         unsubscribeRef.current();
       }
     };
@@ -119,6 +137,7 @@ const ClientChat = () => {
     
     try {
       setIsSending(true);
+      setError(null);
       
       let attachmentUrl = null;
       let attachmentType = null;
@@ -158,12 +177,13 @@ const ClientChat = () => {
     } catch (error: any) {
       console.error("Error sending message:", error);
       toast.error(error.message || "Failed to send message");
+      setError("Failed to send message: " + (error.message || "Unknown error"));
     } finally {
       setIsSending(false);
     }
   };
 
-  if (!clientId) {
+  if (!clientId && !isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-center">
@@ -189,11 +209,26 @@ const ClientChat = () => {
         </CardHeader>
         
         <CardContent className="flex-1 overflow-y-auto p-0">
-          <ChatMessageList 
-            messages={messages} 
-            currentUserId={user?.id || ''} 
-            isLoading={isLoading}
-          />
+          {error ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-center p-4">
+                <p className="text-destructive font-semibold mb-2">Error</p>
+                <p className="text-muted-foreground">{error}</p>
+                <button 
+                  className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90 transition-colors"
+                  onClick={() => window.location.reload()}
+                >
+                  Try Again
+                </button>
+              </div>
+            </div>
+          ) : (
+            <ChatMessageList 
+              messages={messages} 
+              currentUserId={user?.id || ''} 
+              isLoading={isLoading}
+            />
+          )}
         </CardContent>
         
         <ChatInput 
