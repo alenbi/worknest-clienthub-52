@@ -2,12 +2,13 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { supabase, ClientMessage } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/supabase/client";
 import { User, Bell, MessageSquare, SearchIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { ClientMessage } from "@/lib/models";
 
 interface ClientWithChat {
   id: string;
@@ -30,16 +31,13 @@ export function AdminChatList() {
       try {
         setIsLoading(true);
         
-        // Fetch clients from the database
         const { data: clientsData, error: clientsError } = await supabase
           .from("clients")
           .select("*");
         
         if (clientsError) throw clientsError;
         
-        // For each client, get their latest message and unread count
         const clientsWithChatInfo = await Promise.all(clientsData.map(async (client) => {
-          // Get the last message
           const { data: messagesData, error: messagesError } = await supabase
             .from("client_messages")
             .select("*")
@@ -50,7 +48,6 @@ export function AdminChatList() {
           
           if (messagesError) throw messagesError;
           
-          // Get unread count (messages from client not read by admin)
           const { count, error: countError } = await supabase
             .from("client_messages")
             .select("*", { count: "exact", head: true })
@@ -73,7 +70,6 @@ export function AdminChatList() {
           };
         }));
         
-        // Sort by clients with unread messages first, then by last message date
         clientsWithChatInfo.sort((a, b) => {
           if (a.unread_count > 0 && b.unread_count === 0) return -1;
           if (a.unread_count === 0 && b.unread_count > 0) return 1;
@@ -95,7 +91,6 @@ export function AdminChatList() {
 
     fetchClientsWithChatInfo();
     
-    // Subscribe to real-time updates for new messages
     const channel = supabase
       .channel('client_messages_changes')
       .on('postgres_changes', 
@@ -105,7 +100,6 @@ export function AdminChatList() {
           table: 'client_messages'
         }, 
         () => {
-          // Refresh the client list when a new message arrives
           fetchClientsWithChatInfo();
         })
       .subscribe();

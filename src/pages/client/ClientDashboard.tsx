@@ -1,7 +1,8 @@
 
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { CheckCircle, Clock, AlertTriangle, ListTodo } from "lucide-react";
+import { CheckCircle, Clock, AlertTriangle, ListTodo, MessageSquare } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { useClientAuth } from "@/contexts/client-auth-context";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";

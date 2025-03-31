@@ -1,8 +1,8 @@
 import { createContext, useContext, useState, useEffect } from "react";
 import { toast } from "sonner";
-import { supabase, ClientMessage } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "./auth-context";
-import { Resource, Video, Offer } from "@/lib/models";
+import { Resource, Video, Offer, ClientMessage } from "@/lib/models";
 
 // Data models
 export interface Client {
