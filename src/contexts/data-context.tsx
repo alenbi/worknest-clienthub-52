@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Session } from '@supabase/supabase-js';
@@ -457,7 +458,15 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         .order('created_at', { ascending: false });
       
       if (error) throw error;
-      setTasks(data || []);
+      
+      // Convert string status and priority to enum values
+      const typedTasks = data?.map(task => ({
+        ...task,
+        status: task.status as TaskStatus,
+        priority: task.priority as TaskPriority
+      })) || [];
+      
+      setTasks(typedTasks);
     } catch (error) {
       console.error('Error fetching tasks:', error);
     }
