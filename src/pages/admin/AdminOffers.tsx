@@ -5,38 +5,52 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { 
+  PlusIcon, 
+  Trash2, 
+  Pencil,
+  Loader2, 
+  Tag
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { PlusIcon, FileText, Trash2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { useForm } from "react-hook-form";
-import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
+import { Badge } from "@/components/ui/badge";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 
 interface Offer {
   id: string;
   title: string;
-  description?: string;
-  code?: string;
+  description: string;
   discount_percentage: number;
-  valid_until?: string;
-  created_at?: string;
+  valid_until: string;
+  code: string;
+  created_at: string;
 }
 
 const formSchema = z.object({
   title: z.string().min(2, {
     message: "Title must be at least 2 characters.",
   }),
-  description: z.string().optional(),
-  code: z.string().optional(),
-  discount_percentage: z.string().refine((value) => {
-    const num = Number(value);
-    return !isNaN(num) && num >= 0 && num <= 100;
-  }, {
-    message: "Discount percentage must be a number between 0 and 100.",
+  description: z.string(),
+  discount_percentage: z.coerce.number().min(1).max(100, {
+    message: "Discount must be between 1% and 100%.",
   }),
-  valid_until: z.string().optional(),
+  code: z.string().min(3, {
+    message: "Promo code must be at least 3 characters.",
+  }),
+  valid_until: z.date({
+    required_error: "Please select a valid date.",
+  }).refine(date => date > new Date(), {
+    message: "Date must be in the future."
+  }),
 });
 
 const AdminOffers = () => {
@@ -51,9 +65,9 @@ const AdminOffers = () => {
     defaultValues: {
       title: "",
       description: "",
+      discount_percentage: 10,
       code: "",
-      discount_percentage: "",
-      valid_until: undefined,
+      valid_until: new Date(new Date().setMonth(new Date().getMonth() + 1)),
     },
   });
 
@@ -83,22 +97,25 @@ const AdminOffers = () => {
     try {
       setIsSubmitting(true);
       
-      const offerData = {
-        title: values.title,
-        description: values.description || "",
-        code: values.code || null,
-        discount_percentage: parseInt(values.discount_percentage),
-        valid_until: values.valid_until ? new Date(values.valid_until).toISOString() : null
-      };
+      // Ensure discount_percentage is a number
+      const discount = Number(values.discount_percentage);
+      if (isNaN(discount) || discount < 1 || discount > 100) {
+        toast.error("Discount must be between 1% and 100%");
+        setIsSubmitting(false);
+        return;
+      }
       
       const { error } = await supabase
         .from("offers")
-        .insert(offerData);
+        .insert({
+          title: values.title,
+          description: values.description,
+          discount_percentage: discount,
+          code: values.code.toUpperCase(),
+          valid_until: values.valid_until.toISOString(),
+        });
       
-      if (error) {
-        console.error("Supabase insert error:", error);
-        throw error;
-      }
+      if (error) throw error;
       
       toast.success("Offer added successfully");
       setIsAddDialogOpen(false);
@@ -106,7 +123,7 @@ const AdminOffers = () => {
       fetchOffers();
     } catch (error) {
       console.error("Error adding offer:", error);
-      toast.error("Failed to add offer: " + (error instanceof Error ? error.message : "Unknown error"));
+      toast.error("Failed to add offer");
     } finally {
       setIsSubmitting(false);
     }
@@ -114,13 +131,8 @@ const AdminOffers = () => {
 
   const deleteOffer = async (id: string) => {
     try {
-      const { error } = await supabase
-        .from("offers")
-        .delete()
-        .eq("id", id);
-
+      const { error } = await supabase.from("offers").delete().eq("id", id);
       if (error) throw error;
-
       toast.success("Offer deleted successfully");
       setOffers(offers.filter((offer) => offer.id !== id));
     } catch (error) {
@@ -129,10 +141,14 @@ const AdminOffers = () => {
     }
   };
 
+  const isOfferExpired = (validUntil: string) => {
+    return new Date(validUntil) < new Date();
+  };
+
   const filteredOffers = offers.filter((offer) =>
     offer.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (offer.description && offer.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
-    (offer.code && offer.code.toLowerCase().includes(searchTerm.toLowerCase()))
+    offer.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    offer.code.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
@@ -141,7 +157,7 @@ const AdminOffers = () => {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Offers</h1>
           <p className="text-muted-foreground">
-            Manage offers for clients
+            Manage special offers and discounts for clients
           </p>
         </div>
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
@@ -165,57 +181,83 @@ const AdminOffers = () => {
                   disabled={isSubmitting}
                 />
                 {form.formState.errors.title && (
-                  <p className="text-sm text-red-500">{form.formState.errors.title.message}</p>
+                  <p className="text-sm text-red-500">{form.formState.errors.title?.message}</p>
                 )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="description">Description</Label>
-                <Input
+                <Textarea
                   id="description"
                   placeholder="Offer description"
                   {...form.register("description")}
                   disabled={isSubmitting}
                 />
-                {form.formState.errors.description && (
-                  <p className="text-sm text-red-500">{form.formState.errors.description.message}</p>
-                )}
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="code">Code</Label>
-                <Input
-                  id="code"
-                  placeholder="Offer code"
-                  {...form.register("code")}
-                  disabled={isSubmitting}
-                />
-                {form.formState.errors.code && (
-                  <p className="text-sm text-red-500">{form.formState.errors.code.message}</p>
-                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="discount_percentage">Discount Percentage</Label>
-                <Input
-                  id="discount_percentage"
-                  placeholder="Discount percentage"
-                  {...form.register("discount_percentage")}
-                  disabled={isSubmitting}
-                />
+                <div className="flex items-center">
+                  <Input
+                    id="discount_percentage"
+                    type="number"
+                    min="1"
+                    max="100"
+                    placeholder="10"
+                    {...form.register("discount_percentage", { valueAsNumber: true })}
+                    disabled={isSubmitting}
+                  />
+                  <span className="ml-2">%</span>
+                </div>
                 {form.formState.errors.discount_percentage && (
-                  <p className="text-sm text-red-500">{form.formState.errors.discount_percentage.message}</p>
+                  <p className="text-sm text-red-500">{form.formState.errors.discount_percentage?.message}</p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="code">Promo Code</Label>
+                <Input
+                  id="code"
+                  placeholder="SUMMER2025"
+                  {...form.register("code")}
+                  disabled={isSubmitting}
+                  onChange={(e) => form.setValue("code", e.target.value.toUpperCase())}
+                />
+                {form.formState.errors.code && (
+                  <p className="text-sm text-red-500">{form.formState.errors.code?.message}</p>
                 )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="valid_until">Valid Until</Label>
-                <Input
-                  id="valid_until"
-                  type="date"
-                  {...form.register("valid_until")}
-                  disabled={isSubmitting}
-                />
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant={"outline"}
+                      className={cn(
+                        "w-full justify-start text-left font-normal",
+                        !form.watch("valid_until") && "text-muted-foreground"
+                      )}
+                      disabled={isSubmitting}
+                    >
+                      {form.watch("valid_until") ? (
+                        format(form.watch("valid_until"), "PPP")
+                      ) : (
+                        <span>Pick a date</span>
+                      )}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={form.watch("valid_until")}
+                      onSelect={(date) => form.setValue("valid_until", date || new Date())}
+                      disabled={(date) => date < new Date()}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
                 {form.formState.errors.valid_until && (
-                  <p className="text-sm text-red-500">{form.formState.errors.valid_until.message}</p>
+                  <p className="text-sm text-red-500">{form.formState.errors.valid_until?.message}</p>
                 )}
               </div>
+              
               <DialogFooter>
                 <Button variant="outline" onClick={() => setIsAddDialogOpen(false)} disabled={isSubmitting}>
                   Cancel
@@ -258,7 +300,7 @@ const AdminOffers = () => {
             </div>
           ) : filteredOffers.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-center">
-              <FileText className="h-12 w-12 text-muted-foreground mb-4" />
+              <Tag className="h-12 w-12 text-muted-foreground mb-4" />
               <p className="text-lg font-medium">No offers found</p>
               <p className="text-sm text-muted-foreground">
                 {searchTerm ? "Try a different search term" : "Add your first offer to get started"}
@@ -272,46 +314,64 @@ const AdminOffers = () => {
                     <TableHead>Title</TableHead>
                     <TableHead>Code</TableHead>
                     <TableHead>Discount</TableHead>
-                    <TableHead>Valid Until</TableHead>
-                    <TableHead>Added</TableHead>
+                    <TableHead className="hidden md:table-cell">Valid Until</TableHead>
+                    <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredOffers.map((offer) => (
-                    <TableRow key={offer.id}>
-                      <TableCell className="font-medium">
-                        <div>
-                          {offer.title}
-                          {offer.description && (
+                  {filteredOffers.map((offer) => {
+                    const isExpired = isOfferExpired(offer.valid_until);
+                    
+                    return (
+                      <TableRow key={offer.id} className={isExpired ? "opacity-60" : ""}>
+                        <TableCell className="font-medium">
+                          <div>
+                            {offer.title}
                             <p className="text-sm text-muted-foreground truncate max-w-md">
                               {offer.description}
                             </p>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <code className="rounded bg-muted px-1 py-0.5 font-mono text-sm">
+                            {offer.code}
+                          </code>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="bg-green-100 text-green-800">
+                            {offer.discount_percentage}% OFF
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell">
+                          {format(new Date(offer.valid_until), "PP")}
+                        </TableCell>
+                        <TableCell>
+                          {isExpired ? (
+                            <Badge variant="outline" className="bg-red-100 text-red-800">
+                              Expired
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="bg-blue-100 text-blue-800">
+                              Active
+                            </Badge>
                           )}
-                        </div>
-                      </TableCell>
-                      <TableCell>{offer.code || "-"}</TableCell>
-                      <TableCell>{offer.discount_percentage}%</TableCell>
-                      <TableCell>
-                        {offer.valid_until ? format(new Date(offer.valid_until), "PP") : "-"}
-                      </TableCell>
-                      <TableCell>
-                        {offer.created_at && format(new Date(offer.created_at), "PP")}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex justify-end space-x-2">
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            onClick={() => deleteOffer(offer.id)}
-                          >
-                            <Trash2 className="h-4 w-4 text-red-500" />
-                            <span className="sr-only">Delete</span>
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end space-x-2">
+                            <Button
+                              variant="outline"
+                              size="icon"
+                              onClick={() => deleteOffer(offer.id)}
+                            >
+                              <Trash2 className="h-4 w-4 text-red-500" />
+                              <span className="sr-only">Delete</span>
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>

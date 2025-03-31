@@ -13,7 +13,6 @@ import { format } from "date-fns";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { useQueryClient } from "@tanstack/react-query";
 
 interface VideoType {
   id: string;
@@ -28,7 +27,7 @@ const formSchema = z.object({
     message: "Title must be at least 2 characters.",
   }),
   description: z.string().optional(),
-  url: z.string().url("Please enter a valid URL").optional().or(z.string().length(0)),
+  url: z.string().url("Please enter a valid URL").or(z.string().length(0)),
   youtube_id: z.string().optional(),
 });
 
@@ -38,7 +37,6 @@ const AdminVideos = () => {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const queryClient = useQueryClient();
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -75,9 +73,20 @@ const AdminVideos = () => {
   const extractYoutubeId = (url: string): string | null => {
     if (!url) return null;
     
-    const youtubeRegex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
-    const match = url.match(youtubeRegex);
-    return match && match[1] ? match[1] : null;
+    // Handle different YouTube URL formats
+    const patterns = [
+      /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i,
+      /^([^"&?\/\s]{11})$/ // Direct video ID
+    ];
+    
+    for (const pattern of patterns) {
+      const match = url.match(pattern);
+      if (match && match[1]) {
+        return match[1];
+      }
+    }
+    
+    return null;
   };
 
   const addVideo = async (values: z.infer<typeof formSchema>) => {
@@ -92,11 +101,13 @@ const AdminVideos = () => {
         
         if (extractedId) {
           youtubeId = extractedId;
+        } else {
+          toast.error("Please enter a valid YouTube URL or ID");
+          setIsSubmitting(false);
+          return;
         }
-      }
-      
-      if (!youtubeId) {
-        toast.error("Please enter a valid YouTube URL or ID");
+      } else {
+        toast.error("Please enter a YouTube URL");
         setIsSubmitting(false);
         return;
       }
@@ -193,6 +204,9 @@ const AdminVideos = () => {
                 {form.formState.errors.url && (
                   <p className="text-sm text-red-500">{form.formState.errors.url?.message}</p>
                 )}
+                <p className="text-xs text-muted-foreground mt-1">
+                  You can enter a YouTube video URL or just the video ID
+                </p>
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setIsAddDialogOpen(false)} disabled={isSubmitting}>

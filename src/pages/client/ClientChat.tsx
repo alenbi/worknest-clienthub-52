@@ -1,259 +1,208 @@
-
-import { useState, useEffect, useRef } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { ChatMessage, fetchClientMessages, sendMessage, subscribeToChatMessages, markMessageAsRead, uploadChatFile } from "@/lib/chat-utils";
 import { useClientAuth } from "@/contexts/client-auth-context";
+import ChatMessageList from "@/components/chat/ChatMessageList";
+import ChatInput from "@/components/chat/ChatInput";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { 
-  ChatMessage, 
-  subscribeToChatMessages,
-  fetchClientMessages, 
-  sendMessage,
-  uploadChatFile,
-  markMessageAsRead
-} from "@/lib/firebase-chat-utils";
-import { ChatMessageList } from "@/components/chat/ChatMessageList";
-import { ChatInput } from "@/components/chat/ChatInput";
-import { Button } from "@/components/ui/button";
-import { RefreshCw } from "lucide-react";
 
 const ClientChat = () => {
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
   const { user } = useClientAuth();
   const [clientId, setClientId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSending, setIsSending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const cleanupFunctionRef = useRef<(() => void) | null>(null);
+  const [clientName, setClientName] = useState<string | null>(null);
 
-  // Get client ID from user ID
+  const unsubscribeRef = useRef<() => void | null>();
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  
+  const scrollToBottom = () => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
   useEffect(() => {
     const fetchClientId = async () => {
       if (!user?.id) return;
-      
+
       try {
-        console.log("Fetching client ID for user:", user.id);
         const { data, error } = await supabase
           .from("clients")
-          .select("id")
+          .select("id, name")
           .eq("user_id", user.id)
           .single();
-          
-        if (error) {
-          console.error("Error fetching client ID:", error);
-          toast.error("Could not load client profile");
-          setError("Could not load client profile");
-          setIsLoading(false);
-          return;
+
+        if (error) throw error;
+        if (data) {
+          setClientId(data.id);
+          setClientName(data.name || user.email || "Client");
+          console.log("Client ID found:", data.id);
         }
-        
-        console.log("Client ID found:", data?.id);
-        setClientId(data?.id || null);
       } catch (error) {
-        console.error("Failed to fetch client ID:", error);
-        setError("An error occurred while loading your profile");
-        setIsLoading(false);
+        console.error("Error fetching client ID:", error);
+        toast.error("Could not load chat");
       }
     };
-    
+
     fetchClientId();
+
+    return () => {
+      if (unsubscribeRef.current) {
+        unsubscribeRef.current();
+      }
+    };
   }, [user]);
 
-  // Fetch messages and set up subscription once we have clientId
   useEffect(() => {
-    if (!clientId) {
-      if (user) {
-        console.log("No client ID yet, waiting...");
-      }
-      return;
-    }
+    const fetchMessages = async () => {
+      if (!clientId) return;
+      setLoading(true);
 
-    const loadMessages = async () => {
       try {
-        setIsLoading(true);
-        setError(null);
-        console.log("Fetching messages for client:", clientId);
-        
-        // Fetch messages
-        const messages = await fetchClientMessages(clientId);
-        
-        // Mark all unread admin messages as read
-        for (const msg of messages) {
+        const fetchedMessages = await fetchClientMessages(clientId);
+        console.log("Messages fetched:", fetchedMessages.length);
+        setMessages(fetchedMessages);
+
+        for (const msg of fetchedMessages) {
           if (!msg.is_from_client && !msg.is_read) {
             await markMessageAsRead(clientId, msg.id);
           }
         }
-        
-        console.log("Messages fetched:", messages.length);
-        setMessages(messages);
-        setIsLoading(false);
-      } catch (error: any) {
+      } catch (error) {
         console.error("Error fetching messages:", error);
         toast.error("Could not load messages");
-        setError("Could not load messages: " + (error.message || "Unknown error"));
-        setIsLoading(false);
+      } finally {
+        setLoading(false);
+        setTimeout(scrollToBottom, 100);
       }
     };
 
-    loadMessages();
-    
-    // Set up realtime subscription
-    try {
-      console.log("Setting up message subscription for client:", clientId);
-      const unsubscribe = subscribeToChatMessages(
-        clientId,
-        (newMessage) => {
-          console.log("New message received:", newMessage);
+    const setupSubscription = () => {
+      if (!clientId) return;
+
+      try {
+        const unsubscribe = subscribeToChatMessages(clientId, (message) => {
+          console.log("New message received:", message);
           setMessages(prev => {
-            // Check if message already exists
-            if (prev.some(msg => msg.id === newMessage.id)) {
+            if (prev.find(m => m.id === message.id)) {
               return prev;
             }
             
-            // Mark admin messages as read automatically
-            if (!newMessage.is_from_client) {
-              markMessageAsRead(clientId, newMessage.id);
-            }
-            
-            return [...prev, newMessage];
+            const newMessages = [...prev, message];
+            return newMessages.sort((a, b) => 
+              new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+            );
           });
-        }
-      );
-      
-      cleanupFunctionRef.current = unsubscribe;
-    } catch (error: any) {
-      console.error("Error setting up message subscription:", error);
-      toast.error("Failed to connect to chat service");
-      setError("Failed to connect to chat service: " + (error.message || "Unknown error"));
-    }
-    
-    return () => {
-      if (cleanupFunctionRef.current) {
-        console.log("Cleaning up message subscription");
-        cleanupFunctionRef.current();
+
+          if (!message.is_from_client && !message.is_read) {
+            markMessageAsRead(clientId, message.id).catch(console.error);
+          }
+
+          setTimeout(scrollToBottom, 100);
+        });
+
+        unsubscribeRef.current = unsubscribe;
+      } catch (error) {
+        console.error("Error setting up chat subscription:", error);
       }
     };
+
+    if (clientId) {
+      fetchMessages();
+      setupSubscription();
+    }
   }, [clientId]);
 
-  const handleSendMessage = async (messageText: string, file: File | null) => {
-    if ((!messageText.trim() && !file) || !user?.id || !clientId) {
-      return;
-    }
-    
+  const handleSendMessage = async (text: string) => {
+    if (!clientId || !user?.id || !text.trim()) return;
+
     try {
-      setIsSending(true);
-      setError(null);
-      
-      let attachmentUrl = null;
-      let attachmentType = null;
-      
-      // Upload file if provided
-      if (file) {
-        try {
-          const uploadResult = await uploadChatFile(file, clientId, false);
-          attachmentUrl = uploadResult.url;
-          attachmentType = uploadResult.type;
-        } catch (error) {
-          console.error("File upload failed:", error);
-          toast.error("Failed to upload file. Please try again.");
-          throw error;
-        }
-      }
-      
-      // Send message
+      setSending(true);
       await sendMessage({
         clientId,
         senderId: user.id,
-        senderName: user.user_metadata?.full_name || 'Client',
-        message: messageText,
+        senderName: clientName || "Client",
+        message: text,
         isFromClient: true,
-        attachmentUrl,
-        attachmentType
       });
-      
-    } catch (error: any) {
+    } catch (error) {
       console.error("Error sending message:", error);
-      toast.error(error.message || "Failed to send message");
-      setError("Failed to send message: " + (error.message || "Unknown error"));
+      toast.error("Failed to send message");
     } finally {
-      setIsSending(false);
+      setSending(false);
+      setTimeout(scrollToBottom, 100);
     }
   };
 
-  const handleRetry = () => {
-    if (!clientId) return;
-    
-    setError(null);
-    setIsLoading(true);
-    
-    fetchClientMessages(clientId)
-      .then(messages => {
-        setMessages(messages);
-        setIsLoading(false);
-      })
-      .catch(error => {
-        console.error("Error reloading messages:", error);
-        setError("Failed to reload messages: " + (error.message || "Unknown error"));
-        setIsLoading(false);
-      });
-  };
+  const handleFileUpload = useCallback(async (file: File) => {
+    if (!clientId || !user?.id) {
+      toast.error("Cannot upload file: not connected");
+      return null;
+    }
 
-  if (!clientId && !isLoading) {
+    try {
+      const result = await uploadChatFile(file, clientId, false);
+      return result;
+    } catch (error) {
+      console.error("File upload error:", error);
+      toast.error("Failed to upload file");
+      return null;
+    }
+  }, [clientId, user?.id]);
+  
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  if (!clientId) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center">
-          <p className="text-xl font-semibold mb-2">Account not linked</p>
-          <p className="text-muted-foreground">Your user account is not linked to a client profile.</p>
-        </div>
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6 h-[calc(100vh-10rem)] flex flex-col">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Chat Support</h1>
-        <p className="text-muted-foreground">
+    <div className="flex flex-col h-[calc(100vh-9rem)] bg-white border rounded-lg overflow-hidden">
+      <div className="border-b p-4 bg-muted/30">
+        <h2 className="text-lg font-semibold">Support Chat</h2>
+        <p className="text-sm text-muted-foreground">
           Chat with our support team
         </p>
       </div>
-
-      <Card className="flex-1 flex flex-col overflow-hidden">
-        <CardHeader className="pb-2">
-          <CardTitle>Conversation</CardTitle>
-        </CardHeader>
-        
-        <CardContent className="flex-1 overflow-y-auto p-0">
-          {error ? (
-            <div className="flex items-center justify-center h-full">
-              <div className="text-center p-4">
-                <p className="text-destructive font-semibold mb-2">Error</p>
-                <p className="text-muted-foreground">{error}</p>
-                <Button 
-                  className="mt-4"
-                  onClick={handleRetry}
-                  variant="outline"
-                >
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  Try Again
-                </Button>
+      
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {loading ? (
+          <div className="flex items-center justify-center h-full">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+        ) : (
+          <>
+            {messages.length === 0 ? (
+              <div className="flex items-center justify-center h-full">
+                <p className="text-center text-muted-foreground">
+                  No messages yet. Send a message to start the conversation.
+                </p>
               </div>
-            </div>
-          ) : (
-            <ChatMessageList 
-              messages={messages} 
-              currentUserId={user?.id || ''} 
-              isLoading={isLoading}
-              emptyMessage="No messages yet. Start the conversation by sending a message below."
-            />
-          )}
-        </CardContent>
-        
+            ) : (
+              <ChatMessageList messages={messages} currentUserId={user?.id || ""} />
+            )}
+          </>
+        )}
+        <div ref={messagesEndRef} />
+      </div>
+      
+      <div className="border-t p-4">
         <ChatInput 
-          onSendMessage={handleSendMessage}
-          isLoading={isSending}
+          onSendMessage={handleSendMessage} 
+          onFileUpload={handleFileUpload}
+          disabled={sending} 
+          placeholder="Type your message..." 
         />
-      </Card>
+      </div>
     </div>
   );
 };

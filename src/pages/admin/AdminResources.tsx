@@ -1,32 +1,85 @@
 
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { 
+  PlusIcon, 
+  FileText, 
+  Link as LinkIcon, 
+  Trash2, 
+  ExternalLink, 
+  Loader2, 
+  FileUp 
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { PlusIcon, FileText, Link as LinkIcon, Trash2, ExternalLink, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { Resource } from "@/lib/models";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
+import { v4 as uuidv4 } from "uuid";
+
+interface ResourceType {
+  id: string;
+  title: string;
+  description: string;
+  url: string;
+  type: string;
+  created_at: string;
+}
+
+const formSchema = z.object({
+  title: z.string().min(2, {
+    message: "Title must be at least 2 characters.",
+  }),
+  description: z.string(),
+  type: z.enum(["file", "link"], {
+    required_error: "You need to select a resource type.",
+  }),
+  url: z.string().url("Please enter a valid URL").optional(),
+  file: z.instanceof(File).optional(),
+}).refine(data => {
+  if (data.type === "link") {
+    return !!data.url;
+  }
+  return true;
+}, {
+  message: "URL is required for link resources",
+  path: ["url"],
+}).refine(data => {
+  if (data.type === "file") {
+    return !!data.file;
+  }
+  return true;
+}, {
+  message: "File is required for file resources",
+  path: ["file"],
+});
 
 const AdminResources = () => {
-  const [resources, setResources] = useState<Resource[]>([]);
+  const [resources, setResources] = useState<ResourceType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [fileUploadStatus, setFileUploadStatus] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
-  
-  // Form state
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [type, setType] = useState<"file" | "link">("link");
-  const [url, setUrl] = useState("");
-  const [file, setFile] = useState<File | null>(null);
+
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      title: "",
+      description: "",
+      type: "link",
+      url: "",
+    },
+  });
+
+  const resourceType = form.watch("type");
 
   useEffect(() => {
     fetchResources();
@@ -39,9 +92,9 @@ const AdminResources = () => {
         .from("resources")
         .select("*")
         .order("created_at", { ascending: false });
-      
+
       if (error) throw error;
-      setResources(data as Resource[] || []);
+      setResources(data as ResourceType[] || []);
     } catch (error) {
       console.error("Error fetching resources:", error);
       toast.error("Failed to load resources");
@@ -50,145 +103,108 @@ const AdminResources = () => {
     }
   };
 
-  const handleAddResource = async () => {
+  const uploadFile = async (file: File): Promise<string> => {
     try {
-      if (!title) {
-        toast.error("Please enter a title");
-        return;
-      }
+      setFileUploadStatus("Uploading file...");
+      
+      // Create a unique file name to prevent collisions
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${uuidv4()}.${fileExt}`;
+      const filePath = `resources/${fileName}`;
+      
+      // Upload file to Supabase Storage
+      const { data, error } = await supabase.storage
+        .from('resources')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false
+        });
+      
+      if (error) throw error;
+      
+      // Get public URL for the file
+      const { data: { publicUrl } } = supabase.storage
+        .from('resources')
+        .getPublicUrl(data.path);
+      
+      setFileUploadStatus("File uploaded successfully!");
+      return publicUrl;
+    } catch (error) {
+      console.error("Error uploading file:", error);
+      setFileUploadStatus("File upload failed!");
+      throw new Error("Failed to upload file");
+    }
+  };
 
-      if (type === "link" && !url) {
-        toast.error("Please enter a URL");
-        return;
-      }
-
-      if (type === "file" && !file) {
-        toast.error("Please select a file");
-        return;
-      }
-
+  const addResource = async (values: z.infer<typeof formSchema>) => {
+    try {
       setIsSubmitting(true);
-
-      let resourceUrl = url;
       
-      if (type === "file" && file) {
-        try {
-          // Check if resources bucket exists
-          const { data: buckets } = await supabase.storage.listBuckets();
-          const resourceBucket = buckets?.find(b => b.name === 'resources');
-          
-          // Create the bucket if it doesn't exist
-          if (!resourceBucket) {
-            const { error: bucketError } = await supabase.storage
-              .createBucket('resources', { public: true });
-            
-            if (bucketError) {
-              console.error("Error creating bucket:", bucketError);
-              throw bucketError;
-            }
-          }
-          
-          // Upload the file
-          const fileExt = file.name.split('.').pop();
-          const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
-          const filePath = `${fileName}`;
-          
-          const { error: uploadError, data: uploadData } = await supabase.storage
-            .from('resources')
-            .upload(filePath, file, {
-              upsert: true,
-              cacheControl: '3600'
-            });
-          
-          if (uploadError) {
-            console.error("Upload error:", uploadError);
-            throw uploadError;
-          }
-          
-          // Get the public URL
-          const { data } = supabase.storage
-            .from('resources')
-            .getPublicUrl(filePath);
-          
-          resourceUrl = data.publicUrl;
-        } catch (error) {
-          console.error("File upload error:", error);
-          toast.error("File upload failed. Please try again.");
-          setIsSubmitting(false);
-          return;
-        }
+      let resourceUrl = values.url || "";
+      
+      // If it's a file resource, upload the file
+      if (values.type === "file" && values.file) {
+        resourceUrl = await uploadFile(values.file);
       }
       
-      // Insert the resource record
       const { error } = await supabase
         .from("resources")
         .insert({
-          title,
-          description,
-          type,
-          url: resourceUrl
+          title: values.title,
+          description: values.description,
+          url: resourceUrl,
+          type: values.type,
         });
       
       if (error) throw error;
       
       toast.success("Resource added successfully");
-      resetForm();
       setIsAddDialogOpen(false);
+      form.reset();
       fetchResources();
     } catch (error) {
       console.error("Error adding resource:", error);
-      toast.error("Failed to add resource: " + (error instanceof Error ? error.message : "Unknown error"));
+      toast.error("Failed to add resource");
     } finally {
       setIsSubmitting(false);
+      setFileUploadStatus(null);
     }
   };
 
-  const handleDeleteResource = async (id: string, resourceType: string, resourceUrl: string) => {
+  const deleteResource = async (id: string) => {
     try {
-      // Delete the database record first
-      const { error } = await supabase
-        .from("resources")
-        .delete()
-        .eq("id", id);
+      const resourceToDelete = resources.find(resource => resource.id === id);
       
-      if (error) throw error;
-      
-      // If it's a file resource, also delete the file from storage
-      if (resourceType === "file" && resourceUrl) {
-        try {
-          // Extract the filename from the URL
-          const urlParts = resourceUrl.split("/");
-          const filePath = urlParts[urlParts.length - 1];
-          
-          // Delete the file
-          await supabase.storage
-            .from('resources')
-            .remove([filePath]);
-        } catch (fileError) {
-          // Log but don't fail the whole operation if file deletion fails
-          console.error("Error deleting file:", fileError);
+      if (resourceToDelete && resourceToDelete.type === "file") {
+        // Extract the file path from the URL to delete from storage
+        const urlPath = new URL(resourceToDelete.url).pathname;
+        const filePath = urlPath.split('/').slice(2).join('/'); // Remove /storage/v1/object/public/
+        
+        // Delete from storage if it's a file
+        const { error: storageError } = await supabase.storage
+          .from('resources')
+          .remove([filePath]);
+        
+        if (storageError) {
+          console.error("Error deleting file from storage:", storageError);
         }
       }
       
+      // Delete from database
+      const { error } = await supabase.from("resources").delete().eq("id", id);
+      if (error) throw error;
+      
       toast.success("Resource deleted successfully");
-      setResources(resources.filter(r => r.id !== id));
+      setResources(resources.filter((resource) => resource.id !== id));
     } catch (error) {
       console.error("Error deleting resource:", error);
       toast.error("Failed to delete resource");
     }
   };
 
-  const resetForm = () => {
-    setTitle("");
-    setDescription("");
-    setType("link");
-    setUrl("");
-    setFile(null);
-  };
-
-  const filteredResources = resources.filter(resource => 
+  const filteredResources = resources.filter((resource) =>
     resource.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (resource.description && resource.description.toLowerCase().includes(searchTerm.toLowerCase()))
+    resource.description.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
@@ -197,7 +213,7 @@ const AdminResources = () => {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Resources</h1>
           <p className="text-muted-foreground">
-            Manage resources for clients
+            Manage shared resources for your clients
           </p>
         </div>
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
@@ -211,88 +227,112 @@ const AdminResources = () => {
             <DialogHeader>
               <DialogTitle>Add New Resource</DialogTitle>
             </DialogHeader>
-            <div className="space-y-4 py-4">
+            <form onSubmit={form.handleSubmit(addResource)} className="space-y-4 py-4">
               <div className="space-y-2">
                 <Label htmlFor="title">Title</Label>
-                <Input 
-                  id="title" 
-                  value={title} 
-                  onChange={(e) => setTitle(e.target.value)} 
+                <Input
+                  id="title"
                   placeholder="Resource title"
+                  {...form.register("title")}
                   disabled={isSubmitting}
                 />
+                {form.formState.errors.title && (
+                  <p className="text-sm text-red-500">{form.formState.errors.title?.message}</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="description">Description</Label>
-                <Textarea 
-                  id="description" 
-                  value={description} 
-                  onChange={(e) => setDescription(e.target.value)} 
-                  placeholder="Optional description"
+                <Textarea
+                  id="description"
+                  placeholder="Resource description"
+                  {...form.register("description")}
                   disabled={isSubmitting}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="type">Resource Type</Label>
-                <Select 
-                  value={type} 
-                  onValueChange={(value) => setType(value as "file" | "link")}
-                  disabled={isSubmitting}
-                >
-                  <SelectTrigger id="type">
-                    <SelectValue placeholder="Select type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="link">Link</SelectItem>
-                    <SelectItem value="file">File</SelectItem>
-                  </SelectContent>
-                </Select>
+                <Label>Resource Type</Label>
+                <div className="flex space-x-4">
+                  <div className="flex items-center">
+                    <input
+                      type="radio"
+                      id="link-type"
+                      value="link"
+                      className="mr-2"
+                      {...form.register("type")}
+                      checked={resourceType === "link"}
+                      onChange={() => form.setValue("type", "link")}
+                    />
+                    <Label htmlFor="link-type" className="cursor-pointer">Link</Label>
+                  </div>
+                  <div className="flex items-center">
+                    <input
+                      type="radio"
+                      id="file-type"
+                      value="file"
+                      className="mr-2"
+                      {...form.register("type")}
+                      checked={resourceType === "file"}
+                      onChange={() => form.setValue("type", "file")}
+                    />
+                    <Label htmlFor="file-type" className="cursor-pointer">File</Label>
+                  </div>
+                </div>
+                {form.formState.errors.type && (
+                  <p className="text-sm text-red-500">{form.formState.errors.type?.message}</p>
+                )}
               </div>
               
-              {type === "link" ? (
+              {resourceType === "link" ? (
                 <div className="space-y-2">
                   <Label htmlFor="url">URL</Label>
-                  <Input 
-                    id="url" 
-                    value={url} 
-                    onChange={(e) => setUrl(e.target.value)} 
-                    placeholder="https://example.com"
+                  <Input
+                    id="url"
+                    placeholder="https://example.com/resource"
+                    {...form.register("url")}
                     disabled={isSubmitting}
                   />
+                  {form.formState.errors.url && (
+                    <p className="text-sm text-red-500">{form.formState.errors.url?.message}</p>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-2">
-                  <Label htmlFor="file">File</Label>
-                  <Input 
-                    id="file" 
-                    type="file" 
-                    onChange={(e) => setFile(e.target.files?.[0] || null)} 
+                  <Label htmlFor="file">Upload File</Label>
+                  <Input
+                    id="file"
+                    type="file"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        form.setValue("file", e.target.files[0]);
+                      }
+                    }}
                     disabled={isSubmitting}
                   />
-                  <p className="text-xs text-muted-foreground">
-                    Max file size: 10MB. Supported formats: PDF, DOC, DOCX, XLS, XLSX, PNG, JPG, ZIP.
-                  </p>
+                  {fileUploadStatus && (
+                    <p className="text-sm text-blue-500">{fileUploadStatus}</p>
+                  )}
+                  {form.formState.errors.file && (
+                    <p className="text-sm text-red-500">{form.formState.errors.file?.message}</p>
+                  )}
                 </div>
               )}
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => {
-                resetForm();
-                setIsAddDialogOpen(false);
-              }} disabled={isSubmitting}>
-                Cancel
-              </Button>
-              <Button onClick={handleAddResource} disabled={isSubmitting}>
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Adding...
-                  </>
-                ) : (
-                  "Add Resource"
-                )}
-              </Button>
-            </DialogFooter>
+              
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setIsAddDialogOpen(false)} disabled={isSubmitting}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Adding...
+                    </>
+                  ) : (
+                    "Add Resource"
+                  )}
+                </Button>
+              </DialogFooter>
+            </form>
           </DialogContent>
         </Dialog>
       </div>
@@ -330,9 +370,9 @@ const AdminResources = () => {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Title</TableHead>
+                    <TableHead className="w-[300px]">Title</TableHead>
                     <TableHead>Type</TableHead>
-                    <TableHead>Added</TableHead>
+                    <TableHead className="hidden md:table-cell">Added</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -351,15 +391,15 @@ const AdminResources = () => {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center">
-                          {resource.type === "file" ? (
-                            <FileText className="h-4 w-4 mr-2 text-blue-500" />
+                          {resource.type === "link" ? (
+                            <LinkIcon className="h-4 w-4 mr-2" />
                           ) : (
-                            <LinkIcon className="h-4 w-4 mr-2 text-green-500" />
+                            <FileText className="h-4 w-4 mr-2" />
                           )}
-                          {resource.type === "file" ? "File" : "Link"}
+                          {resource.type === "link" ? "Link" : "File"}
                         </div>
                       </TableCell>
-                      <TableCell>
+                      <TableCell className="hidden md:table-cell">
                         {format(new Date(resource.created_at), "PP")}
                       </TableCell>
                       <TableCell className="text-right">
@@ -375,7 +415,7 @@ const AdminResources = () => {
                           <Button
                             variant="outline"
                             size="icon"
-                            onClick={() => handleDeleteResource(resource.id, resource.type, resource.url)}
+                            onClick={() => deleteResource(resource.id)}
                           >
                             <Trash2 className="h-4 w-4 text-red-500" />
                             <span className="sr-only">Delete</span>

@@ -1,12 +1,15 @@
+
 import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { useClientAuth } from "@/contexts/client-auth-context";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { Loader2 } from "lucide-react";
+import { Loader2, Plus } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Task, TaskStatus } from "@/lib/models";
+import { Task, TaskStatus, TaskPriority } from "@/lib/models";
+import { Button } from "@/components/ui/button";
+import { Link } from "react-router-dom";
 
 const statusColors: Record<TaskStatus, string> = {
   [TaskStatus.TODO]: "bg-gray-100 text-gray-800",
@@ -22,6 +25,18 @@ const statusLabels: Record<TaskStatus, string> = {
   [TaskStatus.COMPLETED]: "Completed",
   [TaskStatus.BLOCKED]: "Blocked",
   [TaskStatus.PENDING]: "Pending"
+};
+
+const priorityColors: Record<TaskPriority, string> = {
+  [TaskPriority.LOW]: "bg-slate-100 text-slate-800",
+  [TaskPriority.MEDIUM]: "bg-yellow-100 text-yellow-800",
+  [TaskPriority.HIGH]: "bg-red-100 text-red-800"
+};
+
+const priorityLabels: Record<TaskPriority, string> = {
+  [TaskPriority.LOW]: "Low",
+  [TaskPriority.MEDIUM]: "Medium",
+  [TaskPriority.HIGH]: "High"
 };
 
 const ClientTasks = () => {
@@ -97,16 +112,27 @@ const ClientTasks = () => {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Tasks</h1>
-        <p className="text-muted-foreground">
-          View your current tasks and their status
-        </p>
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Tasks</h1>
+          <p className="text-muted-foreground">
+            View your current tasks and their status
+          </p>
+        </div>
+        <Button asChild>
+          <Link to="/client/tasks/add">
+            <Plus className="mr-2 h-4 w-4" />
+            Request Task
+          </Link>
+        </Button>
       </div>
 
       {tasks.length === 0 ? (
         <Card className="p-8 text-center text-muted-foreground">
           <p>No tasks assigned to you at the moment.</p>
+          <Button asChild variant="link" className="mt-4">
+            <Link to="/client/tasks/add">Request a new task</Link>
+          </Button>
         </Card>
       ) : (
         <div className="space-y-4">
@@ -114,9 +140,14 @@ const ClientTasks = () => {
             <Card key={task.id} className="p-4">
               <div className="flex justify-between items-start mb-2">
                 <h3 className="text-lg font-medium">{task.title}</h3>
-                <Badge className={statusColors[task.status as TaskStatus]}>
-                  {statusLabels[task.status as TaskStatus]}
-                </Badge>
+                <div className="flex gap-2">
+                  <Badge className={statusColors[task.status as TaskStatus]}>
+                    {statusLabels[task.status as TaskStatus]}
+                  </Badge>
+                  <Badge className={priorityColors[task.priority as TaskPriority]}>
+                    {priorityLabels[task.priority as TaskPriority]}
+                  </Badge>
+                </div>
               </div>
               {task.description && <p className="text-muted-foreground mb-4">{task.description}</p>}
               <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
