@@ -15,10 +15,10 @@ interface ClientAuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   user: ClientUserWithProfile | null;
-  client: ClientUserWithProfile | null; // Add client property
   session: Session | null;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  updateProfile?: (data: { name?: string; company?: string }) => Promise<void>;
 }
 
 const ClientAuthContext = createContext<ClientAuthContextType | undefined>(undefined);
@@ -179,16 +179,62 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
     }
   };
 
+  // Function to update client profile
+  const updateProfile = async (data: { name?: string; company?: string }) => {
+    try {
+      setIsLoading(true);
+      
+      if (!user) throw new Error("Not authenticated");
+      
+      // Find client record
+      const { data: clientData, error: fetchError } = await supabase
+        .from("clients")
+        .select("id")
+        .eq("user_id", user.id)
+        .single();
+      
+      if (fetchError) throw fetchError;
+      
+      // Update client record
+      const { error } = await supabase
+        .from("clients")
+        .update({
+          name: data.name,
+          company: data.company,
+        })
+        .eq("id", clientData.id);
+      
+      if (error) throw error;
+      
+      // Update local user state
+      setUser(prev => {
+        if (!prev) return null;
+        return {
+          ...prev,
+          name: data.name || prev.name,
+          company: data.company || prev.company,
+        };
+      });
+      
+      toast.success("Profile updated successfully");
+    } catch (error: any) {
+      toast.error(error.message || "Failed to update profile");
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <ClientAuthContext.Provider
       value={{
         isAuthenticated: !!user,
         isLoading,
         user,
-        client: user, // Add client property aliased to user
         session,
         login,
         logout,
+        updateProfile,
       }}
     >
       {children}

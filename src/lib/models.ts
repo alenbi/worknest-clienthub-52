@@ -48,3 +48,16 @@ export interface ClientFormData {
   domain?: string;
   password?: string;
 }
+
+// Client profile
+export interface ClientProfile {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  company?: string;
+  domain?: string;
+  user_id: string;
+  created_at: string;
+  updated_at: string;
+}

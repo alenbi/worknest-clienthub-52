@@ -8,14 +8,17 @@ import {
   FileText,
   Tag,
   LogOut,
+  User,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useClientAuth } from "@/contexts/client-auth-context";
 import { Separator } from "@/components/ui/separator";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 export function ClientSidebar() {
   const { logout, user } = useClientAuth();
+  const isMobile = useIsMobile();
 
   const menuItems = [
     {
@@ -48,12 +51,21 @@ export function ClientSidebar() {
       icon: Tag,
       path: "/client/offers",
     },
+    {
+      title: "Profile",
+      icon: User,
+      path: "/client/profile",
+    },
   ];
 
   return (
     <aside
       id="client-sidebar"
-      className="bg-sidebar fixed inset-y-0 left-0 z-20 w-64 transform border-r transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:w-64 -translate-x-full"
+      className={cn(
+        "bg-sidebar fixed inset-y-0 left-0 z-20 w-64 transform border-r transition-transform duration-300 ease-in-out",
+        isMobile ? "-translate-x-full" : "translate-x-0",
+        "lg:translate-x-0 lg:static lg:w-64"
+      )}
     >
       <div className="flex h-full flex-col">
         <div className="flex h-16 items-center border-b px-6">
@@ -100,4 +112,4 @@ export function ClientSidebar() {
       </div>
     </aside>
   );
-}
+};

@@ -30,6 +30,7 @@ import ClientChat from "./pages/client/ClientChat";
 import ClientResources from "./pages/client/ClientResources";
 import ClientVideos from "./pages/client/ClientVideos";
 import ClientOffers from "./pages/client/ClientOffers";
+import ClientProfile from "./pages/client/ClientProfile";
 
 // Admin pages
 import AdminChat from "./pages/admin/AdminChat";
@@ -88,6 +89,7 @@ const App = () => (
                     <Route path="/client/resources" element={<ClientResources />} />
                     <Route path="/client/videos" element={<ClientVideos />} />
                     <Route path="/client/offers" element={<ClientOffers />} />
+                    <Route path="/client/profile" element={<ClientProfile />} />
                   </Route>
                 </Route>
                 
