@@ -1,14 +1,14 @@
 
 import { NavLink } from "react-router-dom";
 import {
-  BarChart3,
+  LayoutDashboard,
   CheckSquare,
   MessageSquare,
-  Video,
   FileText,
+  Video,
   Tag,
-  LogOut,
   User,
+  LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -23,7 +23,7 @@ export function ClientSidebar() {
   const menuItems = [
     {
       title: "Dashboard",
-      icon: BarChart3,
+      icon: LayoutDashboard,
       path: "/client/dashboard",
     },
     {
@@ -32,7 +32,7 @@ export function ClientSidebar() {
       path: "/client/tasks",
     },
     {
-      title: "Chat Support",
+      title: "Support Chat",
       icon: MessageSquare,
       path: "/client/chat",
     },
@@ -42,17 +42,17 @@ export function ClientSidebar() {
       path: "/client/resources",
     },
     {
-      title: "Videos",
+      title: "Training Videos",
       icon: Video,
       path: "/client/videos",
     },
     {
-      title: "Offers",
+      title: "Special Offers",
       icon: Tag,
       path: "/client/offers",
     },
     {
-      title: "Profile",
+      title: "My Profile",
       icon: User,
       path: "/client/profile",
     },
@@ -62,16 +62,16 @@ export function ClientSidebar() {
     <aside
       id="client-sidebar"
       className={cn(
-        "bg-sidebar fixed inset-y-0 left-0 z-20 w-64 transform border-r transition-transform duration-300 ease-in-out",
+        "bg-slate-50 dark:bg-slate-900 fixed inset-y-0 left-0 z-20 w-64 transform border-r transition-transform duration-300 ease-in-out",
         isMobile ? "-translate-x-full" : "translate-x-0",
         "lg:translate-x-0 lg:static lg:w-64"
       )}
     >
       <div className="flex h-full flex-col">
         <div className="flex h-16 items-center border-b px-6">
-          <h2 className="text-lg font-semibold text-sidebar-foreground">
+          <h2 className="text-lg font-semibold">
             {user?.company || "Client"} 
-            <span className="text-primary">.</span>
+            <span className="text-primary">Portal</span>
           </h2>
         </div>
         <div className="flex-1 overflow-auto py-4 px-3">
@@ -84,8 +84,8 @@ export function ClientSidebar() {
                   cn(
                     "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium",
                     isActive
-                      ? "bg-sidebar-primary text-sidebar-primary-foreground"
-                      : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                      ? "bg-primary text-primary-foreground"
+                      : "text-foreground hover:bg-muted hover:text-foreground"
                   )
                 }
               >
@@ -101,8 +101,8 @@ export function ClientSidebar() {
             <Separator className="my-2" />
             <Button
               variant="ghost"
-              className="w-full justify-start text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
-              onClick={logout}
+              className="w-full justify-start"
+              onClick={() => logout()}
             >
               <LogOut className="mr-3 h-5 w-5" />
               Logout
@@ -112,4 +112,4 @@ export function ClientSidebar() {
       </div>
     </aside>
   );
-};
+}

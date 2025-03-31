@@ -3,18 +3,28 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/contexts/auth-context";
+import { useClientAuth } from "@/contexts/client-auth-context";
 
 const Index = () => {
   const navigate = useNavigate();
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated: isAdminAuthenticated, isLoading: isAdminLoading } = useAuth();
+  const { isAuthenticated: isClientAuthenticated, isLoading: isClientLoading } = useClientAuth();
   
   useEffect(() => {
-    // Only redirect if auth state has been determined
-    if (!isLoading) {
-      // Redirect to dashboard if authenticated, otherwise to login
-      navigate(isAuthenticated ? '/dashboard' : '/login', { replace: true });
+    // Only redirect if both auth states have been determined
+    if (!isAdminLoading && !isClientLoading) {
+      if (isAdminAuthenticated) {
+        // Admin is authenticated, go to admin dashboard
+        navigate('/dashboard', { replace: true });
+      } else if (isClientAuthenticated) {
+        // Client is authenticated, go to client dashboard 
+        navigate('/client/dashboard', { replace: true });
+      } else {
+        // No one is authenticated, go to admin login
+        navigate('/login', { replace: true });
+      }
     }
-  }, [navigate, isAuthenticated, isLoading]);
+  }, [navigate, isAdminAuthenticated, isClientAuthenticated, isAdminLoading, isClientLoading]);
 
   // Display a loading skeleton while redirecting
   return (

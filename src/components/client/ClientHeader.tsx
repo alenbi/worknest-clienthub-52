@@ -1,26 +1,22 @@
-
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Bell, MessageSquare, LogOut, Menu, User } from "lucide-react";
+import { Bell, MessageSquare, User, Menu, LogOut } from "lucide-react";
 import { useClientAuth } from "@/contexts/client-auth-context";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { ClientThemeToggle } from "./ClientThemeToggle";
+import { useNavigate } from "react-router-dom";
 
 export function ClientHeader() {
   const { user, logout } = useClientAuth();
   const isMobile = useIsMobile();
-  const [sidebarOpen, setSidebarOpen] = useState(!isMobile);
-
-  useEffect(() => {
-    setSidebarOpen(!isMobile);
-  }, [isMobile]);
+  const navigate = useNavigate();
+  const [unreadMessages, setUnreadMessages] = useState(0);
 
   const toggleSidebar = () => {
     const sidebar = document.getElementById("client-sidebar");
     sidebar?.classList.toggle("-translate-x-full");
-    setSidebarOpen(!sidebarOpen);
   };
 
   const getInitials = (name: string = "") => {
@@ -42,16 +38,30 @@ export function ClientHeader() {
         <Menu className="h-5 w-5" />
         <span className="sr-only">Toggle menu</span>
       </Button>
+      
+      <div className="hidden md:block">
+        <h1 className="text-xl font-semibold">Client Portal</h1>
+      </div>
+      
       <div className="ml-auto flex items-center space-x-2">
         <ClientThemeToggle />
-        <Button variant="ghost" size="icon">
-          <Bell className="h-5 w-5" />
-          <span className="sr-only">Notifications</span>
-        </Button>
-        <Button variant="ghost" size="icon">
-          <MessageSquare className="h-5 w-5" />
+        
+        <Button 
+          variant="ghost" 
+          size="icon"
+          onClick={() => navigate("/client/chat")}
+        >
+          <div className="relative">
+            <MessageSquare className="h-5 w-5" />
+            {unreadMessages > 0 && (
+              <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] text-destructive-foreground">
+                {unreadMessages}
+              </span>
+            )}
+          </div>
           <span className="sr-only">Messages</span>
         </Button>
+        
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon" className="rounded-full">
@@ -65,7 +75,7 @@ export function ClientHeader() {
           <DropdownMenuContent align="end">
             <DropdownMenuLabel>My Account</DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
+            <DropdownMenuItem onClick={() => navigate("/client/profile")}>
               <User className="mr-2 h-4 w-4" />
               Profile
             </DropdownMenuItem>

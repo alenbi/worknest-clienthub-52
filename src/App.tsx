@@ -59,7 +59,10 @@ const App = () => (
               <Toaster />
               <Sonner />
               <Routes>
+                {/* Initial route - redirects to appropriate dashboard */}
                 <Route path="/" element={<Index />} />
+                
+                {/* Auth routes */}
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
                 <Route path="/client/login" element={<ClientLogin />} />

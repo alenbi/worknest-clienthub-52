@@ -41,15 +41,10 @@ const ClientLogin = () => {
     }
     
     try {
-      console.log("Attempting client login with:", { email });
       setError("");
       setIsSubmitting(true);
       await login(email, password);
-      toast.success("Successfully signed in!");
-      
-      // Force navigation here in addition to the useEffect
-      console.log("Manually navigating to client dashboard after successful login");
-      navigate("/client/dashboard", { replace: true });
+      // Navigation is handled by the useEffect above
     } catch (error: any) {
       console.error("Client login error:", error);
       setError(error?.message || "Failed to sign in");
@@ -63,9 +58,9 @@ const ClientLogin = () => {
     <div className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
       <Card className="mx-auto w-full max-w-md">
         <CardHeader className="space-y-1 text-center">
-          <CardTitle className="text-2xl font-bold">Client Portal Login</CardTitle>
+          <CardTitle className="text-2xl font-bold">Client Portal</CardTitle>
           <CardDescription>
-            Sign in to your client portal to view tasks and communicate with support
+            Sign in to access your client dashboard
           </CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
@@ -144,9 +139,9 @@ const ClientLogin = () => {
             </Button>
             <div className="text-center text-sm">
               Need help accessing your account?{" "}
-              <Link to="/contact" className="font-medium text-primary">
+              <a href="mailto:support@example.com" className="font-medium text-primary">
                 Contact support
-              </Link>
+              </a>
             </div>
           </CardFooter>
         </form>
