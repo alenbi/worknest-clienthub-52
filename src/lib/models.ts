@@ -38,3 +38,13 @@ export interface Offer {
   code?: string;
   created_at: Date | string;
 }
+
+// Client creation/update form types
+export interface ClientFormData {
+  name: string;
+  email: string;
+  phone: string;
+  company: string;
+  domain?: string;
+  password?: string;
+}

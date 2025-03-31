@@ -1,7 +1,8 @@
 import { createContext, useContext, useState, useEffect } from "react";
 import { toast } from "sonner";
-import { supabase, Resource, Video, Offer, ClientMessage } from "@/integrations/supabase/client";
+import { supabase, ClientMessage } from "@/integrations/supabase/client";
 import { useAuth } from "./auth-context";
+import { Resource, Video, Offer } from "@/lib/models";
 
 // Data models
 export interface Client {
@@ -34,8 +35,9 @@ export type { Resource, Video, Offer, ClientMessage };
 interface DataContextType {
   clients: Client[];
   tasks: Task[];
-  addClient: (client: Omit<Client, "id" | "createdAt">) => Promise<Client>;
+  addClient: (client: Omit<Client, "id" | "createdAt"> & { password?: string }) => Promise<{ client: Client; password: string }>;
   updateClient: (id: string, updates: Partial<Client>) => Promise<Client>;
+  updateClientPassword: (clientId: string, newPassword: string) => Promise<boolean>;
   deleteClient: (id: string) => Promise<boolean>;
   addTask: (task: Omit<Task, "id" | "createdAt" | "completedAt">) => Promise<Task>;
   updateTask: (id: string, updates: Partial<Task>) => Promise<Task>;
@@ -149,13 +151,13 @@ export const DataProvider = ({ children }: { children: React.ReactNode }) => {
     fetchData();
   }, [isAuthenticated]);
 
-  const addClient = async (clientData: Omit<Client, "id" | "createdAt">): Promise<Client> => {
+  const addClient = async (clientData: Omit<Client, "id" | "createdAt"> & { password?: string }): Promise<{ client: Client; password: string }> => {
     try {
+      // Use provided password or generate a random one
+      const password = clientData.password || Math.random().toString(36).slice(-10);
+      
       // Create user account for client
       let userId = null;
-      
-      // Generate a random password
-      const password = Math.random().toString(36).slice(-10);
       
       // Create user in Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -198,8 +200,8 @@ export const DataProvider = ({ children }: { children: React.ReactNode }) => {
         // Automatically create predefined tasks for this client
         await createPredefinedTasks(newClient.id);
         
-        toast.success(`Client added and account created with email: ${clientData.email}`);
-        return newClient;
+        toast.success(`Client added with email: ${clientData.email}`);
+        return { client: newClient, password };
       } else {
         throw new Error("Failed to create user account");
       }
@@ -210,7 +212,6 @@ export const DataProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
-  // Function to create predefined tasks for a client
   const createPredefinedTasks = async (clientId: string) => {
     try {
       // Create predefined tasks with medium priority and 20 days deadline
@@ -280,6 +281,32 @@ export const DataProvider = ({ children }: { children: React.ReactNode }) => {
       console.error("Error updating client:", error);
       toast.error("Failed to update client");
       throw error;
+    }
+  };
+
+  const updateClientPassword = async (clientId: string, newPassword: string): Promise<boolean> => {
+    try {
+      // Find the client to get the user_id
+      const client = clients.find(c => c.id === clientId);
+      if (!client || !client.user_id) {
+        toast.error("Client not found or has no associated user account");
+        return false;
+      }
+      
+      // Update the user's password in Supabase Auth
+      const { error } = await supabase.auth.admin.updateUserById(
+        client.user_id,
+        { password: newPassword }
+      );
+      
+      if (error) throw error;
+      
+      toast.success("Client password updated successfully");
+      return true;
+    } catch (error) {
+      console.error("Error updating client password:", error);
+      toast.error("Failed to update client password");
+      return false;
     }
   };
 
@@ -438,6 +465,7 @@ export const DataProvider = ({ children }: { children: React.ReactNode }) => {
         tasks,
         addClient,
         updateClient,
+        updateClientPassword,
         deleteClient,
         addTask,
         updateTask,
