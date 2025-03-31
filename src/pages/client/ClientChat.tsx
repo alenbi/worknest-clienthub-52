@@ -72,7 +72,7 @@ const ClientChat = () => {
         setIsLoading(true);
         console.log("Fetching messages for client:", clientId);
         
-        // Fixed query to avoid ambiguous user_id reference by specifying table name
+        // Modified query to avoid ambiguous column reference
         const { data, error } = await supabase
           .from("client_messages")
           .select(`
@@ -85,7 +85,7 @@ const ClientChat = () => {
             created_at,
             attachment_url,
             attachment_type,
-            profiles:sender_id(full_name)
+            profiles(full_name)
           `)
           .eq("client_id", clientId)
           .order("created_at", { ascending: true });

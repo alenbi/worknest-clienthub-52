@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -57,7 +56,7 @@ export function AdminChatList() {
             throw messagesError;
           }
           
-          // Count unread messages from client - ensure we avoid ambiguous column references
+          // Count unread messages from client
           const { count, error: countError } = await supabase
             .from("client_messages")
             .select("*", { count: "exact", head: true })
@@ -124,7 +123,6 @@ export function AdminChatList() {
     };
   }, []);
 
-  // Helper functions
   const getInitials = (name: string) => {
     return name
       .split(" ")
