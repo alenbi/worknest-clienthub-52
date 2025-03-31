@@ -213,20 +213,10 @@ export async function uploadChatFile(
  */
 export async function fetchClientMessages(clientId: string): Promise<ChatMessage[]> {
   try {
-    // Fix the ambiguous user_id issue by not selecting profiles directly
+    // Fetch raw messages without joining to profiles
     const { data, error } = await supabase
       .from("client_messages")
-      .select(`
-        id,
-        message,
-        sender_id,
-        client_id,
-        is_from_client,
-        is_read,
-        created_at,
-        attachment_url,
-        attachment_type
-      `)
+      .select("*")
       .eq("client_id", clientId)
       .order("created_at", { ascending: true });
     
@@ -235,29 +225,32 @@ export async function fetchClientMessages(clientId: string): Promise<ChatMessage
       throw error;
     }
     
-    // Now fetch sender names separately to avoid the ambiguous column issue
-    const messagesWithNames = await Promise.all(
-      data.map(async (msg: any) => {
-        try {
-          const { data: profileData } = await supabase
-            .from("profiles")
-            .select("full_name")
-            .eq("id", msg.sender_id)
-            .maybeSingle();
-          
-          return {
-            ...msg,
-            sender_name: profileData?.full_name || "Unknown"
-          };
-        } catch (error) {
-          console.error("Error fetching sender name:", error);
-          return {
-            ...msg,
-            sender_name: "Unknown"
-          };
-        }
-      })
-    );
+    // Get unique sender IDs
+    const senderIds = [...new Set(data.map(msg => msg.sender_id))];
+    
+    // Fetch all profile names in one batch
+    const { data: profiles, error: profilesError } = await supabase
+      .from("profiles")
+      .select("id, full_name")
+      .in("id", senderIds);
+    
+    if (profilesError) {
+      console.error("Error fetching profiles:", profilesError);
+    }
+    
+    // Create a map of sender_id to full_name
+    const senderNames = new Map();
+    if (profiles) {
+      profiles.forEach(profile => {
+        senderNames.set(profile.id, profile.full_name);
+      });
+    }
+    
+    // Combine message data with sender names
+    const messagesWithNames = data.map(msg => ({
+      ...msg,
+      sender_name: senderNames.get(msg.sender_id) || "Unknown User"
+    }));
     
     return messagesWithNames;
   } catch (error) {
