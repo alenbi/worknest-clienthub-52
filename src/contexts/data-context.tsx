@@ -1,3 +1,4 @@
+
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { v4 as uuidv4 } from 'uuid';
@@ -11,15 +12,21 @@ export interface Client {
   company?: string;
   domain?: string;
   user_id?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Task {
   id: string;
   title: string;
   description?: string;
-  status: 'open' | 'in progress' | 'done';
+  status: 'open' | 'in progress' | 'done' | 'pending' | 'completed';
   client_id: string;
   created_at?: string;
+  completed_at?: string;
+  updated_at?: string;
+  priority?: 'low' | 'medium' | 'high';
+  due_date?: string | Date;
 }
 
 export interface Resource {
@@ -27,7 +34,7 @@ export interface Resource {
   title: string;
   description?: string;
   url: string;
-  type: 'document' | 'video' | 'link';
+  type: 'document' | 'video' | 'link' | string;
   created_at?: string;
 }
 
@@ -36,6 +43,7 @@ export interface Video {
   title: string;
   description?: string;
   url: string;
+  youtube_id?: string;
   created_at?: string;
 }
 
@@ -43,9 +51,12 @@ export interface Offer {
   id: string;
   title: string;
   description?: string;
-  price: number;
+  price?: number;
   discount?: number;
-  active: boolean;
+  active?: boolean;
+  code?: string;
+  discount_percentage?: number;
+  valid_until?: string;
   created_at?: string;
 }
 
@@ -85,6 +96,7 @@ interface Data {
   createUpdate: (data: { title: string; content: string; image_url?: string; is_published?: boolean }) => Promise<Update>;
   updateUpdate: (id: string, data: { title?: string; content?: string; image_url?: string; is_published?: boolean; created_at?: string }) => Promise<Update | void>;
   deleteUpdate: (id: string) => Promise<void>;
+  isLoading?: boolean;
 }
 
 // Define context
@@ -96,11 +108,11 @@ interface DataProviderProps {
 }
 
 interface UpdateData {
-    title: string;
-    content: string;
-    image_url?: string;
-    is_published?: boolean;
-    created_at?: string;
+  title: string;
+  content: string;
+  image_url?: string;
+  is_published?: boolean;
+  created_at?: string;
 }
 
 // Fix the Update interface createUpdate method parameter
@@ -111,9 +123,11 @@ export const updateDataContext = (data: UpdateData | null = null): Data => {
   const [videos, setVideos] = useState<Video[]>([]);
   const [offers, setOffers] = useState<Offer[]>([]);
   const [updates, setUpdates] = useState<Update[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   const refreshData = useCallback(async () => {
     try {
+      setIsLoading(true);
       const { data: clientsData, error: clientsError } = await supabase
         .from("clients")
         .select("*")
@@ -163,6 +177,8 @@ export const updateDataContext = (data: UpdateData | null = null): Data => {
       setUpdates(updatesData || []);
     } catch (error) {
       console.error("Error fetching data:", error);
+    } finally {
+      setIsLoading(false);
     }
   }, []);
 
@@ -200,6 +216,7 @@ export const updateDataContext = (data: UpdateData | null = null): Data => {
       setClients((prevClients) =>
         prevClients.map((client) => (client.id === id ? updatedClient : client))
       );
+      return updatedClient;
     } catch (error) {
       console.error("Error updating client:", error);
       throw error;
@@ -219,15 +236,25 @@ export const updateDataContext = (data: UpdateData | null = null): Data => {
 
   const createTask = async (task: Omit<Task, 'id'>): Promise<Task> => {
     try {
+      const taskToInsert = {
+        title: task.title,
+        description: task.description,
+        status: task.status || 'pending',
+        client_id: task.client_id,
+        priority: task.priority || 'medium',
+        due_date: task.due_date,
+        created_at: new Date().toISOString()
+      };
+
       const { data: newTask, error } = await supabase
         .from("tasks")
-        .insert([{ ...task, id: uuidv4(), created_at: new Date().toISOString() }])
+        .insert([{ ...taskToInsert, id: uuidv4() }])
         .select()
         .single();
 
       if (error) throw error;
-      setTasks((prevTasks) => [...prevTasks, newTask]);
-      return newTask;
+      setTasks((prevTasks) => [...prevTasks, newTask as Task]);
+      return newTask as Task;
     } catch (error) {
       console.error("Error creating task:", error);
       throw error;
@@ -245,8 +272,9 @@ export const updateDataContext = (data: UpdateData | null = null): Data => {
 
       if (error) throw error;
       setTasks((prevTasks) =>
-        prevTasks.map((task) => (task.id === id ? updatedTask : task))
+        prevTasks.map((task) => (task.id === id ? updatedTask as Task : task))
       );
+      return updatedTask as Task;
     } catch (error) {
       console.error("Error updating task:", error);
       throw error;
@@ -273,8 +301,8 @@ export const updateDataContext = (data: UpdateData | null = null): Data => {
         .single();
 
       if (error) throw error;
-      setResources((prevResources) => [...prevResources, newResource]);
-      return newResource;
+      setResources((prevResources) => [...prevResources, newResource as Resource]);
+      return newResource as Resource;
     } catch (error) {
       console.error("Error creating resource:", error);
       throw error;
@@ -292,8 +320,9 @@ export const updateDataContext = (data: UpdateData | null = null): Data => {
 
       if (error) throw error;
       setResources((prevResources) =>
-        prevResources.map((resource) => (resource.id === id ? updatedResource : resource))
+        prevResources.map((resource) => (resource.id === id ? updatedResource as Resource : resource))
       );
+      return updatedResource as Resource;
     } catch (error) {
       console.error("Error updating resource:", error);
       throw error;
@@ -313,15 +342,23 @@ export const updateDataContext = (data: UpdateData | null = null): Data => {
 
   const createVideo = async (video: Omit<Video, 'id'>): Promise<Video> => {
     try {
+      const videoToInsert = {
+        title: video.title,
+        description: video.description,
+        url: video.url,
+        youtube_id: video.youtube_id,
+        created_at: new Date().toISOString()
+      };
+
       const { data: newVideo, error } = await supabase
         .from("videos")
-        .insert([{ ...video, id: uuidv4(), created_at: new Date().toISOString() }])
+        .insert([{ ...videoToInsert, id: uuidv4() }])
         .select()
         .single();
 
       if (error) throw error;
-      setVideos((prevVideos) => [...prevVideos, newVideo]);
-      return newVideo;
+      setVideos((prevVideos) => [...prevVideos, newVideo as Video]);
+      return newVideo as Video;
     } catch (error) {
       console.error("Error creating video:", error);
       throw error;
@@ -339,8 +376,9 @@ export const updateDataContext = (data: UpdateData | null = null): Data => {
 
       if (error) throw error;
       setVideos((prevVideos) =>
-        prevVideos.map((video) => (video.id === id ? updatedVideo : video))
+        prevVideos.map((video) => (video.id === id ? updatedVideo as Video : video))
       );
+      return updatedVideo as Video;
     } catch (error) {
       console.error("Error updating video:", error);
       throw error;
@@ -360,15 +398,27 @@ export const updateDataContext = (data: UpdateData | null = null): Data => {
 
   const createOffer = async (offer: Omit<Offer, 'id'>): Promise<Offer> => {
     try {
+      const offerToInsert = {
+        title: offer.title,
+        description: offer.description,
+        price: offer.price,
+        discount: offer.discount,
+        active: offer.active !== undefined ? offer.active : true,
+        code: offer.code,
+        discount_percentage: offer.discount_percentage,
+        valid_until: offer.valid_until,
+        created_at: new Date().toISOString()
+      };
+
       const { data: newOffer, error } = await supabase
         .from("offers")
-        .insert([{ ...offer, id: uuidv4(), created_at: new Date().toISOString() }])
+        .insert([{ ...offerToInsert, id: uuidv4() }])
         .select()
         .single();
 
       if (error) throw error;
-      setOffers((prevOffers) => [...prevOffers, newOffer]);
-      return newOffer;
+      setOffers((prevOffers) => [...prevOffers, newOffer as Offer]);
+      return newOffer as Offer;
     } catch (error) {
       console.error("Error creating offer:", error);
       throw error;
@@ -386,8 +436,9 @@ export const updateDataContext = (data: UpdateData | null = null): Data => {
 
       if (error) throw error;
       setOffers((prevOffers) =>
-        prevOffers.map((offer) => (offer.id === id ? updatedOffer : offer))
+        prevOffers.map((offer) => (offer.id === id ? updatedOffer as Offer : offer))
       );
+      return updatedOffer as Offer;
     } catch (error) {
       console.error("Error updating offer:", error);
       throw error;
@@ -421,7 +472,8 @@ export const updateDataContext = (data: UpdateData | null = null): Data => {
         .single();
 
       if (error) throw error;
-      return update;
+      setUpdates((prevUpdates) => [...prevUpdates, update as Update]);
+      return update as Update;
     } catch (error) {
       console.error("Error creating update:", error);
       throw error;
@@ -447,7 +499,13 @@ export const updateDataContext = (data: UpdateData | null = null): Data => {
         .single();
 
       if (error) throw error;
-      return update;
+      
+      // Update local state
+      setUpdates(prevUpdates => 
+        prevUpdates.map(item => item.id === id ? update as Update : item)
+      );
+      
+      return update as Update;
     } catch (error) {
       console.error("Error updating update:", error);
       throw error;
@@ -491,6 +549,7 @@ export const updateDataContext = (data: UpdateData | null = null): Data => {
     createUpdate,
     updateUpdate,
     deleteUpdate,
+    isLoading
   };
 };
 

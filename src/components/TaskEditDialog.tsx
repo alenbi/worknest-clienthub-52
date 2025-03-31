@@ -63,10 +63,10 @@ export function TaskEditDialog({
       setEditedTask({
         title: task.title,
         description: task.description,
-        clientId: task.clientId,
+        client_id: task.client_id,
         status: task.status,
-        priority: task.priority,
-        dueDate: task.dueDate,
+        priority: task.priority || 'medium',
+        due_date: task.due_date,
       });
     }
   }, [task]);
@@ -84,7 +84,7 @@ export function TaskEditDialog({
 
   const handleDateChange = (date: Date | undefined) => {
     if (date) {
-      setEditedTask((prev) => ({ ...prev, dueDate: date }));
+      setEditedTask((prev) => ({ ...prev, due_date: date.toISOString() }));
     }
   };
 
@@ -128,14 +128,14 @@ export function TaskEditDialog({
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="clientId">Client</Label>
+            <Label htmlFor="client_id">Client</Label>
             <Select
-              value={editedTask.clientId}
+              value={editedTask.client_id}
               onValueChange={(value) =>
-                handleSelectChange("clientId", value)
+                handleSelectChange("client_id", value)
               }
             >
-              <SelectTrigger id="clientId">
+              <SelectTrigger id="client_id">
                 <SelectValue placeholder="Select client" />
               </SelectTrigger>
               <SelectContent>
@@ -190,18 +190,18 @@ export function TaskEditDialog({
             </div>
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="dueDate">Due Date</Label>
+            <Label htmlFor="due_date">Due Date</Label>
             <Popover>
               <PopoverTrigger asChild>
                 <Button
                   variant={"outline"}
                   className={cn(
                     "w-full justify-start text-left font-normal",
-                    !editedTask.dueDate && "text-muted-foreground"
+                    !editedTask.due_date && "text-muted-foreground"
                   )}
                 >
-                  {editedTask.dueDate ? (
-                    format(new Date(editedTask.dueDate), "PPP")
+                  {editedTask.due_date ? (
+                    format(new Date(editedTask.due_date), "PPP")
                   ) : (
                     <span>Pick a date</span>
                   )}
@@ -210,7 +210,7 @@ export function TaskEditDialog({
               <PopoverContent className="w-auto p-0" align="start">
                 <Calendar
                   mode="single"
-                  selected={editedTask.dueDate ? new Date(editedTask.dueDate) : undefined}
+                  selected={editedTask.due_date ? new Date(editedTask.due_date) : undefined}
                   onSelect={handleDateChange}
                   initialFocus
                 />
