@@ -12,7 +12,7 @@ import { toast } from "sonner";
 
 const Login = () => {
   const { login, isAuthenticated, isLoading } = useAuth();
-  const { isAuthenticated: isClientAuthenticated } = useClientAuth();
+  const { isAuthenticated: isClientAuthenticated, logout: clientLogout } = useClientAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -22,26 +22,23 @@ const Login = () => {
 
   // Effect to handle redirect after authentication changes
   useEffect(() => {
+    // If authenticated as client, log them out of client auth
+    if (isClientAuthenticated) {
+      clientLogout();
+      console.log("Logging out of client account to avoid conflicts");
+    }
+    
+    // Only redirect if admin auth is confirmed
     if (isAuthenticated && !isLoading) {
       console.log("User is authenticated as admin, redirecting to dashboard");
       navigate("/dashboard", { replace: true });
-    } else if (isClientAuthenticated && !isLoading) {
-      console.log("User is authenticated as client, redirecting to client dashboard");
-      toast.error("Please use the client login page");
-      navigate("/client/dashboard", { replace: true });
     }
-  }, [isAuthenticated, isClientAuthenticated, isLoading, navigate]);
+  }, [isAuthenticated, isClientAuthenticated, isLoading, navigate, clientLogout]);
 
   // Regular redirect check (still useful for initial load)
   if (isAuthenticated && !isLoading) {
     console.log("Rendering redirect to dashboard");
     return <Navigate to="/dashboard" />;
-  }
-  
-  if (isClientAuthenticated && !isLoading) {
-    console.log("Rendering redirect to client dashboard");
-    toast.error("Please use the client login page");
-    return <Navigate to="/client/dashboard" />;
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -59,8 +56,10 @@ const Login = () => {
       await login(email, password);
       
       // Force navigation here in addition to the useEffect
-      console.log("Manually navigating to dashboard after successful login");
-      navigate("/dashboard", { replace: true });
+      if (isAuthenticated) {
+        console.log("Manually navigating to dashboard after successful login");
+        navigate("/dashboard", { replace: true });
+      }
     } catch (error: any) {
       console.error("Login error:", error);
       setError(error?.message || "Failed to sign in");

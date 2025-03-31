@@ -22,7 +22,7 @@ const ProtectedRoute = () => {
     }
     
     // If the user is authenticated but is identified as a client, they should be redirected to client pages
-    if (isAuthenticated && isClientAuthenticated) {
+    if (!isAuthenticated && isClientAuthenticated) {
       console.log("User is authenticated as client but accessing admin routes, redirecting to client dashboard");
       toast.error("You don't have permission to access the admin area");
       navigate("/client/dashboard", { replace: true });

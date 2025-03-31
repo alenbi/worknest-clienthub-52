@@ -12,7 +12,7 @@ import { toast } from "sonner";
 
 const ClientLogin = () => {
   const { login, isAuthenticated, isLoading } = useClientAuth();
-  const { isAuthenticated: isAdminAuthenticated } = useAuth();
+  const { isAuthenticated: isAdminAuthenticated, logout: adminLogout } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -22,26 +22,22 @@ const ClientLogin = () => {
 
   // Effect to handle redirect after authentication changes
   useEffect(() => {
+    // If authenticated as admin, log them out of admin auth
+    if (isAdminAuthenticated) {
+      adminLogout();
+      console.log("Logging out of admin account to avoid conflicts");
+    }
+    
     if (isAuthenticated && !isLoading) {
       console.log("Client is authenticated, redirecting to client dashboard");
       navigate("/client/dashboard", { replace: true });
-    } else if (isAdminAuthenticated && !isLoading) {
-      console.log("User is authenticated as admin, redirecting to admin dashboard");
-      toast.error("Please use the admin login page");
-      navigate("/dashboard", { replace: true });
     }
-  }, [isAuthenticated, isAdminAuthenticated, isLoading, navigate]);
+  }, [isAuthenticated, isAdminAuthenticated, isLoading, navigate, adminLogout]);
 
   // Regular redirect check (still useful for initial load)
   if (isAuthenticated && !isLoading) {
     console.log("Rendering redirect to client dashboard");
     return <Navigate to="/client/dashboard" />;
-  }
-  
-  if (isAdminAuthenticated && !isLoading) {
-    console.log("Rendering redirect to admin dashboard");
-    toast.error("Please use the admin login page");
-    return <Navigate to="/dashboard" />;
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -57,6 +53,9 @@ const ClientLogin = () => {
       setIsSubmitting(true);
       await login(email, password);
       // Navigation is handled by the useEffect above
+      if (isAuthenticated) {
+        navigate("/client/dashboard", { replace: true });
+      }
     } catch (error: any) {
       console.error("Client login error:", error);
       setError(error?.message || "Failed to sign in");
