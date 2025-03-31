@@ -218,10 +218,12 @@ export async function uploadChatFile(
  */
 export async function fetchClientMessages(clientId: string): Promise<ChatMessage[]> {
   try {
-    // Get all messages for this client - specify table name to avoid ambiguous column reference
+    console.log("Fetching messages for client:", clientId);
+    
+    // Step 1: Get all messages for this client
     const { data: messages, error } = await supabase
       .from("client_messages")
-      .select("*")
+      .select("id, message, sender_id, client_id, is_from_client, created_at, is_read, attachment_url, attachment_type")
       .eq("client_id", clientId)
       .order("created_at", { ascending: true });
     
@@ -234,21 +236,28 @@ export async function fetchClientMessages(clientId: string): Promise<ChatMessage
       return [];
     }
     
-    // Fetch profile names separately and merge them with messages
+    // Step 2: Extract unique sender IDs
     const senderIds = [...new Set(messages.map(msg => msg.sender_id))];
-    const { data: profiles } = await supabase
+    
+    // Step 3: Fetch profile data for all senders in a separate query
+    const { data: profiles, error: profilesError } = await supabase
       .from("profiles")
       .select("id, full_name")
       .in("id", senderIds);
     
-    // Create a map of sender IDs to names for quick lookup
-    const senderNameMap = (profiles || []).reduce((map, profile) => {
-      map[profile.id] = profile.full_name;
-      return map;
-    }, {} as Record<string, string>);
+    if (profilesError) {
+      console.error("Error fetching profiles:", profilesError);
+      // Continue without profile names instead of failing
+    }
     
-    // Format the messages to match the ChatMessage interface
-    const formattedMessages = messages.map(msg => ({
+    // Step 4: Create a map of sender ID to name
+    const senderNameMap: {[key: string]: string} = {};
+    (profiles || []).forEach(profile => {
+      senderNameMap[profile.id] = profile.full_name;
+    });
+    
+    // Step 5: Format messages with sender names
+    return messages.map(msg => ({
       id: msg.id,
       message: msg.message,
       sender_id: msg.sender_id,
@@ -261,7 +270,6 @@ export async function fetchClientMessages(clientId: string): Promise<ChatMessage
       attachment_type: msg.attachment_type
     }));
     
-    return formattedMessages;
   } catch (error) {
     console.error("Error in fetchClientMessages:", error);
     throw error;
