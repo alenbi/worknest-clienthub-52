@@ -1,3 +1,4 @@
+
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -62,8 +63,8 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider defaultTheme="light" storageKey="digitalshopi-theme">
       <AuthProvider>
-        <ClientAuthProvider>
-          <DataProvider>
+        <DataProvider>
+          <ClientAuthProvider>
             <TooltipProvider>
               <Toaster />
               <Sonner />
@@ -119,8 +120,8 @@ const App = () => (
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </TooltipProvider>
-          </DataProvider>
-        </ClientAuthProvider>
+          </ClientAuthProvider>
+        </DataProvider>
       </AuthProvider>
     </ThemeProvider>
   </QueryClientProvider>

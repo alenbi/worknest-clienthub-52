@@ -2,67 +2,11 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Session } from '@supabase/supabase-js';
 import { Resource, Video, Offer, Client, Task, TaskStatus, TaskPriority, Update } from '@/lib/models';
+import { useAuth } from '@/contexts/auth-context'; // Import from auth-context directly
 
 // Re-export the types so they can be imported from data-context
 export type { Resource, Video, Offer, Client, Task, Update };
 export { TaskStatus, TaskPriority };
-
-interface AuthContextType {
-  session: Session | null;
-  user: Session['user'] | null;
-  signIn: (email: string) => Promise<void>;
-  signOut: () => Promise<void>;
-}
-
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
-
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
-  const [user, setUser] = useState<Session['user'] | null>(null);
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user || null);
-    });
-
-    supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setUser(session?.user || null);
-    });
-  }, []);
-
-  const signIn = async (email: string) => {
-    try {
-      await supabase.auth.signInWithOtp({ email });
-      alert('Check your email for the magic link to sign in.');
-    } catch (error) {
-      console.error('Error signing in:', error);
-    }
-  };
-
-  const signOut = async () => {
-    try {
-      await supabase.auth.signOut();
-    } catch (error) {
-      console.error('Error signing out:', error);
-    }
-  };
-
-  return (
-    <AuthContext.Provider value={{ session, user, signIn, signOut }}>
-      {children}
-    </AuthContext.Provider>
-  );
-}
-
-export function useAuth() {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-}
 
 interface DataContextType {
   session: Session | null;
@@ -115,7 +59,7 @@ interface DataContextType {
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
-  const { session, user } = useAuth();
+  const { session, user } = useAuth(); // Use the useAuth hook from auth-context
   const [isAdmin, setIsAdmin] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   
