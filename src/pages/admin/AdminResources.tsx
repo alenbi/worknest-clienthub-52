@@ -71,13 +71,26 @@ const AdminResources = () => {
       let resourceUrl = url;
       
       if (type === "file" && file) {
+        const { data: buckets } = await supabase.storage.listBuckets();
+        const resourceBucket = buckets?.find(b => b.name === 'resources');
+        
+        if (!resourceBucket) {
+          const { error: bucketError } = await supabase.storage
+            .createBucket('resources', { public: true });
+          
+          if (bucketError) throw bucketError;
+        }
+        
         const fileExt = file.name.split('.').pop();
-        const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
+        const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
         const filePath = `resources/${fileName}`;
         
         const { error: uploadError } = await supabase.storage
           .from('resources')
-          .upload(filePath, file);
+          .upload(filePath, file, {
+            upsert: true,
+            cacheControl: '3600'
+          });
         
         if (uploadError) throw uploadError;
         

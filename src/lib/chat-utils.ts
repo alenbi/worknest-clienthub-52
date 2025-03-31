@@ -148,6 +148,42 @@ export async function sendMessage({
       throw error;
     }
     
+    // Get user details for sending notification
+    const { data: senderData } = await supabase
+      .from("profiles")
+      .select("full_name")
+      .eq("id", senderId)
+      .single();
+      
+    const senderName = senderData?.full_name || (isFromClient ? "Client" : "Admin");
+    
+    // Get client details for notification
+    const { data: clientData } = await supabase
+      .from("clients")
+      .select("name, email")
+      .eq("id", clientId)
+      .single();
+    
+    if (clientData) {
+      // Send email notification
+      try {
+        await supabase.functions.invoke('send-message-notification', {
+          body: {
+            clientId,
+            clientName: clientData.name,
+            clientEmail: clientData.email,
+            senderName,
+            message: finalMessage.substring(0, 100) + (finalMessage.length > 100 ? '...' : ''),
+            isFromClient
+          }
+        });
+        console.log("Message notification sent");
+      } catch (notificationError) {
+        // Don't block the message if notification fails
+        console.error("Failed to send message notification:", notificationError);
+      }
+    }
+    
     return data;
   } catch (error) {
     console.error("Error sending message:", error);
@@ -164,13 +200,13 @@ export async function uploadChatFile(
   isAdmin: boolean
 ): Promise<{ url: string; type: string }> {
   try {
-    // Check if the bucket exists and create if not
+    // First check if the bucket exists
     const { data: buckets } = await supabase.storage.listBuckets();
-    const chatBucket = buckets?.find(bucket => bucket.name === 'chat-attachments');
+    const chatBucket = buckets?.find(b => b.name === 'chat-attachments');
     
+    // Create the bucket if it doesn't exist
     if (!chatBucket) {
-      console.log("Creating chat-attachments bucket");
-      const { error: bucketError } = await supabase.storage.createBucket('chat-attachments', {
+      const { error: bucketError } = await supabase.storage.createBucket('chat-attachments', { 
         public: true
       });
       
@@ -180,16 +216,19 @@ export async function uploadChatFile(
       }
     }
     
-    // Generate unique file name and path
+    // Generate a unique file path
     const fileExt = file.name.split('.').pop();
-    const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
+    const fileName = `${Math.random().toString(36).substring(2)}_${Date.now()}.${fileExt}`;
     const prefix = isAdmin ? 'admin-attachments' : 'client-attachments';
     const filePath = `${prefix}/${clientId}/${fileName}`;
     
     // Upload the file
     const { error: uploadError } = await supabase.storage
       .from('chat-attachments')
-      .upload(filePath, file);
+      .upload(filePath, file, {
+        upsert: true,
+        cacheControl: '3600'
+      });
     
     if (uploadError) {
       console.error("Error uploading file:", uploadError);

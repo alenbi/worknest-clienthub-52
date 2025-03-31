@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useClientAuth } from "@/contexts/client-auth-context";
 import { supabase } from "@/integrations/supabase/client";
@@ -28,7 +27,22 @@ const ClientTasks = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("all");
 
-  // Function to get status badge
+  const getStatusColor = (status: TaskStatus) => {
+    switch (status) {
+      case "open":
+        return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300";
+      case "in progress":
+        return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300";
+      case "pending":
+        return "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300";
+      case "completed":
+      case "done":
+        return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300";
+      default:
+        return "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300";
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'completed':
@@ -61,7 +75,6 @@ const ClientTasks = () => {
     }
   };
 
-  // Get priority badge
   const getPriorityBadge = (priority: string) => {
     switch (priority) {
       case 'high':
@@ -75,7 +88,6 @@ const ClientTasks = () => {
     }
   };
 
-  // Get client ID
   useEffect(() => {
     const getClientId = async () => {
       if (!user) return;
@@ -101,7 +113,6 @@ const ClientTasks = () => {
     getClientId();
   }, [user]);
 
-  // Fetch tasks
   useEffect(() => {
     const fetchTasks = async () => {
       if (!clientId) return;
@@ -117,9 +128,7 @@ const ClientTasks = () => {
         
         if (error) throw error;
         
-        // Process tasks and check if any are overdue
         const processedTasks = (data || []).map(task => {
-          // If task is not completed and due date is past, mark as overdue
           if (task.status !== "completed" && new Date(task.due_date) < new Date()) {
             return { ...task, status: "overdue" };
           }
@@ -140,7 +149,6 @@ const ClientTasks = () => {
     }
   }, [clientId]);
 
-  // Filter tasks based on active tab
   const filteredTasks = tasks.filter(task => {
     if (activeTab === "all") return true;
     if (activeTab === "completed") return task.status === "completed";

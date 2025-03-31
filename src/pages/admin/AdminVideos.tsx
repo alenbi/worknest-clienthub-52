@@ -1,36 +1,51 @@
-
 import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { PlusIcon, FileText, Link as LinkIcon, Trash2, ExternalLink, Loader2, Video } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { PlusIcon, Video, Trash2, ExternalLink, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import * as z from "zod";
 
-interface Video {
+interface VideoType {
   id: string;
   title: string;
-  description: string;
+  description?: string;
   youtube_id: string;
   created_at: string;
 }
 
+const formSchema = z.object({
+  title: z.string().min(2, {
+    message: "Title must be at least 2 characters.",
+  }),
+  description: z.string().optional(),
+  url: z.string().optional(),
+  youtube_id: z.string().optional(),
+});
+
 const AdminVideos = () => {
-  const [videos, setVideos] = useState<Video[]>([]);
+  const [videos, setVideos] = useState<VideoType[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  
-  // Form state
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [youtubeUrl, setYoutubeUrl] = useState("");
+
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      title: "",
+      description: "",
+      url: "",
+      youtube_id: "",
+    },
+  });
 
   useEffect(() => {
     fetchVideos();
@@ -43,9 +58,9 @@ const AdminVideos = () => {
         .from("videos")
         .select("*")
         .order("created_at", { ascending: false });
-      
+
       if (error) throw error;
-      setVideos(data || []);
+      setVideos(data as VideoType[] || []);
     } catch (error) {
       console.error("Error fetching videos:", error);
       toast.error("Failed to load videos");
@@ -54,47 +69,40 @@ const AdminVideos = () => {
     }
   };
 
-  const extractYoutubeId = (url: string): string | null => {
-    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|&v=)([^#&?]*).*/;
-    const match = url.match(regExp);
-    return (match && match[2].length === 11) ? match[2] : null;
-  };
-
-  const handleAddVideo = async () => {
+  const addVideo = async (values: any) => {
     try {
-      if (!title) {
-        toast.error("Please enter a title");
-        return;
-      }
-
-      if (!youtubeUrl) {
-        toast.error("Please enter a YouTube URL");
-        return;
-      }
-
-      // Extract YouTube ID
-      const youtubeId = extractYoutubeId(youtubeUrl);
-      if (!youtubeId) {
-        toast.error("Invalid YouTube URL");
-        return;
-      }
-
       setIsSubmitting(true);
       
-      // Insert the video
+      // Extract YouTube ID from URL if provided
+      let youtubeId = values.youtube_id;
+      
+      if (values.url && !youtubeId) {
+        const youtubeRegex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
+        const match = values.url.match(youtubeRegex);
+        
+        if (match && match[1]) {
+          youtubeId = match[1];
+        }
+      }
+      
+      if (!youtubeId) {
+        toast.error("Please enter a valid YouTube URL or ID");
+        return;
+      }
+      
       const { error } = await supabase
         .from("videos")
         .insert({
-          title,
-          description,
+          title: values.title,
+          description: values.description || "",
           youtube_id: youtubeId
         });
       
       if (error) throw error;
       
       toast.success("Video added successfully");
-      resetForm();
       setIsAddDialogOpen(false);
+      form.reset();
       fetchVideos();
     } catch (error) {
       console.error("Error adding video:", error);
@@ -104,34 +112,21 @@ const AdminVideos = () => {
     }
   };
 
-  const handleDeleteVideo = async (id: string) => {
+  const deleteVideo = async (id: string) => {
     try {
-      const { error } = await supabase
-        .from("videos")
-        .delete()
-        .eq("id", id);
-      
+      const { error } = await supabase.from("videos").delete().eq("id", id);
       if (error) throw error;
-      
       toast.success("Video deleted successfully");
-      
-      // Update local state
-      setVideos(videos.filter(v => v.id !== id));
+      setVideos(videos.filter((video) => video.id !== id));
     } catch (error) {
       console.error("Error deleting video:", error);
       toast.error("Failed to delete video");
     }
   };
 
-  const resetForm = () => {
-    setTitle("");
-    setDescription("");
-    setYoutubeUrl("");
-  };
-
-  const filteredVideos = videos.filter(video => 
+  const filteredVideos = videos.filter((video) =>
     video.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    video.description.toLowerCase().includes(searchTerm.toLowerCase())
+    (video.description && video.description.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   return (
@@ -157,43 +152,40 @@ const AdminVideos = () => {
             <div className="space-y-4 py-4">
               <div className="space-y-2">
                 <Label htmlFor="title">Title</Label>
-                <Input 
-                  id="title" 
-                  value={title} 
-                  onChange={(e) => setTitle(e.target.value)} 
+                <Input
+                  id="title"
                   placeholder="Video title"
+                  {...form.register("title")}
                   disabled={isSubmitting}
                 />
+                {form.formState.errors.title && (
+                  <p className="text-sm text-red-500">{form.formState.errors.title?.message}</p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="description">Description</Label>
-                <Textarea 
-                  id="description" 
-                  value={description} 
-                  onChange={(e) => setDescription(e.target.value)} 
-                  placeholder="Optional description"
+                <Input
+                  id="description"
+                  placeholder="Video description"
+                  {...form.register("description")}
                   disabled={isSubmitting}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="youtube">YouTube URL</Label>
-                <Input 
-                  id="youtube" 
-                  value={youtubeUrl} 
-                  onChange={(e) => setYoutubeUrl(e.target.value)} 
-                  placeholder="https://www.youtube.com/watch?v=..."
+                <Label htmlFor="url">YouTube URL</Label>
+                <Input
+                  id="url"
+                  placeholder="https://youtube.com/watch?v=dQw4w9WgXcQ"
+                  {...form.register("url")}
                   disabled={isSubmitting}
                 />
-                <p className="text-xs text-muted-foreground">
-                  Enter a YouTube video URL (e.g., https://www.youtube.com/watch?v=12345abcde)
-                </p>
               </div>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsAddDialogOpen(false)} disabled={isSubmitting}>
                 Cancel
               </Button>
-              <Button onClick={handleAddVideo} disabled={isSubmitting}>
+              <Button onClick={form.handleSubmit(addVideo)} disabled={isSubmitting}>
                 {isSubmitting ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -242,7 +234,6 @@ const AdminVideos = () => {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Title</TableHead>
-                    <TableHead>YouTube ID</TableHead>
                     <TableHead>Added</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
@@ -261,11 +252,6 @@ const AdminVideos = () => {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <code className="bg-muted px-1 py-0.5 rounded text-xs">
-                          {video.youtube_id}
-                        </code>
-                      </TableCell>
-                      <TableCell>
                         {format(new Date(video.created_at), "PP")}
                       </TableCell>
                       <TableCell className="text-right">
@@ -281,7 +267,7 @@ const AdminVideos = () => {
                           <Button
                             variant="outline"
                             size="icon"
-                            onClick={() => handleDeleteVideo(video.id)}
+                            onClick={() => deleteVideo(video.id)}
                           >
                             <Trash2 className="h-4 w-4 text-red-500" />
                             <span className="sr-only">Delete</span>

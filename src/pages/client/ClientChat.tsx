@@ -6,13 +6,12 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { 
   ChatMessage, 
-  subscribeToChatMessages,
+  subscribeToChatChannel,
   fetchClientMessages, 
   sendMessage,
   uploadChatFile,
-  markMessageAsRead,
-  testFirebaseConnection 
-} from "@/lib/firebase-chat-utils";
+  markMessageAsRead
+} from "@/lib/chat-utils";
 import { ChatMessageList } from "@/components/chat/ChatMessageList";
 import { ChatInput } from "@/components/chat/ChatInput";
 import { Button } from "@/components/ui/button";
@@ -25,8 +24,7 @@ const ClientChat = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [connectionTested, setConnectionTested] = useState(false);
-  const unsubscribeRef = useRef<(() => void) | null>(null);
+  const channelRef = useRef<ReturnType<typeof subscribeToChatChannel> | null>(null);
 
   // Get client ID from user ID
   useEffect(() => {
@@ -61,47 +59,12 @@ const ClientChat = () => {
     fetchClientId();
   }, [user]);
 
-  // Test connection to Firebase
-  useEffect(() => {
-    if (!clientId) return;
-    
-    const testConnection = async () => {
-      try {
-        const isConnected = await testFirebaseConnection();
-        console.log("Firebase connection test result:", isConnected);
-        setConnectionTested(true);
-        
-        if (!isConnected) {
-          setError("Failed to connect to chat service. Please refresh the page and try again.");
-          console.log("Firebase connection failed");
-        }
-      } catch (error) {
-        console.error("Error testing Firebase connection:", error);
-        setError("Failed to connect to chat service. Please refresh the page and try again.");
-        setConnectionTested(true);
-      }
-    };
-    
-    testConnection();
-  }, [clientId]);
-
   // Fetch messages and set up subscription once we have clientId
   useEffect(() => {
     if (!clientId) {
       if (user) {
         console.log("No client ID yet, waiting...");
       }
-      return;
-    }
-
-    if (!connectionTested) {
-      console.log("Connection test not completed yet, waiting...");
-      return;
-    }
-
-    // If connection test failed, don't try to fetch messages
-    if (error && error.includes("Failed to connect")) {
-      setIsLoading(false);
       return;
     }
 
@@ -117,7 +80,7 @@ const ClientChat = () => {
         // Mark all unread admin messages as read
         for (const msg of messages) {
           if (!msg.is_from_client && !msg.is_read) {
-            await markMessageAsRead(clientId, msg.id);
+            await markMessageAsRead(msg.id);
           }
         }
         
@@ -137,24 +100,23 @@ const ClientChat = () => {
     // Set up realtime subscription
     try {
       console.log("Setting up message subscription for client:", clientId);
-      const unsubscribe = subscribeToChatMessages(clientId, (newMessage) => {
-        console.log("New message received:", newMessage);
-        setMessages(prev => {
-          // Check if message already exists
-          if (prev.some(msg => msg.id === newMessage.id)) {
-            return prev;
-          }
-          
-          // Mark message as read if it's from admin
-          if (!newMessage.is_from_client) {
-            markMessageAsRead(clientId, newMessage.id);
-          }
-          
-          return [...prev, newMessage];
-        });
-      });
+      const channel = subscribeToChatChannel(
+        clientId,
+        false, // not admin
+        (newMessage) => {
+          console.log("New message received:", newMessage);
+          setMessages(prev => {
+            // Check if message already exists
+            if (prev.some(msg => msg.id === newMessage.id)) {
+              return prev;
+            }
+            
+            return [...prev, newMessage];
+          });
+        }
+      );
       
-      unsubscribeRef.current = unsubscribe;
+      channelRef.current = channel;
     } catch (error: any) {
       console.error("Error setting up message subscription:", error);
       toast.error("Failed to connect to chat service");
@@ -162,12 +124,12 @@ const ClientChat = () => {
     }
     
     return () => {
-      if (unsubscribeRef.current) {
+      if (channelRef.current) {
         console.log("Cleaning up message subscription");
-        unsubscribeRef.current();
+        supabase.removeChannel(channelRef.current);
       }
     };
-  }, [clientId, connectionTested, error]);
+  }, [clientId]);
 
   const handleSendMessage = async (messageText: string, file: File | null) => {
     if ((!messageText.trim() && !file) || !user?.id || !clientId) {
@@ -190,23 +152,14 @@ const ClientChat = () => {
         } catch (error) {
           console.error("File upload failed:", error);
           toast.error("Failed to upload file. Please try again.");
+          throw error;
         }
       }
-      
-      // Get user name
-      const { data } = await supabase
-        .from("profiles")
-        .select("full_name")
-        .eq("id", user.id)
-        .single();
-      
-      const senderName = data?.full_name || "Client";
       
       // Send message
       await sendMessage({
         clientId,
         senderId: user.id,
-        senderName,
         message: messageText,
         isFromClient: true,
         attachmentUrl,
@@ -227,28 +180,17 @@ const ClientChat = () => {
     
     setError(null);
     setIsLoading(true);
-    setConnectionTested(false);
     
-    // Test connection and reload messages
-    testFirebaseConnection().then((connected) => {
-      setConnectionTested(true);
-      if (!connected) {
-        setError("Failed to connect to chat service. Please refresh the page and try again.");
+    fetchClientMessages(clientId)
+      .then(messages => {
+        setMessages(messages);
         setIsLoading(false);
-        return;
-      }
-      
-      fetchClientMessages(clientId)
-        .then(messages => {
-          setMessages(messages);
-          setIsLoading(false);
-        })
-        .catch(error => {
-          console.error("Error reloading messages:", error);
-          setError("Failed to reload messages: " + (error.message || "Unknown error"));
-          setIsLoading(false);
-        });
-    });
+      })
+      .catch(error => {
+        console.error("Error reloading messages:", error);
+        setError("Failed to reload messages: " + (error.message || "Unknown error"));
+        setIsLoading(false);
+      });
   };
 
   if (!clientId && !isLoading) {
@@ -297,6 +239,7 @@ const ClientChat = () => {
               messages={messages} 
               currentUserId={user?.id || ''} 
               isLoading={isLoading}
+              emptyMessage="No messages yet. Start the conversation by sending a message below."
             />
           )}
         </CardContent>

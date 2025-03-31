@@ -47,7 +47,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/components/ui/use-toast";
 import { cn } from "@/lib/utils";
-import { useData, Task } from "@/contexts/data-context";
+import { useData, Task, TaskStatus } from "@/contexts/data-context";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "react-router-dom";
 import { TaskEditDialog } from "@/components/TaskEditDialog";
@@ -70,6 +70,22 @@ const sortOptions = [
   { value: "priority-low", label: "Priority: Low to High" },
   { value: "due-date", label: "Due Date" },
 ];
+
+const getStatusColor = (status: TaskStatus) => {
+  switch (status) {
+    case "open":
+      return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300";
+    case "in progress":
+      return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300";
+    case "pending":
+      return "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-300";
+    case "completed":
+    case "done":
+      return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300";
+    default:
+      return "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300";
+  }
+};
 
 export default function Tasks() {
   const { tasks, clients, addTask, updateTask, isLoading } = useData();
@@ -575,11 +591,7 @@ export default function Tasks() {
                       <Badge
                         variant="outline"
                         className={cn(
-                          task.priority === "high"
-                            ? "bg-destructive text-white"
-                            : task.priority === "medium"
-                            ? "bg-amber-500 text-amber-500"
-                            : "bg-muted text-muted-foreground",
+                          getStatusColor(task.status),
                           "bg-opacity-10"
                         )}
                       >

@@ -10,13 +10,12 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { 
   ChatMessage, 
-  subscribeToChatMessages, 
+  subscribeToChatChannel, 
   fetchClientMessages, 
   sendMessage,
   uploadChatFile,
-  markMessageAsRead,
-  testFirebaseConnection
-} from "@/lib/firebase-chat-utils";
+  markMessageAsRead
+} from "@/lib/chat-utils";
 import { ChatMessageList } from "@/components/chat/ChatMessageList";
 import { ChatInput } from "@/components/chat/ChatInput";
 
@@ -38,8 +37,7 @@ export function AdminChatRoom() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [connectionTested, setConnectionTested] = useState(false);
-  const unsubscribeRef = useRef<(() => void) | null>(null);
+  const channelRef = useRef<ReturnType<typeof subscribeToChatChannel> | null>(null);
 
   // Fetch client details
   useEffect(() => {
@@ -75,30 +73,9 @@ export function AdminChatRoom() {
     fetchClientDetails();
   }, [clientId, navigate]);
 
-  // Test connection to Firebase
-  useEffect(() => {
-    if (!clientId) return;
-    
-    const testConnection = async () => {
-      try {
-        const isConnected = await testFirebaseConnection();
-        console.log("Firebase connection test result:", isConnected);
-        setConnectionTested(true);
-        
-        if (!isConnected) {
-          console.log("Firebase connection failed, will use Supabase fallback");
-        }
-      } catch (error) {
-        console.error("Error testing Firebase connection:", error);
-      }
-    };
-    
-    testConnection();
-  }, [clientId]);
-
   // Fetch messages and set up realtime subscription
   useEffect(() => {
-    if (!clientId || !client || !user?.id || !connectionTested) return;
+    if (!clientId || !client || !user?.id) return;
     
     const loadMessages = async () => {
       try {
@@ -111,7 +88,7 @@ export function AdminChatRoom() {
         // Mark messages from client as read
         messages.forEach(msg => {
           if (msg.is_from_client && !msg.is_read) {
-            markMessageAsRead(clientId, msg.id);
+            markMessageAsRead(msg.id);
           }
         });
         
@@ -129,23 +106,27 @@ export function AdminChatRoom() {
     
     // Set up realtime subscription
     try {
-      const unsubscribe = subscribeToChatMessages(clientId, (newMessage) => {
-        setMessages(prev => {
-          // Check if message already exists
-          if (prev.some(msg => msg.id === newMessage.id)) {
-            return prev;
-          }
-          
-          // Mark message as read if it's from client
-          if (newMessage.is_from_client) {
-            markMessageAsRead(clientId, newMessage.id);
-          }
-          
-          return [...prev, newMessage];
-        });
-      });
+      const channel = subscribeToChatChannel(
+        clientId,
+        true, // is admin
+        (newMessage) => {
+          setMessages(prev => {
+            // Check if message already exists
+            if (prev.some(msg => msg.id === newMessage.id)) {
+              return prev;
+            }
+            
+            // Mark message as read if it's from client
+            if (newMessage.is_from_client) {
+              markMessageAsRead(newMessage.id);
+            }
+            
+            return [...prev, newMessage];
+          });
+        }
+      );
       
-      unsubscribeRef.current = unsubscribe;
+      channelRef.current = channel;
     } catch (error: any) {
       console.error("Error setting up message subscription:", error);
       toast.error("Failed to connect to chat service");
@@ -153,11 +134,11 @@ export function AdminChatRoom() {
     }
     
     return () => {
-      if (unsubscribeRef.current) {
-        unsubscribeRef.current();
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current);
       }
     };
-  }, [clientId, client, user?.id, connectionTested]);
+  }, [clientId, client, user?.id]);
 
   const handleSendMessage = async (messageText: string, file: File | null) => {
     if ((!messageText.trim() && !file) || !clientId || !user?.id) {
@@ -180,23 +161,14 @@ export function AdminChatRoom() {
         } catch (error) {
           console.error("File upload failed:", error);
           toast.error("Failed to upload file. Please try again.");
+          throw error;
         }
       }
-      
-      // Get user name
-      const { data } = await supabase
-        .from("profiles")
-        .select("full_name")
-        .eq("id", user.id)
-        .single();
-      
-      const senderName = data?.full_name || "Admin";
       
       // Send message
       await sendMessage({
         clientId,
         senderId: user.id,
-        senderName,
         message: messageText,
         isFromClient: false,
         attachmentUrl,
@@ -218,19 +190,16 @@ export function AdminChatRoom() {
     setError(null);
     setIsLoading(true);
     
-    // Test connection and reload messages
-    testFirebaseConnection().then(() => {
-      fetchClientMessages(clientId)
-        .then(messages => {
-          setMessages(messages);
-          setIsLoading(false);
-        })
-        .catch(error => {
-          console.error("Error reloading messages:", error);
-          setError("Failed to reload messages: " + (error.message || "Unknown error"));
-          setIsLoading(false);
-        });
-    });
+    fetchClientMessages(clientId)
+      .then(messages => {
+        setMessages(messages);
+        setIsLoading(false);
+      })
+      .catch(error => {
+        console.error("Error reloading messages:", error);
+        setError("Failed to reload messages: " + (error.message || "Unknown error"));
+        setIsLoading(false);
+      });
   };
 
   if (isLoading && !client) {
