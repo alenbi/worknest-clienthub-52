@@ -1,8 +1,10 @@
+
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Session } from '@supabase/supabase-js';
 import { Resource, Video, Offer, Client, Task, TaskStatus, TaskPriority, Update } from '@/lib/models';
-import { useAuth } from '@/contexts/auth-context'; // Import from auth-context directly
+import { useAuth } from '@/contexts/auth-context';
+import { toast } from 'sonner';
 
 // Re-export the types so they can be imported from data-context
 export type { Resource, Video, Offer, Client, Task, Update };
@@ -59,7 +61,7 @@ interface DataContextType {
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
-  const { session, user } = useAuth(); // Use the useAuth hook from auth-context
+  const { session, user } = useAuth();
   const [isAdmin, setIsAdmin] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   
@@ -86,6 +88,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
             setIsAdmin(false);
           } else {
             setIsAdmin(!!data);
+            console.log("Admin status:", data);
           }
         } catch (error) {
           console.error('Error checking admin status:', error);
@@ -143,6 +146,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   
   const createResource = async (resource: Partial<Resource>) => {
     try {
+      console.log("Creating resource:", resource);
+      
       // Ensure required fields for insert
       if (!resource.title || !resource.url || !resource.type) {
         throw new Error('Title, URL, and type are required');
@@ -155,12 +160,19 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         type: resource.type
       };
       
-      const { error } = await supabase.from('resources').insert(newResource);
+      const { data, error } = await supabase.from('resources').insert(newResource).select();
       
-      if (error) throw error;
+      if (error) {
+        console.error("Supabase Error:", error);
+        throw error;
+      }
+      
+      console.log("Created resource successfully:", data);
       await fetchResources();
+      return data;
     } catch (error) {
       console.error('Error creating resource:', error);
+      toast.error("Failed to add resource");
       throw error;
     }
   };
@@ -204,6 +216,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   
   const createVideo = async (video: Partial<Video>) => {
     try {
+      console.log("Creating video:", video);
+      
       // Ensure required fields for insert
       if (!video.title || !video.youtube_id) {
         throw new Error('Title and YouTube ID are required');
@@ -215,12 +229,19 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         youtube_id: video.youtube_id
       };
       
-      const { error } = await supabase.from('videos').insert(newVideo);
+      const { data, error } = await supabase.from('videos').insert(newVideo).select();
       
-      if (error) throw error;
+      if (error) {
+        console.error("Supabase Error:", error);
+        throw error;
+      }
+      
+      console.log("Created video successfully:", data);
       await fetchVideos();
+      return data;
     } catch (error) {
       console.error('Error creating video:', error);
+      toast.error("Failed to add video");
       throw error;
     }
   };
@@ -264,6 +285,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   
   const createOffer = async (offer: Partial<Offer>) => {
     try {
+      console.log("Creating offer:", offer);
+      
       // Ensure required fields for insert
       if (!offer.title || !offer.valid_until) {
         throw new Error('Title and valid until date are required');
@@ -277,12 +300,19 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         valid_until: offer.valid_until
       };
       
-      const { error } = await supabase.from('offers').insert(newOffer);
+      const { data, error } = await supabase.from('offers').insert(newOffer).select();
       
-      if (error) throw error;
+      if (error) {
+        console.error("Supabase Error:", error);
+        throw error;
+      }
+      
+      console.log("Created offer successfully:", data);
       await fetchOffers();
+      return data;
     } catch (error) {
       console.error('Error creating offer:', error);
+      toast.error("Failed to add offer");
       throw error;
     }
   };
