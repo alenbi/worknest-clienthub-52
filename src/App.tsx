@@ -47,13 +47,13 @@ const queryClient = new QueryClient({
     queries: {
       refetchOnWindowFocus: false,
       retry: 2,
-      onSettled: (_, error) => {
-        if (error) {
-          console.error("Query error:", error);
-        }
-      },
     },
   },
+  queryCache: {
+    onError: (error) => {
+      console.error("Query error:", error);
+    }
+  }
 });
 
 const App = () => (
