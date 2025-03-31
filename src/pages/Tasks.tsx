@@ -415,7 +415,7 @@ export default function Tasks() {
                         selected={newTask.due_date ? new Date(newTask.due_date) : undefined}
                         onSelect={handleDateChange}
                         initialFocus
-                        min={new Date().toISOString().split('T')[0]}
+                        disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
                       />
                     </PopoverContent>
                   </Popover>

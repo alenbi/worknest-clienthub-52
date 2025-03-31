@@ -58,6 +58,7 @@ const ClientDetail = () => {
     status: "pending",
     priority: "medium",
     due_date: new Date().toISOString(),
+    created_at: new Date().toISOString(),
   });
   const [isAddTaskDialogOpen, setIsAddTaskDialogOpen] = useState(false);
 
@@ -152,6 +153,7 @@ const ClientDetail = () => {
         status: "pending",
         priority: "medium",
         due_date: new Date().toISOString(),
+        created_at: new Date().toISOString(),
       });
       setIsAddTaskDialogOpen(false);
     } catch (error) {
