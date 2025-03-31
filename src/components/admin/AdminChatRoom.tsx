@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
@@ -81,7 +80,15 @@ export function AdminChatRoom() {
         const { data, error } = await supabase
           .from("client_messages")
           .select(`
-            *,
+            id,
+            message,
+            sender_id,
+            client_id,
+            is_from_client,
+            is_read,
+            created_at,
+            attachment_url,
+            attachment_type,
             profiles:sender_id(full_name)
           `)
           .eq("client_id", clientId)
@@ -92,7 +99,6 @@ export function AdminChatRoom() {
           throw error;
         }
         
-        // Mark all messages from client as read
         await supabase
           .from("client_messages")
           .update({ is_read: true })
@@ -100,7 +106,6 @@ export function AdminChatRoom() {
           .eq("is_from_client", true)
           .eq("is_read", false);
         
-        // Transform data to include sender name
         const formattedMessages = data.map((msg: any) => ({
           ...msg,
           sender_name: msg.is_from_client 
@@ -120,7 +125,6 @@ export function AdminChatRoom() {
     if (client) {
       fetchMessages();
       
-      // Subscribe to real-time updates
       const channel = supabase
         .channel('admin_client_messages_changes')
         .on('postgres_changes', 
@@ -133,7 +137,6 @@ export function AdminChatRoom() {
           async (payload) => {
             const newMessage = payload.new as ChatMessage;
             
-            // Mark message as read if it's from client
             if (newMessage.is_from_client) {
               await supabase
                 .from("client_messages")
@@ -141,7 +144,6 @@ export function AdminChatRoom() {
                 .eq("id", newMessage.id);
             }
             
-            // Fetch sender name
             let senderName = newMessage.is_from_client ? client?.name || "Client" : "Support Staff";
             
             if (!newMessage.is_from_client) {
@@ -171,7 +173,6 @@ export function AdminChatRoom() {
   }, [clientId, client, navigate]);
 
   useEffect(() => {
-    // Scroll to bottom when messages change
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
@@ -185,13 +186,11 @@ export function AdminChatRoom() {
     try {
       setIsSending(true);
       
-      // Upload file if exists
       let attachmentUrl = null;
       let attachmentType = null;
       
       if (file) {
         try {
-          // First check if the storage bucket exists
           const { data: buckets } = await supabase.storage.listBuckets();
           const chatBucket = buckets?.find(bucket => bucket.name === 'chat-attachments');
           
@@ -230,11 +229,9 @@ export function AdminChatRoom() {
         } catch (uploadError) {
           console.error("File upload failed:", uploadError);
           toast.error("Failed to upload file. Please try again.");
-          // Continue without the attachment
         }
       }
       
-      // Insert message
       const { error } = await supabase
         .from("client_messages")
         .insert({
@@ -244,7 +241,7 @@ export function AdminChatRoom() {
           message: newMessage.trim(),
           attachment_url: attachmentUrl,
           attachment_type: attachmentType,
-          is_read: true // Admin messages are marked as read immediately
+          is_read: true
         });
       
       if (error) {
@@ -252,7 +249,6 @@ export function AdminChatRoom() {
         throw error;
       }
       
-      // Clear input
       setNewMessage("");
       setFile(null);
       
@@ -271,7 +267,6 @@ export function AdminChatRoom() {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
-      // Check file size (max 10MB)
       if (selectedFile.size > 10 * 1024 * 1024) {
         toast.error("File is too large. Maximum size is 10MB.");
         return;

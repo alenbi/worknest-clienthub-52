@@ -1,6 +1,7 @@
 
 import { useState, useEffect } from "react";
 import { useClientAuth } from "@/contexts/client-auth-context";
+import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,6 +12,7 @@ import { toast } from "sonner";
 
 const ClientLogin = () => {
   const { login, isAuthenticated, isLoading } = useClientAuth();
+  const { isAuthenticated: isAdminAuthenticated } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -23,13 +25,23 @@ const ClientLogin = () => {
     if (isAuthenticated && !isLoading) {
       console.log("Client is authenticated, redirecting to client dashboard");
       navigate("/client/dashboard", { replace: true });
+    } else if (isAdminAuthenticated && !isLoading) {
+      console.log("User is authenticated as admin, redirecting to admin dashboard");
+      toast.error("Please use the admin login page");
+      navigate("/dashboard", { replace: true });
     }
-  }, [isAuthenticated, isLoading, navigate]);
+  }, [isAuthenticated, isAdminAuthenticated, isLoading, navigate]);
 
   // Regular redirect check (still useful for initial load)
   if (isAuthenticated && !isLoading) {
     console.log("Rendering redirect to client dashboard");
     return <Navigate to="/client/dashboard" />;
+  }
+  
+  if (isAdminAuthenticated && !isLoading) {
+    console.log("Rendering redirect to admin dashboard");
+    toast.error("Please use the admin login page");
+    return <Navigate to="/dashboard" />;
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -138,10 +150,10 @@ const ClientLogin = () => {
               )}
             </Button>
             <div className="text-center text-sm">
-              Need help accessing your account?{" "}
-              <a href="mailto:support@example.com" className="font-medium text-primary">
-                Contact support
-              </a>
+              Looking for admin access?{" "}
+              <Link to="/login" className="font-medium text-primary">
+                Go to admin login
+              </Link>
             </div>
           </CardFooter>
         </form>

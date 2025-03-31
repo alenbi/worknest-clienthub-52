@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -43,7 +42,7 @@ const ClientChat = () => {
           .from("clients")
           .select("id")
           .eq("user_id", user.id)
-          .single();
+          .maybeSingle();
           
         if (error) {
           console.error("Error fetching client ID:", error);
@@ -51,8 +50,8 @@ const ClientChat = () => {
           return;
         }
         
-        console.log("Client ID found:", data.id);
-        setClientId(data.id);
+        console.log("Client ID found:", data?.id);
+        setClientId(data?.id || null);
       } catch (error) {
         console.error("Failed to fetch client ID:", error);
       }
@@ -75,7 +74,15 @@ const ClientChat = () => {
         const { data, error } = await supabase
           .from("client_messages")
           .select(`
-            *,
+            id,
+            message,
+            sender_id,
+            client_id,
+            is_from_client,
+            is_read,
+            created_at,
+            attachment_url,
+            attachment_type,
             profiles:sender_id(full_name)
           `)
           .eq("client_id", clientId)
@@ -88,7 +95,6 @@ const ClientChat = () => {
         
         console.log("Messages fetched:", data.length);
         
-        // Mark messages from admins as read
         await supabase
           .from("client_messages")
           .update({ is_read: true })
@@ -201,7 +207,6 @@ const ClientChat = () => {
           const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
           const filePath = `client-attachments/${clientId}/${fileName}`;
           
-          // Ensure the folder exists
           const { error: uploadError } = await supabase.storage
             .from('chat-attachments')
             .upload(filePath, file);
@@ -221,11 +226,9 @@ const ClientChat = () => {
         } catch (uploadError) {
           console.error("File upload failed:", uploadError);
           toast.error("Failed to upload file. Please try again.");
-          // Continue without the attachment
         }
       }
       
-      // Insert message
       const messageData = {
         client_id: clientId,
         sender_id: user.id,
@@ -268,7 +271,6 @@ const ClientChat = () => {
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
-      // Check file size (max 10MB)
       if (selectedFile.size > 10 * 1024 * 1024) {
         toast.error("File is too large. Maximum size is 10MB.");
         return;

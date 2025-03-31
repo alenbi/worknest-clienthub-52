@@ -1,6 +1,7 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/auth-context";
+import { useClientAuth } from "@/contexts/client-auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,6 +12,7 @@ import { toast } from "sonner";
 
 const Login = () => {
   const { login, isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated: isClientAuthenticated } = useClientAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -21,15 +23,25 @@ const Login = () => {
   // Effect to handle redirect after authentication changes
   useEffect(() => {
     if (isAuthenticated && !isLoading) {
-      console.log("User is authenticated, redirecting to dashboard");
+      console.log("User is authenticated as admin, redirecting to dashboard");
       navigate("/dashboard", { replace: true });
+    } else if (isClientAuthenticated && !isLoading) {
+      console.log("User is authenticated as client, redirecting to client dashboard");
+      toast.error("Please use the client login page");
+      navigate("/client/dashboard", { replace: true });
     }
-  }, [isAuthenticated, isLoading, navigate]);
+  }, [isAuthenticated, isClientAuthenticated, isLoading, navigate]);
 
   // Regular redirect check (still useful for initial load)
   if (isAuthenticated && !isLoading) {
     console.log("Rendering redirect to dashboard");
     return <Navigate to="/dashboard" />;
+  }
+  
+  if (isClientAuthenticated && !isLoading) {
+    console.log("Rendering redirect to client dashboard");
+    toast.error("Please use the client login page");
+    return <Navigate to="/client/dashboard" />;
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -45,7 +57,6 @@ const Login = () => {
       setError("");
       setIsSubmitting(true);
       await login(email, password);
-      toast.success("Successfully signed in!");
       
       // Force navigation here in addition to the useEffect
       console.log("Manually navigating to dashboard after successful login");
@@ -63,9 +74,9 @@ const Login = () => {
     <div className="flex min-h-screen items-center justify-center bg-muted/40 p-4">
       <Card className="mx-auto w-full max-w-md">
         <CardHeader className="space-y-1 text-center">
-          <CardTitle className="text-2xl font-bold">Welcome back</CardTitle>
+          <CardTitle className="text-2xl font-bold">Admin Portal</CardTitle>
           <CardDescription>
-            Sign in to your account to continue
+            Sign in to your admin account to continue
           </CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
@@ -143,9 +154,9 @@ const Login = () => {
               )}
             </Button>
             <div className="text-center text-sm">
-              Don't have an account?{" "}
-              <Link to="/register" className="font-medium text-primary">
-                Create an account
+              Looking for client access?{" "}
+              <Link to="/client/login" className="font-medium text-primary">
+                Go to client login
               </Link>
             </div>
           </CardFooter>

@@ -1,32 +1,52 @@
-import { createContext, useContext, useState, useEffect } from "react";
-import { toast } from "sonner";
+import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "./auth-context";
-import { Resource, Video, Offer, ClientMessage } from "@/lib/models";
+import { v4 as uuidv4 } from 'uuid';
 
-// Data models
+// Define types for data models
 export interface Client {
   id: string;
   name: string;
   email: string;
-  phone: string;
-  company: string;
+  phone?: string;
+  company?: string;
   domain?: string;
-  avatar?: string;
-  createdAt: Date;
   user_id?: string;
 }
 
 export interface Task {
   id: string;
   title: string;
-  description: string;
-  clientId: string;
-  status: "pending" | "completed";
-  priority: "low" | "medium" | "high";
-  dueDate: Date;
-  createdAt: Date;
-  completedAt?: Date;
+  description?: string;
+  status: 'open' | 'in progress' | 'done';
+  client_id: string;
+  created_at?: string;
+}
+
+export interface Resource {
+  id: string;
+  title: string;
+  description?: string;
+  url: string;
+  type: 'document' | 'video' | 'link';
+  created_at?: string;
+}
+
+export interface Video {
+  id: string;
+  title: string;
+  description?: string;
+  url: string;
+  created_at?: string;
+}
+
+export interface Offer {
+  id: string;
+  title: string;
+  description?: string;
+  price: number;
+  discount?: number;
+  active: boolean;
+  created_at?: string;
 }
 
 export interface Update {
@@ -35,547 +55,452 @@ export interface Update {
   content: string;
   image_url?: string;
   is_published: boolean;
-  created_at: Date | string;
+  created_at?: string;
 }
 
-// Reexport for use throughout the app
-export type { Resource, Video, Offer, ClientMessage };
-
-interface DataContextType {
+// Define data context type
+interface Data {
   clients: Client[];
   tasks: Task[];
+  resources: Resource[];
+  videos: Video[];
+  offers: Offer[];
   updates: Update[];
-  addClient: (client: Omit<Client, "id" | "createdAt"> & { password?: string }) => Promise<{ client: Client; password: string }>;
-  updateClient: (id: string, updates: Partial<Client>) => Promise<Client>;
-  updateClientPassword: (clientId: string, newPassword: string) => Promise<boolean>;
-  deleteClient: (id: string) => Promise<boolean>;
-  addTask: (task: Omit<Task, "id" | "createdAt" | "completedAt">) => Promise<Task>;
-  updateTask: (id: string, updates: Partial<Task>) => Promise<Task>;
-  deleteTask: (id: string) => Promise<boolean>;
-  createUpdate: (update: Omit<Update, "id" | "created_at">) => Promise<Update>;
-  updateUpdate: (update: Partial<Update> & { id: string }) => Promise<Update>;
-  toggleUpdatePublished: (id: string, isPublished: boolean) => Promise<Update>;
-  deleteUpdate: (id: string) => Promise<boolean>;
-  isLoading: boolean;
   refreshData: () => Promise<void>;
+  createClient: (client: Omit<Client, 'id'>) => Promise<Client>;
+  updateClient: (id: string, updates: Partial<Client>) => Promise<Client | void>;
+  deleteClient: (id: string) => Promise<void>;
+  createTask: (task: Omit<Task, 'id'>) => Promise<Task>;
+  updateTask: (id: string, updates: Partial<Task>) => Promise<Task | void>;
+  deleteTask: (id: string) => Promise<void>;
+  createResource: (resource: Omit<Resource, 'id'>) => Promise<Resource>;
+  updateResource: (id: string, updates: Partial<Resource>) => Promise<Resource | void>;
+  deleteResource: (id: string) => Promise<void>;
+  createVideo: (video: Omit<Video, 'id'>) => Promise<Video>;
+  updateVideo: (id: string, updates: Partial<Video>) => Promise<Video | void>;
+  deleteVideo: (id: string) => Promise<void>;
+  createOffer: (offer: Omit<Offer, 'id'>) => Promise<Offer>;
+  updateOffer: (id: string, updates: Partial<Offer>) => Promise<Offer | void>;
+  deleteOffer: (id: string) => Promise<void>;
+  createUpdate: (data: { title: string; content: string; image_url?: string; is_published?: boolean }) => Promise<Update>;
+  updateUpdate: (id: string, data: { title?: string; content?: string; image_url?: string; is_published?: boolean; created_at?: string }) => Promise<Update | void>;
+  deleteUpdate: (id: string) => Promise<void>;
 }
 
-const DataContext = createContext<DataContextType | undefined>(undefined);
+// Define context
+const DataContext = createContext<Data | undefined>(undefined);
 
-// Helper functions to transform data between frontend and database
-const transformClientFromDB = (client: any): Client => ({
-  id: client.id,
-  name: client.name,
-  email: client.email,
-  phone: client.phone || "",
-  company: client.company || "",
-  domain: client.domain || "",
-  avatar: client.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(client.name)}&background=6366f1&color=fff`,
-  createdAt: new Date(client.created_at),
-  user_id: client.user_id,
-});
+// Define provider
+interface DataProviderProps {
+  children: React.ReactNode;
+}
 
-const transformTaskFromDB = (task: any): Task => ({
-  id: task.id,
-  title: task.title,
-  description: task.description || "",
-  clientId: task.client_id,
-  status: task.status === "completed" ? "completed" : "pending",
-  priority: task.priority,
-  dueDate: new Date(task.due_date),
-  createdAt: new Date(task.created_at),
-  completedAt: task.completed_at ? new Date(task.completed_at) : undefined,
-});
+interface UpdateData {
+    title: string;
+    content: string;
+    image_url?: string;
+    is_published?: boolean;
+    created_at?: string;
+}
 
-const transformUpdateFromDB = (update: any): Update => ({
-  id: update.id,
-  title: update.title,
-  content: update.content,
-  image_url: update.image_url || undefined,
-  is_published: update.is_published,
-  created_at: new Date(update.created_at),
-});
-
-// Predefined tasks to create for new clients
-const predefinedTasks = [
-  "Domain & Hosting",
-  "Hostinger Invite",
-  "Site Installation",
-  "Find & Replace",
-  "WhatsApp Widget",
-  "Header",
-  "Footer",
-  "Home",
-  "SMTP",
-  "Woo Settings",
-  "Tracker",
-  "Resell License",
-  "Access File",
-  "Forward to Kamalesh",
-  "Connect Gateway",
-  "Anydesk Session",
-  "Update Page",
-  "Affiliate Setup",
-  "Ad Campaign",
-  "Chatbot"
-];
-
-export const DataProvider = ({ children }: { children: React.ReactNode }) => {
+// Fix the Update interface createUpdate method parameter
+export const updateDataContext = (data: UpdateData | null = null): Data => {
   const [clients, setClients] = useState<Client[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [resources, setResources] = useState<Resource[]>([]);
+  const [videos, setVideos] = useState<Video[]>([]);
+  const [offers, setOffers] = useState<Offer[]>([]);
   const [updates, setUpdates] = useState<Update[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const { isAuthenticated } = useAuth();
 
-  const fetchData = async () => {
-    if (!isAuthenticated) {
-      setClients([]);
-      setTasks([]);
-      setUpdates([]);
-      setIsLoading(false);
-      return;
-    }
-
-    setIsLoading(true);
+  const refreshData = useCallback(async () => {
     try {
-      // Fetch clients
       const { data: clientsData, error: clientsError } = await supabase
         .from("clients")
         .select("*")
-        .order("created_at", { ascending: false });
+        .order('name', { ascending: true });
 
-      if (clientsError) {
-        throw clientsError;
-      }
+      if (clientsError) throw clientsError;
+      setClients(clientsData || []);
 
-      // Fetch tasks
       const { data: tasksData, error: tasksError } = await supabase
         .from("tasks")
         .select("*")
-        .order("created_at", { ascending: true });
+        .order('created_at', { ascending: false });
 
-      if (tasksError) {
-        throw tasksError;
-      }
+      if (tasksError) throw tasksError;
+      setTasks(tasksData || []);
 
-      // Fetch updates
+      const { data: resourcesData, error: resourcesError } = await supabase
+        .from("resources")
+        .select("*")
+        .order('created_at', { ascending: false });
+
+      if (resourcesError) throw resourcesError;
+      setResources(resourcesData || []);
+
+      const { data: videosData, error: videosError } = await supabase
+        .from("videos")
+        .select("*")
+        .order('created_at', { ascending: false });
+
+      if (videosError) throw videosError;
+      setVideos(videosData || []);
+
+      const { data: offersData, error: offersError } = await supabase
+        .from("offers")
+        .select("*")
+        .order('created_at', { ascending: false });
+
+      if (offersError) throw offersError;
+      setOffers(offersData || []);
+
       const { data: updatesData, error: updatesError } = await supabase
         .from("updates")
         .select("*")
-        .order("created_at", { ascending: false });
+        .order('created_at', { ascending: false });
 
-      if (updatesError) {
-        throw updatesError;
-      }
-
-      // Transform data
-      const transformedClients = clientsData.map(transformClientFromDB);
-      const transformedTasks = tasksData.map(transformTaskFromDB);
-      const transformedUpdates = updatesData.map(transformUpdateFromDB);
-
-      setClients(transformedClients);
-      setTasks(transformedTasks);
-      setUpdates(transformedUpdates);
+      if (updatesError) throw updatesError;
+      setUpdates(updatesData || []);
     } catch (error) {
       console.error("Error fetching data:", error);
-      toast.error("Failed to load data");
-    } finally {
-      setIsLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
-    fetchData();
-  }, [isAuthenticated]);
-
-  const addClient = async (clientData: Omit<Client, "id" | "createdAt"> & { password?: string }): Promise<{ client: Client; password: string }> => {
+    refreshData();
+  }, [refreshData]);
+    
+  const createClient = async (client: Omit<Client, 'id'>): Promise<Client> => {
     try {
-      const password = clientData.password || Math.random().toString(36).slice(-10);
-      
-      let userId = null;
-      
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email: clientData.email,
-        password,
-        options: {
-          data: {
-            full_name: clientData.name,
-          },
-        },
-      });
-      
-      if (authError) throw authError;
-      
-      if (authData.user) {
-        userId = authData.user.id;
-        
-        const dbClient = {
-          name: clientData.name,
-          email: clientData.email,
-          phone: clientData.phone,
-          company: clientData.company,
-          domain: clientData.domain,
-          avatar: clientData.avatar,
-          user_id: userId
-        };
+      const { data: newClient, error } = await supabase
+        .from("clients")
+        .insert([{ ...client, id: uuidv4() }])
+        .select()
+        .single();
 
-        const { data, error } = await supabase
-          .from("clients")
-          .insert(dbClient)
-          .select()
-          .single();
-
-        if (error) throw error;
-
-        const newClient = transformClientFromDB(data);
-        setClients(prev => [newClient, ...prev]);
-        
-        await createPredefinedTasks(newClient.id);
-        
-        toast.success(`Client added with email: ${clientData.email}`);
-        return { client: newClient, password };
-      } else {
-        throw new Error("Failed to create user account");
-      }
+      if (error) throw error;
+      setClients((prevClients) => [...prevClients, newClient]);
+      return newClient;
     } catch (error) {
-      console.error("Error adding client:", error);
-      toast.error("Failed to add client");
+      console.error("Error creating client:", error);
       throw error;
     }
   };
 
-  const createPredefinedTasks = async (clientId: string) => {
+  const updateClient = async (id: string, updates: Partial<Client>): Promise<Client | void> => {
     try {
-      const now = new Date();
-      const dueDate = new Date(now);
-      dueDate.setDate(now.getDate() + 20);
-
-      const tasksToCreate = predefinedTasks.map((title) => ({
-        title,
-        description: "",
-        client_id: clientId,
-        status: "todo",
-        priority: "medium",
-        due_date: dueDate.toISOString(),
-      }));
-
-      const { data, error } = await supabase
-        .from("tasks")
-        .insert(tasksToCreate)
-        .select();
-
-      if (error) {
-        throw error;
-      }
-
-      if (data) {
-        const newTasks = data.map(transformTaskFromDB);
-        setTasks(prev => [...prev, ...newTasks]);
-      }
-      
-      toast.success(`${predefinedTasks.length} tasks created for the new client`);
-    } catch (error) {
-      console.error("Error creating predefined tasks:", error);
-      toast.error("Failed to create predefined tasks");
-    }
-  };
-
-  const updateClient = async (id: string, updates: Partial<Client>): Promise<Client> => {
-    try {
-      const dbUpdates: any = {};
-      if (updates.name !== undefined) dbUpdates.name = updates.name;
-      if (updates.email !== undefined) dbUpdates.email = updates.email;
-      if (updates.phone !== undefined) dbUpdates.phone = updates.phone;
-      if (updates.company !== undefined) dbUpdates.company = updates.company;
-      if (updates.domain !== undefined) dbUpdates.domain = updates.domain;
-      if (updates.avatar !== undefined) dbUpdates.avatar = updates.avatar;
-      dbUpdates.updated_at = new Date().toISOString();
-
-      const { data, error } = await supabase
+      const { data: updatedClient, error } = await supabase
         .from("clients")
-        .update(dbUpdates)
+        .update(updates)
         .eq("id", id)
         .select()
         .single();
 
       if (error) throw error;
-
-      const updatedClient = transformClientFromDB(data);
-      setClients(prev => prev.map(client => client.id === id ? updatedClient : client));
-      
-      toast.success("Client updated successfully");
-      return updatedClient;
+      setClients((prevClients) =>
+        prevClients.map((client) => (client.id === id ? updatedClient : client))
+      );
     } catch (error) {
       console.error("Error updating client:", error);
-      toast.error("Failed to update client");
       throw error;
     }
   };
 
-  const updateClientPassword = async (clientId: string, newPassword: string): Promise<boolean> => {
+  const deleteClient = async (id: string): Promise<void> => {
     try {
-      const client = clients.find(c => c.id === clientId);
-      if (!client || !client.user_id) {
-        toast.error("Client not found or has no associated user account");
-        return false;
-      }
-      
-      const { error } = await supabase.auth.admin.updateUserById(
-        client.user_id,
-        { password: newPassword }
-      );
-      
+      const { error } = await supabase.from("clients").delete().eq("id", id);
       if (error) throw error;
-      
-      toast.success("Client password updated successfully");
-      return true;
-    } catch (error) {
-      console.error("Error updating client password:", error);
-      toast.error("Failed to update client password");
-      return false;
-    }
-  };
-
-  const deleteClient = async (id: string): Promise<boolean> => {
-    try {
-      const clientTasks = tasks.filter(task => task.clientId === id && task.status !== "completed");
-      
-      if (clientTasks.length > 0) {
-        toast.error("Cannot delete client with active tasks");
-        return false;
-      }
-      
-      const { error } = await supabase
-        .from("clients")
-        .delete()
-        .eq("id", id);
-
-      if (error) throw error;
-
-      setClients(prev => prev.filter(client => client.id !== id));
-      setTasks(prev => prev.filter(task => task.clientId !== id));
-      
-      toast.success("Client deleted successfully");
-      return true;
+      setClients((prevClients) => prevClients.filter((client) => client.id !== id));
     } catch (error) {
       console.error("Error deleting client:", error);
-      toast.error("Failed to delete client");
-      return false;
+      throw error;
     }
   };
 
-  const addTask = async (taskData: Omit<Task, "id" | "createdAt" | "completedAt">): Promise<Task> => {
+  const createTask = async (task: Omit<Task, 'id'>): Promise<Task> => {
     try {
-      let dbStatus = "todo";
-      
-      if (taskData.status === "pending") {
-        dbStatus = "todo";
-      } else if (taskData.status === "completed") {
-        dbStatus = "completed";
-      }
-      
-      const dbTask = {
-        title: taskData.title,
-        description: taskData.description,
-        client_id: taskData.clientId,
-        status: dbStatus,
-        priority: taskData.priority,
-        due_date: new Date(taskData.dueDate).toISOString(),
-      };
-
-      const { data, error } = await supabase
+      const { data: newTask, error } = await supabase
         .from("tasks")
-        .insert(dbTask)
+        .insert([{ ...task, id: uuidv4(), created_at: new Date().toISOString() }])
         .select()
         .single();
 
       if (error) throw error;
-
-      const newTask = transformTaskFromDB(data);
-      setTasks(prev => [...prev, newTask]);
-      
-      toast.success("Task added successfully");
+      setTasks((prevTasks) => [...prevTasks, newTask]);
       return newTask;
     } catch (error) {
-      console.error("Error adding task:", error);
-      toast.error("Failed to add task");
+      console.error("Error creating task:", error);
       throw error;
     }
   };
 
-  const updateTask = async (id: string, updates: Partial<Task>): Promise<Task> => {
+  const updateTask = async (id: string, updates: Partial<Task>): Promise<Task | void> => {
     try {
-      const dbUpdates: any = {};
-      if (updates.title !== undefined) dbUpdates.title = updates.title;
-      if (updates.description !== undefined) dbUpdates.description = updates.description;
-      if (updates.clientId !== undefined) dbUpdates.client_id = updates.clientId;
-      if (updates.priority !== undefined) dbUpdates.priority = updates.priority;
-      if (updates.dueDate !== undefined) dbUpdates.due_date = new Date(updates.dueDate).toISOString();
-      
-      if (updates.status !== undefined) {
-        if (updates.status === "pending") {
-          dbUpdates.status = "todo";
-        } else if (updates.status === "completed") {
-          dbUpdates.status = "completed";
-        }
-        
-        const task = tasks.find(t => t.id === id);
-        if (task && updates.status === "completed" && task.status !== "completed") {
-          dbUpdates.completed_at = new Date().toISOString();
-        } else if (updates.status !== "completed") {
-          dbUpdates.completed_at = null;
-        }
-      }
-      
-      dbUpdates.updated_at = new Date().toISOString();
-
-      const { data, error } = await supabase
+      const { data: updatedTask, error } = await supabase
         .from("tasks")
-        .update(dbUpdates)
+        .update(updates)
         .eq("id", id)
         .select()
         .single();
 
       if (error) throw error;
-
-      const updatedTask = transformTaskFromDB(data);
-      setTasks(prev => prev.map(task => task.id === id ? updatedTask : task));
-      
-      toast.success("Task updated successfully");
-      return updatedTask;
+      setTasks((prevTasks) =>
+        prevTasks.map((task) => (task.id === id ? updatedTask : task))
+      );
     } catch (error) {
       console.error("Error updating task:", error);
-      toast.error("Failed to update task");
       throw error;
     }
   };
 
-  const deleteTask = async (id: string): Promise<boolean> => {
+  const deleteTask = async (id: string): Promise<void> => {
     try {
-      const { error } = await supabase
-        .from("tasks")
-        .delete()
-        .eq("id", id);
-
+      const { error } = await supabase.from("tasks").delete().eq("id", id);
       if (error) throw error;
-
-      setTasks(prev => prev.filter(task => task.id !== id));
-      
-      toast.success("Task deleted successfully");
-      return true;
+      setTasks((prevTasks) => prevTasks.filter((task) => task.id !== id));
     } catch (error) {
       console.error("Error deleting task:", error);
-      toast.error("Failed to delete task");
-      return false;
+      throw error;
     }
   };
 
-  const createUpdate = async (updateData: Omit<Update, "id" | "created_at">): Promise<Update> => {
+  const createResource = async (resource: Omit<Resource, 'id'>): Promise<Resource> => {
     try {
-      const { data, error } = await supabase
+      const { data: newResource, error } = await supabase
+        .from("resources")
+        .insert([{ ...resource, id: uuidv4(), created_at: new Date().toISOString() }])
+        .select()
+        .single();
+
+      if (error) throw error;
+      setResources((prevResources) => [...prevResources, newResource]);
+      return newResource;
+    } catch (error) {
+      console.error("Error creating resource:", error);
+      throw error;
+    }
+  };
+
+  const updateResource = async (id: string, updates: Partial<Resource>): Promise<Resource | void> => {
+    try {
+      const { data: updatedResource, error } = await supabase
+        .from("resources")
+        .update(updates)
+        .eq("id", id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      setResources((prevResources) =>
+        prevResources.map((resource) => (resource.id === id ? updatedResource : resource))
+      );
+    } catch (error) {
+      console.error("Error updating resource:", error);
+      throw error;
+    }
+  };
+
+  const deleteResource = async (id: string): Promise<void> => {
+    try {
+      const { error } = await supabase.from("resources").delete().eq("id", id);
+      if (error) throw error;
+      setResources((prevResources) => prevResources.filter((resource) => resource.id !== id));
+    } catch (error) {
+      console.error("Error deleting resource:", error);
+      throw error;
+    }
+  };
+
+  const createVideo = async (video: Omit<Video, 'id'>): Promise<Video> => {
+    try {
+      const { data: newVideo, error } = await supabase
+        .from("videos")
+        .insert([{ ...video, id: uuidv4(), created_at: new Date().toISOString() }])
+        .select()
+        .single();
+
+      if (error) throw error;
+      setVideos((prevVideos) => [...prevVideos, newVideo]);
+      return newVideo;
+    } catch (error) {
+      console.error("Error creating video:", error);
+      throw error;
+    }
+  };
+
+  const updateVideo = async (id: string, updates: Partial<Video>): Promise<Video | void> => {
+    try {
+      const { data: updatedVideo, error } = await supabase
+        .from("videos")
+        .update(updates)
+        .eq("id", id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      setVideos((prevVideos) =>
+        prevVideos.map((video) => (video.id === id ? updatedVideo : video))
+      );
+    } catch (error) {
+      console.error("Error updating video:", error);
+      throw error;
+    }
+  };
+
+  const deleteVideo = async (id: string): Promise<void> => {
+    try {
+      const { error } = await supabase.from("videos").delete().eq("id", id);
+      if (error) throw error;
+      setVideos((prevVideos) => prevVideos.filter((video) => video.id !== id));
+    } catch (error) {
+      console.error("Error deleting video:", error);
+      throw error;
+    }
+  };
+
+  const createOffer = async (offer: Omit<Offer, 'id'>): Promise<Offer> => {
+    try {
+      const { data: newOffer, error } = await supabase
+        .from("offers")
+        .insert([{ ...offer, id: uuidv4(), created_at: new Date().toISOString() }])
+        .select()
+        .single();
+
+      if (error) throw error;
+      setOffers((prevOffers) => [...prevOffers, newOffer]);
+      return newOffer;
+    } catch (error) {
+      console.error("Error creating offer:", error);
+      throw error;
+    }
+  };
+
+  const updateOffer = async (id: string, updates: Partial<Offer>): Promise<Offer | void> => {
+    try {
+      const { data: updatedOffer, error } = await supabase
+        .from("offers")
+        .update(updates)
+        .eq("id", id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      setOffers((prevOffers) =>
+        prevOffers.map((offer) => (offer.id === id ? updatedOffer : offer))
+      );
+    } catch (error) {
+      console.error("Error updating offer:", error);
+      throw error;
+    }
+  };
+
+  const deleteOffer = async (id: string): Promise<void> => {
+    try {
+      const { error } = await supabase.from("offers").delete().eq("id", id);
+      if (error) throw error;
+      setOffers((prevOffers) => prevOffers.filter((offer) => offer.id !== id));
+    } catch (error) {
+      console.error("Error deleting offer:", error);
+      throw error;
+    }
+  };
+    
+  // Fix the createUpdate method to ensure created_at is always a string
+  const createUpdate = async (data: { title: string; content: string; image_url?: string; is_published?: boolean }) => {
+    try {
+      const { data: update, error } = await supabase
         .from("updates")
         .insert({
-          title: updateData.title,
-          content: updateData.content,
-          image_url: updateData.image_url,
-          is_published: updateData.is_published
+          title: data.title,
+          content: data.content,
+          image_url: data.image_url,
+          is_published: data.is_published || false,
+          created_at: new Date().toISOString(), // Ensure created_at is always a string
         })
         .select()
         .single();
 
       if (error) throw error;
-
-      const newUpdate = transformUpdateFromDB(data);
-      setUpdates(prev => [newUpdate, ...prev]);
-      
-      toast.success("Update created successfully");
-      return newUpdate;
+      return update;
     } catch (error) {
       console.error("Error creating update:", error);
-      toast.error("Failed to create update");
       throw error;
     }
   };
-
-  const updateUpdate = async (updateData: Partial<Update> & { id: string }): Promise<Update> => {
+    
+  // Fix in updateUpdate to ensure created_at is always a string when provided
+  const updateUpdate = async (id: string, data: { title?: string; content?: string; image_url?: string; is_published?: boolean; created_at?: string }) => {
     try {
-      const { id, ...rest } = updateData;
-      
-      const { data, error } = await supabase
+      // If created_at is a Date object, convert it to ISO string
+      const updateData = {
+        ...data,
+        created_at: data.created_at ? 
+          (typeof data.created_at === 'string' ? data.created_at : new Date(data.created_at).toISOString()) : 
+          undefined
+      };
+
+      const { data: update, error } = await supabase
         .from("updates")
-        .update(rest)
+        .update(updateData)
         .eq("id", id)
         .select()
         .single();
 
       if (error) throw error;
-
-      const updatedUpdate = transformUpdateFromDB(data);
-      setUpdates(prev => prev.map(update => update.id === id ? updatedUpdate : update));
-      
-      toast.success("Update saved successfully");
-      return updatedUpdate;
+      return update;
     } catch (error) {
       console.error("Error updating update:", error);
-      toast.error("Failed to save update");
       throw error;
     }
   };
 
-  const toggleUpdatePublished = async (id: string, isPublished: boolean): Promise<Update> => {
-    return updateUpdate({ id, is_published: isPublished });
-  };
-
-  const deleteUpdate = async (id: string): Promise<boolean> => {
+  const deleteUpdate = async (id: string): Promise<void> => {
     try {
-      const { error } = await supabase
-        .from("updates")
-        .delete()
-        .eq("id", id);
-
+      const { error } = await supabase.from("updates").delete().eq("id", id);
       if (error) throw error;
-
-      setUpdates(prev => prev.filter(update => update.id !== id));
-      
-      toast.success("Update deleted successfully");
-      return true;
+      setUpdates((prevUpdates) => prevUpdates.filter((update) => update.id !== id));
     } catch (error) {
       console.error("Error deleting update:", error);
-      toast.error("Failed to delete update");
-      return false;
+      throw error;
     }
   };
 
-  const refreshData = async () => {
-    await fetchData();
+  return {
+    clients,
+    tasks,
+    resources,
+    videos,
+    offers,
+    updates,
+    refreshData,
+    createClient,
+    updateClient,
+    deleteClient,
+    createTask,
+    updateTask,
+    deleteTask,
+    createResource,
+    updateResource,
+    deleteResource,
+    createVideo,
+    updateVideo,
+    deleteVideo,
+    createOffer,
+    updateOffer,
+    deleteOffer,
+    createUpdate,
+    updateUpdate,
+    deleteUpdate,
   };
-
-  return (
-    <DataContext.Provider
-      value={{
-        clients,
-        tasks,
-        updates,
-        addClient,
-        updateClient,
-        updateClientPassword,
-        deleteClient,
-        addTask,
-        updateTask,
-        deleteTask,
-        createUpdate,
-        updateUpdate,
-        toggleUpdatePublished,
-        deleteUpdate,
-        isLoading,
-        refreshData,
-      }}
-    >
-      {children}
-    </DataContext.Provider>
-  );
 };
 
+export const DataProvider: React.FC<DataProviderProps> = ({ children }) => {
+  const data = updateDataContext();
+
+  return <DataContext.Provider value={data}>{children}</DataContext.Provider>;
+};
+
+// Define hook
 export const useData = () => {
   const context = useContext(DataContext);
   if (context === undefined) {
