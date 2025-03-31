@@ -80,7 +80,10 @@ export function AdminChatRoom() {
         setIsLoading(true);
         const { data, error } = await supabase
           .from("client_messages")
-          .select("*, profiles(full_name)")
+          .select(`
+            *,
+            profiles:sender_id(full_name)
+          `)
           .eq("client_id", clientId)
           .order("created_at", { ascending: true });
         
@@ -139,9 +142,9 @@ export function AdminChatRoom() {
             }
             
             // Fetch sender name
-            if (newMessage.is_from_client) {
-              newMessage.sender_name = client?.name || "Client";
-            } else {
+            let senderName = newMessage.is_from_client ? client?.name || "Client" : "Support Staff";
+            
+            if (!newMessage.is_from_client) {
               try {
                 const { data } = await supabase
                   .from("profiles")
@@ -149,13 +152,15 @@ export function AdminChatRoom() {
                   .eq("id", newMessage.sender_id)
                   .single();
                 
-                newMessage.sender_name = data?.full_name || "Support Staff";
+                if (data?.full_name) {
+                  senderName = data.full_name;
+                }
               } catch (error) {
-                newMessage.sender_name = "Support Staff";
+                console.error("Error fetching sender name:", error);
               }
             }
             
-            setMessages(prev => [...prev, newMessage]);
+            setMessages(prev => [...prev, {...newMessage, sender_name: senderName}]);
           })
         .subscribe();
 
@@ -172,7 +177,10 @@ export function AdminChatRoom() {
 
   const handleSendMessage = async () => {
     if (!newMessage.trim() && !file) return;
-    if (!clientId || !user) return;
+    if (!clientId || !user) {
+      toast.error("Not connected. Please reload the page.");
+      return;
+    }
     
     try {
       setIsSending(true);
@@ -182,42 +190,48 @@ export function AdminChatRoom() {
       let attachmentType = null;
       
       if (file) {
-        // First check if the storage bucket exists
-        const { data: buckets } = await supabase.storage.listBuckets();
-        const chatBucket = buckets?.find(bucket => bucket.name === 'chat-attachments');
-        
-        if (!chatBucket) {
-          console.log("Creating chat-attachments bucket");
-          const { error: bucketError } = await supabase.storage.createBucket('chat-attachments', {
-            public: true
-          });
+        try {
+          // First check if the storage bucket exists
+          const { data: buckets } = await supabase.storage.listBuckets();
+          const chatBucket = buckets?.find(bucket => bucket.name === 'chat-attachments');
           
-          if (bucketError) {
-            console.error("Error creating bucket:", bucketError);
-            throw bucketError;
+          if (!chatBucket) {
+            console.log("Creating chat-attachments bucket");
+            const { error: bucketError } = await supabase.storage.createBucket('chat-attachments', {
+              public: true
+            });
+            
+            if (bucketError) {
+              console.error("Error creating bucket:", bucketError);
+              throw bucketError;
+            }
           }
+          
+          const fileExt = file.name.split('.').pop();
+          const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
+          const filePath = `admin-attachments/${clientId}/${fileName}`;
+          
+          const { error: uploadError } = await supabase.storage
+            .from('chat-attachments')
+            .upload(filePath, file);
+          
+          if (uploadError) {
+            console.error("Error uploading file:", uploadError);
+            throw uploadError;
+          }
+          
+          const { data: { publicUrl } } = supabase.storage
+            .from('chat-attachments')
+            .getPublicUrl(filePath);
+          
+          attachmentUrl = publicUrl;
+          attachmentType = file.type.startsWith('image/') ? 'image' : 'file';
+          console.log("File uploaded successfully:", attachmentUrl, attachmentType);
+        } catch (uploadError) {
+          console.error("File upload failed:", uploadError);
+          toast.error("Failed to upload file. Please try again.");
+          // Continue without the attachment
         }
-        
-        const fileExt = file.name.split('.').pop();
-        const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
-        const filePath = `admin-attachments/${clientId}/${fileName}`;
-        
-        const { error: uploadError } = await supabase.storage
-          .from('chat-attachments')
-          .upload(filePath, file);
-        
-        if (uploadError) {
-          console.error("Error uploading file:", uploadError);
-          throw uploadError;
-        }
-        
-        const { data: { publicUrl } } = supabase.storage
-          .from('chat-attachments')
-          .getPublicUrl(filePath);
-        
-        attachmentUrl = publicUrl;
-        attachmentType = file.type.startsWith('image/') ? 'image' : 'file';
-        console.log("File uploaded successfully:", attachmentUrl, attachmentType);
       }
       
       // Insert message

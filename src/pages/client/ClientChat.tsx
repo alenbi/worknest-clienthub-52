@@ -38,6 +38,7 @@ const ClientChat = () => {
       if (!user?.id) return;
       
       try {
+        console.log("Fetching client ID for user:", user.id);
         const { data, error } = await supabase
           .from("clients")
           .select("id")
@@ -50,6 +51,7 @@ const ClientChat = () => {
           return;
         }
         
+        console.log("Client ID found:", data.id);
         setClientId(data.id);
       } catch (error) {
         console.error("Failed to fetch client ID:", error);
@@ -60,15 +62,22 @@ const ClientChat = () => {
   }, [user]);
 
   useEffect(() => {
-    if (!clientId) return;
+    if (!clientId) {
+      console.log("No client ID yet, skipping message fetch");
+      return;
+    }
 
     const fetchMessages = async () => {
       try {
         setIsLoading(true);
+        console.log("Fetching messages for client:", clientId);
         
         const { data, error } = await supabase
           .from("client_messages")
-          .select("*, profiles(full_name)")
+          .select(`
+            *,
+            profiles:sender_id(full_name)
+          `)
           .eq("client_id", clientId)
           .order("created_at", { ascending: true });
         
@@ -76,6 +85,8 @@ const ClientChat = () => {
           console.error("Error fetching messages:", error);
           throw error;
         }
+        
+        console.log("Messages fetched:", data.length);
         
         // Mark messages from admins as read
         await supabase
@@ -106,6 +117,8 @@ const ClientChat = () => {
     const setupSubscription = async () => {
       if (!clientId) return;
       
+      console.log("Setting up real-time subscription for client:", clientId);
+      
       const channel = supabase
         .channel('client_messages_changes')
         .on('postgres_changes', 
@@ -116,6 +129,7 @@ const ClientChat = () => {
             filter: `client_id=eq.${clientId}`
           }, 
           async (payload) => {
+            console.log("New message received:", payload);
             const newMessage = payload.new as Message;
             
             if (!newMessage.is_from_client) {
@@ -125,8 +139,9 @@ const ClientChat = () => {
                 .eq("id", newMessage.id);
             }
             
+            let senderName = "";
             if (newMessage.is_from_client) {
-              newMessage.sender_name = user?.name || "You";
+              senderName = user?.name || "You";
             } else {
               try {
                 const { data } = await supabase
@@ -135,13 +150,13 @@ const ClientChat = () => {
                   .eq("id", newMessage.sender_id)
                   .single();
                 
-                newMessage.sender_name = data?.full_name || "Support Staff";
+                senderName = data?.full_name || "Support Staff";
               } catch (error) {
-                newMessage.sender_name = "Support Staff";
+                senderName = "Support Staff";
               }
             }
             
-            setMessages(prev => [...prev, newMessage]);
+            setMessages(prev => [...prev, {...newMessage, sender_name: senderName}]);
           })
         .subscribe();
         
@@ -174,67 +189,66 @@ const ClientChat = () => {
     
     try {
       setIsSending(true);
+      console.log("Sending message for client:", clientId);
       
       let attachmentUrl = null;
       let attachmentType = null;
       
       if (file) {
-        const fileExt = file.name.split('.').pop();
-        const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
-        const filePath = `client-attachments/${clientId}/${fileName}`;
-        
-        // First check if the storage bucket exists
-        const { data: buckets } = await supabase.storage.listBuckets();
-        const chatBucket = buckets?.find(bucket => bucket.name === 'chat-attachments');
-        
-        if (!chatBucket) {
-          console.log("Creating chat-attachments bucket");
-          const { error: bucketError } = await supabase.storage.createBucket('chat-attachments', {
-            public: true
-          });
+        try {
+          console.log("Uploading file:", file.name);
+          const fileExt = file.name.split('.').pop();
+          const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
+          const filePath = `client-attachments/${clientId}/${fileName}`;
           
-          if (bucketError) {
-            console.error("Error creating bucket:", bucketError);
-            throw bucketError;
+          // Ensure the folder exists
+          const { error: uploadError } = await supabase.storage
+            .from('chat-attachments')
+            .upload(filePath, file);
+          
+          if (uploadError) {
+            console.error("Error uploading file:", uploadError);
+            throw uploadError;
           }
+          
+          const { data: { publicUrl } } = supabase.storage
+            .from('chat-attachments')
+            .getPublicUrl(filePath);
+          
+          attachmentUrl = publicUrl;
+          attachmentType = file.type.startsWith('image/') ? 'image' : 'file';
+          console.log("File uploaded successfully:", attachmentUrl, attachmentType);
+        } catch (uploadError) {
+          console.error("File upload failed:", uploadError);
+          toast.error("Failed to upload file. Please try again.");
+          // Continue without the attachment
         }
-        
-        // Upload the file
-        const { error: uploadError } = await supabase.storage
-          .from('chat-attachments')
-          .upload(filePath, file);
-        
-        if (uploadError) {
-          console.error("Error uploading file:", uploadError);
-          throw uploadError;
-        }
-        
-        const { data: { publicUrl } } = supabase.storage
-          .from('chat-attachments')
-          .getPublicUrl(filePath);
-        
-        attachmentUrl = publicUrl;
-        attachmentType = file.type.startsWith('image/') ? 'image' : 'file';
-        console.log("File uploaded successfully:", attachmentUrl, attachmentType);
       }
       
       // Insert message
-      const { error } = await supabase
+      const messageData = {
+        client_id: clientId,
+        sender_id: user.id,
+        is_from_client: true,
+        message: newMessage.trim(),
+        attachment_url: attachmentUrl,
+        attachment_type: attachmentType,
+        is_read: false
+      };
+      
+      console.log("Inserting message data:", messageData);
+      
+      const { data, error } = await supabase
         .from("client_messages")
-        .insert({
-          client_id: clientId,
-          sender_id: user.id,
-          is_from_client: true,
-          message: newMessage.trim(),
-          attachment_url: attachmentUrl,
-          attachment_type: attachmentType,
-          is_read: false
-        });
+        .insert(messageData)
+        .select();
       
       if (error) {
         console.error("Error sending message:", error);
         throw error;
       }
+      
+      console.log("Message sent successfully:", data);
       
       setNewMessage("");
       setFile(null);
@@ -275,6 +289,17 @@ const ClientChat = () => {
       <div className="flex items-center justify-center h-full">
         <Loader2 className="h-8 w-8 animate-spin text-primary mr-2" />
         <span>Loading conversation...</span>
+      </div>
+    );
+  }
+  
+  if (!clientId) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center">
+          <p className="text-xl font-semibold mb-2">Account not linked</p>
+          <p className="text-muted-foreground">Your user account is not linked to a client profile.</p>
+        </div>
       </div>
     );
   }
