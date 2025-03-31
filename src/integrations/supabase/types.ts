@@ -220,6 +220,33 @@ export type Database = {
           },
         ]
       }
+      updates: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          image_url: string | null
+          is_published: boolean
+          title: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          is_published?: boolean
+          title: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          is_published?: boolean
+          title?: string
+        }
+        Relationships: []
+      }
       videos: {
         Row: {
           created_at: string

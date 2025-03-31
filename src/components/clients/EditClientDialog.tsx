@@ -1,171 +1,188 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Edit } from "lucide-react";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useData } from "@/contexts/data-context";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { toast } from "sonner";
+import { Client } from "@/contexts/data-context";
 
-interface Client {
-  id: string;
-  name: string;
-  email: string;
-  company?: string;
-  domain?: string;
-  phone?: string;
-  avatar?: string;
-}
+const formSchema = z.object({
+  name: z.string().min(2, { message: "Name must be at least 2 characters" }),
+  email: z.string().email({ message: "Please enter a valid email address" }),
+  phone: z.string().optional(),
+  company: z.string().optional(),
+  domain: z.string().url({ message: "Please enter a valid URL" }).optional().or(z.literal("")),
+});
+
+type FormValues = z.infer<typeof formSchema>;
 
 interface EditClientDialogProps {
   client: Client;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }
 
-export function EditClientDialog({ client }: EditClientDialogProps) {
-  const [open, setOpen] = useState(false);
-  const [name, setName] = useState(client.name);
-  const [email, setEmail] = useState(client.email);
-  const [company, setCompany] = useState(client.company || "");
-  const [domain, setDomain] = useState(client.domain || "");
-  const [phone, setPhone] = useState(client.phone || "");
-  const [isSubmitting, setIsSubmitting] = useState(false);
+export function EditClientDialog({ client, open, onOpenChange }: EditClientDialogProps) {
   const { updateClient } = useData();
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!name || !email) {
-      toast.error("Name and email are required");
-      return;
-    }
-    
+  const form = useForm<FormValues>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      name: client.name,
+      email: client.email,
+      phone: client.phone,
+      company: client.company || "",
+      domain: client.domain || "",
+    },
+  });
+
+  useEffect(() => {
+    // Reset form when client changes
+    form.reset({
+      name: client.name,
+      email: client.email,
+      phone: client.phone,
+      company: client.company || "",
+      domain: client.domain || "",
+    });
+  }, [client, form]);
+
+  const onSubmit = async (data: FormValues) => {
     try {
       setIsSubmitting(true);
-      await updateClient({
-        id: client.id,
-        name,
-        email,
-        company: company || null,
-        domain: domain || null,
-        phone: phone || null
+      await updateClient(client.id, {
+        name: data.name,
+        email: data.email,
+        phone: data.phone || "",
+        company: data.company || "",
+        domain: data.domain || "",
       });
       
       toast.success("Client updated successfully");
-      setOpen(false);
-    } catch (error: any) {
+      onOpenChange(false);
+    } catch (error) {
       console.error("Error updating client:", error);
-      toast.error(error.message || "Failed to update client");
+      toast.error("Failed to update client");
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const resetForm = () => {
-    setName(client.name);
-    setEmail(client.email);
-    setCompany(client.company || "");
-    setDomain(client.domain || "");
-    setPhone(client.phone || "");
-  };
-
   return (
-    <>
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => {
-          resetForm();
-          setOpen(true);
-        }}
-      >
-        <Edit className="mr-2 h-4 w-4" /> Edit
-      </Button>
-      <Dialog open={open} onOpenChange={(isOpen) => {
-        if (!isOpen) resetForm();
-        setOpen(isOpen);
-      }}>
-        <DialogContent className="sm:max-w-[425px]">
-          <form onSubmit={handleSubmit}>
-            <DialogHeader>
-              <DialogTitle>Edit Client</DialogTitle>
-              <DialogDescription>
-                Update client information.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="grid gap-2">
-                <Label htmlFor="name">Name</Label>
-                <Input
-                  id="name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Full Name"
-                  disabled={isSubmitting}
-                  required
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="Email Address"
-                  disabled={isSubmitting}
-                  required
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="company">Company (Optional)</Label>
-                <Input
-                  id="company"
-                  value={company}
-                  onChange={(e) => setCompany(e.target.value)}
-                  placeholder="Company Name"
-                  disabled={isSubmitting}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="domain">Domain (Optional)</Label>
-                <Input
-                  id="domain"
-                  value={domain}
-                  onChange={(e) => setDomain(e.target.value)}
-                  placeholder="example.com"
-                  disabled={isSubmitting}
-                />
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="phone">Phone (Optional)</Label>
-                <Input
-                  id="phone"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="+1 (555) 123-4567"
-                  disabled={isSubmitting}
-                />
-              </div>
-            </div>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[425px]">
+        <DialogHeader>
+          <DialogTitle>Edit Client</DialogTitle>
+          <DialogDescription>
+            Update client information. Click save when you're done.
+          </DialogDescription>
+        </DialogHeader>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4">
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Name</FormLabel>
+                  <FormControl>
+                    <Input 
+                      placeholder="Enter client name"
+                      {...field}
+                      disabled={isSubmitting}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="email"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Email</FormLabel>
+                  <FormControl>
+                    <Input 
+                      type="email"
+                      placeholder="Enter client email"
+                      {...field}
+                      disabled={isSubmitting}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="phone"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Phone</FormLabel>
+                  <FormControl>
+                    <Input 
+                      placeholder="Enter client phone number"
+                      {...field}
+                      value={field.value || ""}
+                      disabled={isSubmitting}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="company"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Company</FormLabel>
+                  <FormControl>
+                    <Input 
+                      placeholder="Enter client company"
+                      {...field}
+                      value={field.value || ""}
+                      disabled={isSubmitting}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="domain"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Domain</FormLabel>
+                  <FormControl>
+                    <Input 
+                      placeholder="https://example.com"
+                      {...field}
+                      value={field.value || ""}
+                      disabled={isSubmitting}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-                Cancel
-              </Button>
               <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Updating..." : "Update Client"}
+                {isSubmitting ? "Saving..." : "Save changes"}
               </Button>
             </DialogFooter>
           </form>
-        </DialogContent>
-      </Dialog>
-    </>
+        </Form>
+      </DialogContent>
+    </Dialog>
   );
 }

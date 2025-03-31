@@ -29,12 +29,22 @@ export interface Task {
   completedAt?: Date;
 }
 
+export interface Update {
+  id: string;
+  title: string;
+  content: string;
+  image_url?: string;
+  is_published: boolean;
+  created_at: Date | string;
+}
+
 // Reexport for use throughout the app
 export type { Resource, Video, Offer, ClientMessage };
 
 interface DataContextType {
   clients: Client[];
   tasks: Task[];
+  updates: Update[];
   addClient: (client: Omit<Client, "id" | "createdAt"> & { password?: string }) => Promise<{ client: Client; password: string }>;
   updateClient: (id: string, updates: Partial<Client>) => Promise<Client>;
   updateClientPassword: (clientId: string, newPassword: string) => Promise<boolean>;
@@ -42,6 +52,10 @@ interface DataContextType {
   addTask: (task: Omit<Task, "id" | "createdAt" | "completedAt">) => Promise<Task>;
   updateTask: (id: string, updates: Partial<Task>) => Promise<Task>;
   deleteTask: (id: string) => Promise<boolean>;
+  createUpdate: (update: Omit<Update, "id" | "created_at">) => Promise<Update>;
+  updateUpdate: (update: Partial<Update> & { id: string }) => Promise<Update>;
+  toggleUpdatePublished: (id: string, isPublished: boolean) => Promise<Update>;
+  deleteUpdate: (id: string) => Promise<boolean>;
   isLoading: boolean;
   refreshData: () => Promise<void>;
 }
@@ -73,6 +87,15 @@ const transformTaskFromDB = (task: any): Task => ({
   completedAt: task.completed_at ? new Date(task.completed_at) : undefined,
 });
 
+const transformUpdateFromDB = (update: any): Update => ({
+  id: update.id,
+  title: update.title,
+  content: update.content,
+  image_url: update.image_url || undefined,
+  is_published: update.is_published,
+  created_at: new Date(update.created_at),
+});
+
 // Predefined tasks to create for new clients
 const predefinedTasks = [
   "Domain & Hosting",
@@ -100,6 +123,7 @@ const predefinedTasks = [
 export const DataProvider = ({ children }: { children: React.ReactNode }) => {
   const [clients, setClients] = useState<Client[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
+  const [updates, setUpdates] = useState<Update[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const { isAuthenticated } = useAuth();
 
@@ -107,6 +131,7 @@ export const DataProvider = ({ children }: { children: React.ReactNode }) => {
     if (!isAuthenticated) {
       setClients([]);
       setTasks([]);
+      setUpdates([]);
       setIsLoading(false);
       return;
     }
@@ -127,18 +152,30 @@ export const DataProvider = ({ children }: { children: React.ReactNode }) => {
       const { data: tasksData, error: tasksError } = await supabase
         .from("tasks")
         .select("*")
-        .order("created_at", { ascending: true }); // Changed to ascending for oldest first
+        .order("created_at", { ascending: true });
 
       if (tasksError) {
         throw tasksError;
       }
 
+      // Fetch updates
+      const { data: updatesData, error: updatesError } = await supabase
+        .from("updates")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (updatesError) {
+        throw updatesError;
+      }
+
       // Transform data
       const transformedClients = clientsData.map(transformClientFromDB);
       const transformedTasks = tasksData.map(transformTaskFromDB);
+      const transformedUpdates = updatesData.map(transformUpdateFromDB);
 
       setClients(transformedClients);
       setTasks(transformedTasks);
+      setUpdates(transformedUpdates);
     } catch (error) {
       console.error("Error fetching data:", error);
       toast.error("Failed to load data");
@@ -153,13 +190,10 @@ export const DataProvider = ({ children }: { children: React.ReactNode }) => {
 
   const addClient = async (clientData: Omit<Client, "id" | "createdAt"> & { password?: string }): Promise<{ client: Client; password: string }> => {
     try {
-      // Use provided password or generate a random one
       const password = clientData.password || Math.random().toString(36).slice(-10);
       
-      // Create user account for client
       let userId = null;
       
-      // Create user in Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: clientData.email,
         password,
@@ -175,7 +209,6 @@ export const DataProvider = ({ children }: { children: React.ReactNode }) => {
       if (authData.user) {
         userId = authData.user.id;
         
-        // Prepare data for database with user_id
         const dbClient = {
           name: clientData.name,
           email: clientData.email,
@@ -197,7 +230,6 @@ export const DataProvider = ({ children }: { children: React.ReactNode }) => {
         const newClient = transformClientFromDB(data);
         setClients(prev => [newClient, ...prev]);
         
-        // Automatically create predefined tasks for this client
         await createPredefinedTasks(newClient.id);
         
         toast.success(`Client added with email: ${clientData.email}`);
@@ -214,17 +246,15 @@ export const DataProvider = ({ children }: { children: React.ReactNode }) => {
 
   const createPredefinedTasks = async (clientId: string) => {
     try {
-      // Create predefined tasks with medium priority and 20 days deadline
       const now = new Date();
       const dueDate = new Date(now);
       dueDate.setDate(now.getDate() + 20);
 
-      // Prepare tasks data
       const tasksToCreate = predefinedTasks.map((title) => ({
         title,
         description: "",
         client_id: clientId,
-        status: "todo", // Using "todo" for the database
+        status: "todo",
         priority: "medium",
         due_date: dueDate.toISOString(),
       }));
@@ -238,7 +268,6 @@ export const DataProvider = ({ children }: { children: React.ReactNode }) => {
         throw error;
       }
 
-      // Transform and add new tasks to local state
       if (data) {
         const newTasks = data.map(transformTaskFromDB);
         setTasks(prev => [...prev, ...newTasks]);
@@ -253,7 +282,6 @@ export const DataProvider = ({ children }: { children: React.ReactNode }) => {
 
   const updateClient = async (id: string, updates: Partial<Client>): Promise<Client> => {
     try {
-      // Prepare data for database
       const dbUpdates: any = {};
       if (updates.name !== undefined) dbUpdates.name = updates.name;
       if (updates.email !== undefined) dbUpdates.email = updates.email;
@@ -286,14 +314,12 @@ export const DataProvider = ({ children }: { children: React.ReactNode }) => {
 
   const updateClientPassword = async (clientId: string, newPassword: string): Promise<boolean> => {
     try {
-      // Find the client to get the user_id
       const client = clients.find(c => c.id === clientId);
       if (!client || !client.user_id) {
         toast.error("Client not found or has no associated user account");
         return false;
       }
       
-      // Update the user's password in Supabase Auth
       const { error } = await supabase.auth.admin.updateUserById(
         client.user_id,
         { password: newPassword }
@@ -312,7 +338,6 @@ export const DataProvider = ({ children }: { children: React.ReactNode }) => {
 
   const deleteClient = async (id: string): Promise<boolean> => {
     try {
-      // Check if client has tasks
       const clientTasks = tasks.filter(task => task.clientId === id && task.status !== "completed");
       
       if (clientTasks.length > 0) {
@@ -328,7 +353,6 @@ export const DataProvider = ({ children }: { children: React.ReactNode }) => {
       if (error) throw error;
 
       setClients(prev => prev.filter(client => client.id !== id));
-      // Also filter out client's tasks from local state
       setTasks(prev => prev.filter(task => task.clientId !== id));
       
       toast.success("Client deleted successfully");
@@ -342,13 +366,10 @@ export const DataProvider = ({ children }: { children: React.ReactNode }) => {
 
   const addTask = async (taskData: Omit<Task, "id" | "createdAt" | "completedAt">): Promise<Task> => {
     try {
-      // Prepare data for database
-      // Map our frontend status values to database accepted values
-      // The database appears to only accept "todo", "in-progress", or "completed"
-      let dbStatus = "todo"; // Default fallback
+      let dbStatus = "todo";
       
       if (taskData.status === "pending") {
-        dbStatus = "todo"; // Map "pending" to "todo" for database
+        dbStatus = "todo";
       } else if (taskData.status === "completed") {
         dbStatus = "completed";
       }
@@ -357,7 +378,7 @@ export const DataProvider = ({ children }: { children: React.ReactNode }) => {
         title: taskData.title,
         description: taskData.description,
         client_id: taskData.clientId,
-        status: dbStatus, // Use the mapped status value
+        status: dbStatus,
         priority: taskData.priority,
         due_date: new Date(taskData.dueDate).toISOString(),
       };
@@ -371,7 +392,7 @@ export const DataProvider = ({ children }: { children: React.ReactNode }) => {
       if (error) throw error;
 
       const newTask = transformTaskFromDB(data);
-      setTasks(prev => [...prev, newTask]); // Add to end of array to maintain chronological order
+      setTasks(prev => [...prev, newTask]);
       
       toast.success("Task added successfully");
       return newTask;
@@ -384,7 +405,6 @@ export const DataProvider = ({ children }: { children: React.ReactNode }) => {
 
   const updateTask = async (id: string, updates: Partial<Task>): Promise<Task> => {
     try {
-      // Prepare data for database
       const dbUpdates: any = {};
       if (updates.title !== undefined) dbUpdates.title = updates.title;
       if (updates.description !== undefined) dbUpdates.description = updates.description;
@@ -392,16 +412,13 @@ export const DataProvider = ({ children }: { children: React.ReactNode }) => {
       if (updates.priority !== undefined) dbUpdates.priority = updates.priority;
       if (updates.dueDate !== undefined) dbUpdates.due_date = new Date(updates.dueDate).toISOString();
       
-      // Handle status update and completed_at
       if (updates.status !== undefined) {
-        // Map our frontend status to database status
         if (updates.status === "pending") {
           dbUpdates.status = "todo";
         } else if (updates.status === "completed") {
           dbUpdates.status = "completed";
         }
         
-        // If status is changing to completed, set completed_at
         const task = tasks.find(t => t.id === id);
         if (task && updates.status === "completed" && task.status !== "completed") {
           dbUpdates.completed_at = new Date().toISOString();
@@ -453,7 +470,82 @@ export const DataProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
-  // Function to manually refresh data
+  const createUpdate = async (updateData: Omit<Update, "id" | "created_at">): Promise<Update> => {
+    try {
+      const { data, error } = await supabase
+        .from("updates")
+        .insert({
+          title: updateData.title,
+          content: updateData.content,
+          image_url: updateData.image_url,
+          is_published: updateData.is_published
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      const newUpdate = transformUpdateFromDB(data);
+      setUpdates(prev => [newUpdate, ...prev]);
+      
+      toast.success("Update created successfully");
+      return newUpdate;
+    } catch (error) {
+      console.error("Error creating update:", error);
+      toast.error("Failed to create update");
+      throw error;
+    }
+  };
+
+  const updateUpdate = async (updateData: Partial<Update> & { id: string }): Promise<Update> => {
+    try {
+      const { id, ...rest } = updateData;
+      
+      const { data, error } = await supabase
+        .from("updates")
+        .update(rest)
+        .eq("id", id)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      const updatedUpdate = transformUpdateFromDB(data);
+      setUpdates(prev => prev.map(update => update.id === id ? updatedUpdate : update));
+      
+      toast.success("Update saved successfully");
+      return updatedUpdate;
+    } catch (error) {
+      console.error("Error updating update:", error);
+      toast.error("Failed to save update");
+      throw error;
+    }
+  };
+
+  const toggleUpdatePublished = async (id: string, isPublished: boolean): Promise<Update> => {
+    return updateUpdate({ id, is_published: isPublished });
+  };
+
+  const deleteUpdate = async (id: string): Promise<boolean> => {
+    try {
+      const { error } = await supabase
+        .from("updates")
+        .delete()
+        .eq("id", id);
+
+      if (error) throw error;
+
+      setUpdates(prev => prev.filter(update => update.id !== id));
+      
+      toast.success("Update deleted successfully");
+      return true;
+    } catch (error) {
+      console.error("Error deleting update:", error);
+      toast.error("Failed to delete update");
+      return false;
+    }
+  };
+
   const refreshData = async () => {
     await fetchData();
   };
@@ -463,6 +555,7 @@ export const DataProvider = ({ children }: { children: React.ReactNode }) => {
       value={{
         clients,
         tasks,
+        updates,
         addClient,
         updateClient,
         updateClientPassword,
@@ -470,6 +563,10 @@ export const DataProvider = ({ children }: { children: React.ReactNode }) => {
         addTask,
         updateTask,
         deleteTask,
+        createUpdate,
+        updateUpdate,
+        toggleUpdatePublished,
+        deleteUpdate,
         isLoading,
         refreshData,
       }}
