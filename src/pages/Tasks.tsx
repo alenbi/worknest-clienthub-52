@@ -413,6 +413,7 @@ export default function Tasks() {
                         selected={newTask.due_date}
                         onSelect={handleDateChange}
                         initialFocus
+                        min={new Date().toISOString().split('T')[0]}
                       />
                     </PopoverContent>
                   </Popover>

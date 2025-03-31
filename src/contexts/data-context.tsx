@@ -1,4 +1,3 @@
-
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { v4 as uuidv4 } from 'uuid';
@@ -16,16 +15,19 @@ export interface Client {
   avatar?: string;
 }
 
+export type TaskStatus = 'open' | 'in progress' | 'done' | 'pending' | 'completed';
+export type TaskPriority = 'low' | 'medium' | 'high';
+
 export interface Task {
   id: string;
   title: string;
   description?: string;
-  status: 'open' | 'in progress' | 'done' | 'pending' | 'completed';
+  status: TaskStatus;
   client_id: string;
-  created_at?: string;
+  created_at: string;
   completed_at?: string;
   updated_at?: string;
-  priority?: 'low' | 'medium' | 'high';
+  priority?: TaskPriority;
   due_date?: string;
 }
 
@@ -142,7 +144,12 @@ export const updateDataContext = (data: UpdateData | null = null): Data => {
         .order('created_at', { ascending: false });
 
       if (tasksError) throw tasksError;
-      setTasks(tasksData || []);
+      const typedTasks = (tasksData || []).map(task => ({
+        ...task,
+        status: task.status as TaskStatus,
+        priority: task.priority as TaskPriority,
+      }));
+      setTasks(typedTasks);
 
       const { data: resourcesData, error: resourcesError } = await supabase
         .from("resources")
@@ -246,9 +253,14 @@ export const updateDataContext = (data: UpdateData | null = null): Data => {
         status: task.status,
         client_id: task.client_id,
         priority: task.priority || 'medium',
-        due_date: typeof task.due_date === 'string' ? task.due_date : undefined,
         created_at: new Date().toISOString()
       };
+
+      if (task.due_date) {
+        taskToInsert.due_date = typeof task.due_date === 'object' && task.due_date instanceof Date 
+          ? task.due_date.toISOString() 
+          : task.due_date;
+      }
 
       const { data: newTask, error } = await supabase
         .from("tasks")
@@ -269,8 +281,10 @@ export const updateDataContext = (data: UpdateData | null = null): Data => {
     try {
       const updatesToSubmit: any = { ...updates };
       
-      if (updates.due_date && typeof updates.due_date !== 'string') {
-        updatesToSubmit.due_date = new Date(updates.due_date).toISOString();
+      if (updates.due_date) {
+        updatesToSubmit.due_date = typeof updates.due_date === 'object' && updates.due_date instanceof Date
+          ? updates.due_date.toISOString()
+          : updates.due_date;
       }
 
       const { data: updatedTask, error } = await supabase

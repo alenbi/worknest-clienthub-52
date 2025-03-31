@@ -106,9 +106,14 @@ const Dashboard = () => {
   const recentlyCompletedTasks = tasks
     .filter((task) => task.status === "completed")
     .sort((a, b) => 
-      (b.completed_at?.getTime() || 0) - (a.completed_at?.getTime() || 0)
+      (getTaskCompletionTime(b) || 0) - (getTaskCompletionTime(a) || 0)
     )
     .slice(0, 5);
+
+  const getTaskCompletionTime = (task: Task) => {
+    if (!task.completed_at) return null;
+    return new Date(task.completed_at).getTime();
+  };
 
   return (
     <div className="space-y-6">
