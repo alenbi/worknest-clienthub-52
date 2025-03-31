@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect } from "react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase, Resource, Video, Offer, ClientMessage } from "@/integrations/supabase/client";
 import { useAuth } from "./auth-context";
 
 // Data models
@@ -13,6 +13,7 @@ export interface Client {
   domain?: string;
   avatar?: string;
   createdAt: Date;
+  user_id?: string;
 }
 
 export interface Task {
@@ -26,6 +27,9 @@ export interface Task {
   createdAt: Date;
   completedAt?: Date;
 }
+
+// Reexport for use throughout the app
+export type { Resource, Video, Offer, ClientMessage };
 
 interface DataContextType {
   clients: Client[];
@@ -52,6 +56,7 @@ const transformClientFromDB = (client: any): Client => ({
   domain: client.domain || "",
   avatar: client.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(client.name)}&background=6366f1&color=fff`,
   createdAt: new Date(client.created_at),
+  user_id: client.user_id,
 });
 
 const transformTaskFromDB = (task: any): Task => ({
@@ -59,7 +64,6 @@ const transformTaskFromDB = (task: any): Task => ({
   title: task.title,
   description: task.description || "",
   clientId: task.client_id,
-  // Map database statuses to our new simplified statuses
   status: task.status === "completed" ? "completed" : "pending",
   priority: task.priority,
   dueDate: new Date(task.due_date),

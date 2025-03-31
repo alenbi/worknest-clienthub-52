@@ -1,9 +1,8 @@
-
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase, ClientMessage } from "@/integrations/supabase/client";
 import { User, Bell, MessageSquare, SearchIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -46,7 +45,8 @@ export function AdminChatList() {
             .select("*")
             .eq("client_id", client.id)
             .order("created_at", { ascending: false })
-            .limit(1);
+            .limit(1)
+            .returns<any[]>();
           
           if (messagesError) throw messagesError;
           
@@ -115,11 +115,6 @@ export function AdminChatList() {
     };
   }, []);
 
-  const filteredClients = clients.filter(client => 
-    client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    client.company.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
   const getInitials = (name: string) => {
     return name
       .split(" ")
@@ -149,6 +144,11 @@ export function AdminChatList() {
   const handleClientClick = (clientId: string) => {
     navigate(`/admin/chat/${clientId}`);
   };
+
+  const filteredClients = clients.filter(client => 
+    client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    client.company.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
     <Card className="h-full">

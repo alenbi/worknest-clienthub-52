@@ -9,6 +9,50 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      client_messages: {
+        Row: {
+          attachment_type: string | null
+          attachment_url: string | null
+          client_id: string
+          created_at: string
+          id: string
+          is_from_client: boolean
+          is_read: boolean
+          message: string
+          sender_id: string
+        }
+        Insert: {
+          attachment_type?: string | null
+          attachment_url?: string | null
+          client_id: string
+          created_at?: string
+          id?: string
+          is_from_client?: boolean
+          is_read?: boolean
+          message: string
+          sender_id: string
+        }
+        Update: {
+          attachment_type?: string | null
+          attachment_url?: string | null
+          client_id?: string
+          created_at?: string
+          id?: string
+          is_from_client?: boolean
+          is_read?: boolean
+          message?: string
+          sender_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_messages_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clients: {
         Row: {
           avatar: string | null
@@ -20,6 +64,7 @@ export type Database = {
           name: string
           phone: string | null
           updated_at: string
+          user_id: string | null
         }
         Insert: {
           avatar?: string | null
@@ -31,6 +76,7 @@ export type Database = {
           name: string
           phone?: string | null
           updated_at?: string
+          user_id?: string | null
         }
         Update: {
           avatar?: string | null
@@ -42,6 +88,37 @@ export type Database = {
           name?: string
           phone?: string | null
           updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      offers: {
+        Row: {
+          code: string | null
+          created_at: string
+          description: string | null
+          discount_percentage: number | null
+          id: string
+          title: string
+          valid_until: string
+        }
+        Insert: {
+          code?: string | null
+          created_at?: string
+          description?: string | null
+          discount_percentage?: number | null
+          id?: string
+          title: string
+          valid_until: string
+        }
+        Update: {
+          code?: string | null
+          created_at?: string
+          description?: string | null
+          discount_percentage?: number | null
+          id?: string
+          title?: string
+          valid_until?: string
         }
         Relationships: []
       }
@@ -66,6 +143,33 @@ export type Database = {
           full_name?: string | null
           id?: string
           role?: string | null
+        }
+        Relationships: []
+      }
+      resources: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          title: string
+          type: string
+          url: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          title: string
+          type: string
+          url: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          title?: string
+          type?: string
+          url?: string
         }
         Relationships: []
       }
@@ -115,6 +219,30 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      videos: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          title: string
+          youtube_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          title: string
+          youtube_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          title?: string
+          youtube_id?: string
+        }
+        Relationships: []
       }
     }
     Views: {
