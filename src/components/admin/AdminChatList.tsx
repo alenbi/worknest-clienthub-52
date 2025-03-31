@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -31,23 +32,26 @@ export function AdminChatList() {
       try {
         setIsLoading(true);
         
+        // Get all clients
         const { data: clientsData, error: clientsError } = await supabase
           .from("clients")
           .select("*");
         
         if (clientsError) throw clientsError;
         
+        // For each client, get the most recent message and unread count
         const clientsWithChatInfo = await Promise.all(clientsData.map(async (client) => {
+          // Get most recent message
           const { data: messagesData, error: messagesError } = await supabase
             .from("client_messages")
             .select("*")
             .eq("client_id", client.id)
             .order("created_at", { ascending: false })
-            .limit(1)
-            .returns<any[]>();
+            .limit(1);
           
           if (messagesError) throw messagesError;
           
+          // Count unread messages from client
           const { count, error: countError } = await supabase
             .from("client_messages")
             .select("*", { count: "exact", head: true })
@@ -70,6 +74,7 @@ export function AdminChatList() {
           };
         }));
         
+        // Sort clients by unread count first, then by latest message
         clientsWithChatInfo.sort((a, b) => {
           if (a.unread_count > 0 && b.unread_count === 0) return -1;
           if (a.unread_count === 0 && b.unread_count > 0) return 1;
@@ -91,6 +96,7 @@ export function AdminChatList() {
 
     fetchClientsWithChatInfo();
     
+    // Subscribe to real-time updates for messages
     const channel = supabase
       .channel('client_messages_changes')
       .on('postgres_changes', 
@@ -109,6 +115,7 @@ export function AdminChatList() {
     };
   }, []);
 
+  // Helper functions
   const getInitials = (name: string) => {
     return name
       .split(" ")

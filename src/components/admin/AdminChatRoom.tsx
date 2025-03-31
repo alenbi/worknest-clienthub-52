@@ -77,7 +77,7 @@ export function AdminChatRoom() {
         setIsLoading(true);
         const { data, error } = await supabase
           .from("client_messages")
-          .select("*, profiles(full_name)")
+          .select("*, profiles!client_messages_sender_id_fkey(full_name)")
           .eq("client_id", clientId)
           .order("created_at", { ascending: true });
         

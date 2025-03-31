@@ -1,187 +1,182 @@
-
 import { useState, useEffect, useRef } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { useClientAuth } from "@/contexts/client-auth-context";
+import { Textarea } from "@/components/ui/textarea";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { supabase } from "@/integrations/supabase/client";
-import { Send, PaperclipIcon, Loader2 } from "lucide-react";
+import { useClientAuth } from "@/contexts/client-auth-context";
+import { SendIcon, Paperclip, Image as ImageIcon, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
-// Define ClientMessage interface for type safety
-interface ClientMessage {
+interface Message {
   id: string;
-  client_id: string;
+  message: string;
   sender_id: string;
   is_from_client: boolean;
-  is_read: boolean;
-  message: string;
   created_at: string;
+  sender_name?: string;
   attachment_url?: string;
   attachment_type?: string;
 }
 
 const ClientChat = () => {
-  const { user } = useClientAuth();
-  const [message, setMessage] = useState("");
-  const [messages, setMessages] = useState<ClientMessage[]>([]);
-  const [clientId, setClientId] = useState<string | null>(null);
+  const { user, client } = useClientAuth();
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [newMessage, setNewMessage] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [file, setFile] = useState<File | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Fetch client ID from database based on user ID
   useEffect(() => {
-    const fetchClientId = async () => {
-      if (!user?.id) return;
+    if (!client) return;
 
-      try {
-        console.log("Fetching client ID for user:", user.id);
-        const { data, error } = await supabase
-          .from("clients")
-          .select("id")
-          .eq("user_id", user.id)
-          .single();
-        
-        if (error) {
-          console.error("Error fetching client ID:", error);
-          setError(`Could not find client profile: ${error.message}`);
-          setIsLoading(false);
-          return;
-        }
-        
-        console.log("Client ID found:", data?.id);
-        if (data) {
-          setClientId(data.id);
-        }
-      } catch (err) {
-        console.error("Exception fetching client ID:", err);
-        setError("An unexpected error occurred while loading your profile");
-        setIsLoading(false);
-      }
-    };
-
-    if (user) {
-      fetchClientId();
-    }
-  }, [user]);
-
-  // Fetch messages for this client
-  useEffect(() => {
     const fetchMessages = async () => {
-      if (!clientId) return;
-
       try {
-        console.log("Fetching messages for client:", clientId);
         setIsLoading(true);
+        
+        // Explicitly specify which table the user_id comes from in the join
         const { data, error } = await supabase
           .from("client_messages")
-          .select("*")
-          .eq("client_id", clientId)
+          .select("*, profiles!client_messages_sender_id_fkey(full_name)")
+          .eq("client_id", client.id)
           .order("created_at", { ascending: true });
         
-        if (error) {
-          console.error("Error fetching messages:", error);
-          setError(`Could not load messages: ${error.message}`);
-          setIsLoading(false);
-          return;
-        }
+        if (error) throw error;
         
-        console.log(`Loaded ${data?.length || 0} messages`);
-        setMessages(data as ClientMessage[]);
+        // Mark all messages from admin as read
+        await supabase
+          .from("client_messages")
+          .update({ is_read: true })
+          .eq("client_id", client.id)
+          .eq("is_from_client", false)
+          .eq("is_read", false);
         
-        // Mark all unread messages from admin as read
-        const unreadAdminMessages = data.filter(
-          msg => !msg.is_from_client && !msg.is_read
-        );
+        // Transform data to include sender name
+        const formattedMessages = data.map((msg: any) => ({
+          ...msg,
+          sender_name: msg.is_from_client 
+            ? (client?.name || "You")
+            : (msg.profiles?.full_name || "Support Staff")
+        }));
         
-        if (unreadAdminMessages.length > 0) {
-          console.log(`Marking ${unreadAdminMessages.length} messages as read`);
-          const unreadIds = unreadAdminMessages.map(msg => msg.id);
-          await supabase
-            .from("client_messages")
-            .update({ is_read: true })
-            .in("id", unreadIds);
-        }
-      } catch (err) {
-        console.error("Exception fetching messages:", err);
-        setError("An unexpected error occurred while loading messages");
+        setMessages(formattedMessages);
+      } catch (error) {
+        console.error("Error fetching messages:", error);
+        toast.error("Could not load messages");
       } finally {
         setIsLoading(false);
       }
     };
 
-    if (clientId) {
-      fetchMessages();
-      
-      // Set up realtime subscription for new messages
-      const channel = supabase
-        .channel('client_messages_changes')
-        .on('postgres_changes', { 
+    fetchMessages();
+    
+    // Subscribe to real-time updates
+    const channel = supabase
+      .channel('client_messages_changes')
+      .on('postgres_changes', 
+        { 
           event: 'INSERT', 
           schema: 'public', 
           table: 'client_messages',
-          filter: `client_id=eq.${clientId}`
-        }, (payload) => {
-          console.log("Received new message:", payload);
-          const newMessage = payload.new as ClientMessage;
-          setMessages(prev => [...prev, newMessage]);
+          filter: `client_id=eq.${client.id}`
+        }, 
+        async (payload) => {
+          const newMessage = payload.new as Message;
           
-          // If message is from admin, mark as read
-          if (!newMessage.is_from_client && !newMessage.is_read) {
-            supabase
+          // Mark message as read if it's from admin
+          if (!newMessage.is_from_client) {
+            await supabase
               .from("client_messages")
               .update({ is_read: true })
               .eq("id", newMessage.id);
           }
+          
+          // Fetch sender name
+          if (newMessage.is_from_client) {
+            newMessage.sender_name = client?.name || "You";
+          } else {
+            try {
+              const { data } = await supabase
+                .from("profiles")
+                .select("full_name")
+                .eq("id", newMessage.sender_id)
+                .single();
+              
+              newMessage.sender_name = data?.full_name || "Support Staff";
+            } catch (error) {
+              newMessage.sender_name = "Support Staff";
+            }
+          }
+          
+          setMessages(prev => [...prev, newMessage]);
         })
-        .subscribe();
+      .subscribe();
 
-      return () => {
-        console.log("Unsubscribing from client_messages_changes channel");
-        supabase.removeChannel(channel);
-      };
-    }
-  }, [clientId]);
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [client]);
 
-  // Scroll to bottom when messages change
   useEffect(() => {
+    // Scroll to bottom when messages change
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!message.trim() || !clientId || !user?.id) return;
+  const handleSendMessage = async () => {
+    if (!newMessage.trim() && !file) return;
+    if (!client || !user) return;
     
     try {
       setIsSending(true);
-      console.log("Sending message:", message.trim());
       
-      const newMessage = {
-        client_id: clientId,
-        sender_id: user.id,
-        is_from_client: true,
-        message: message.trim(),
-        is_read: false
-      };
+      // Upload file if exists
+      let attachmentUrl = null;
+      let attachmentType = null;
       
-      const { error } = await supabase
-        .from("client_messages")
-        .insert(newMessage);
-      
-      if (error) {
-        console.error("Error sending message:", error);
-        toast.error(`Failed to send message: ${error.message}`);
-        return;
+      if (file) {
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
+        const filePath = `client-attachments/${client.id}/${fileName}`;
+        
+        const { error: uploadError, data } = await supabase.storage
+          .from('chat-attachments')
+          .upload(filePath, file);
+        
+        if (uploadError) throw uploadError;
+        
+        const { data: { publicUrl } } = supabase.storage
+          .from('chat-attachments')
+          .getPublicUrl(filePath);
+        
+        attachmentUrl = publicUrl;
+        attachmentType = file.type.startsWith('image/') ? 'image' : 'file';
       }
       
-      setMessage("");
-    } catch (err) {
-      console.error("Exception sending message:", err);
-      toast.error("An unexpected error occurred while sending your message");
+      // Insert message
+      const { error } = await supabase
+        .from("client_messages")
+        .insert({
+          client_id: client.id,
+          sender_id: user.id,
+          is_from_client: true,
+          message: newMessage.trim(),
+          attachment_url: attachmentUrl,
+          attachment_type: attachmentType,
+          is_read: false // Client messages are marked as unread for admin
+        });
+      
+      if (error) throw error;
+      
+      // Clear input
+      setNewMessage("");
+      setFile(null);
+      
+    } catch (error) {
+      console.error("Error sending message:", error);
+      toast.error("Failed to send message");
     } finally {
       setIsSending(false);
     }
@@ -192,18 +187,6 @@ const ClientChat = () => {
       <div className="flex items-center justify-center h-full">
         <Loader2 className="h-8 w-8 animate-spin text-primary mr-2" />
         <span>Loading conversation...</span>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full">
-        <div className="text-destructive mb-4">
-          <p className="font-semibold text-lg">Error loading chat</p>
-          <p>{error}</p>
-        </div>
-        <Button onClick={() => window.location.reload()}>Try again</Button>
       </div>
     );
   }
@@ -261,28 +244,28 @@ const ClientChat = () => {
             </div>
           )}
         </CardContent>
-        <div className="p-4 border-t">
+        <CardFooter className="p-4 border-t">
           <form onSubmit={handleSendMessage} className="flex gap-2">
-            <Input
+            <Textarea
               placeholder="Type your message..."
-              value={message}
-              onChange={(e) => setMessage(e.target.value)}
+              value={newMessage}
+              onChange={(e) => setNewMessage(e.target.value)}
               disabled={isSending}
             />
             <Button type="button" variant="outline" size="icon" disabled={isSending}>
-              <PaperclipIcon className="h-4 w-4" />
+              <Paperclip className="h-4 w-4" />
               <span className="sr-only">Attach file</span>
             </Button>
-            <Button type="submit" disabled={!message.trim() || isSending}>
+            <Button type="submit" disabled={!newMessage.trim() || isSending}>
               {isSending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <Send className="h-4 w-4" />
+                <SendIcon className="h-4 w-4" />
               )}
               <span className="sr-only">Send</span>
             </Button>
           </form>
-        </div>
+        </CardFooter>
       </Card>
     </div>
   );
