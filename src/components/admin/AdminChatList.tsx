@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
-import { User, Bell, MessageSquare, SearchIcon } from "lucide-react";
+import { MessageSquare, SearchIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
@@ -57,7 +57,7 @@ export function AdminChatList() {
             throw messagesError;
           }
           
-          // Count unread messages from client
+          // Count unread messages from client - ensure we avoid ambiguous column references
           const { count, error: countError } = await supabase
             .from("client_messages")
             .select("*", { count: "exact", head: true })

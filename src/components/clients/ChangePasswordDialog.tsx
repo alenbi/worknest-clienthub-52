@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { useData, Client } from "@/contexts/data-context";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 interface ChangePasswordDialogProps extends ButtonProps {
   client: Client;
@@ -42,15 +43,46 @@ export function ChangePasswordDialog({ client, ...props }: ChangePasswordDialogP
 
     try {
       setIsSubmitting(true);
+      
+      // Check if the client has a user_id
+      if (!client.user_id) {
+        toast.error("This client doesn't have a user account");
+        return;
+      }
+      
+      // If updateClientPassword exists in the context, use it
       if (updateClientPassword) {
         await updateClientPassword(client.id, newPassword);
-        toast.success("Password updated successfully");
-        setNewPassword("");
-        setConfirmPassword("");
-        setOpen(false);
       } else {
-        throw new Error("Password update functionality not available");
+        // Direct implementation fallback if context function doesn't exist
+        try {
+          // Get user_id from client
+          const { data: userData, error: userError } = await supabase
+            .from("clients")
+            .select("user_id")
+            .eq("id", client.id)
+            .single();
+            
+          if (userError || !userData.user_id) {
+            throw new Error("Could not find user account for this client");
+          }
+          
+          // Update password via Supabase Auth Admin API
+          const { error: pwError } = await supabase.auth.admin.updateUserById(userData.user_id, {
+            password: newPassword
+          });
+          
+          if (pwError) throw pwError;
+        } catch (error: any) {
+          console.error("Error updating password:", error);
+          throw error;
+        }
       }
+      
+      toast.success("Password updated successfully");
+      setNewPassword("");
+      setConfirmPassword("");
+      setOpen(false);
     } catch (error: any) {
       toast.error(error.message || "Failed to update password");
     } finally {

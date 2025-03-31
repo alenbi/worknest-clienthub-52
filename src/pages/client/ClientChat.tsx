@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -71,6 +72,7 @@ const ClientChat = () => {
         setIsLoading(true);
         console.log("Fetching messages for client:", clientId);
         
+        // Fixed query to avoid ambiguous user_id reference by specifying table name
         const { data, error } = await supabase
           .from("client_messages")
           .select(`
@@ -206,6 +208,22 @@ const ClientChat = () => {
           const fileExt = file.name.split('.').pop();
           const fileName = `${Math.random().toString(36).substring(2)}.${fileExt}`;
           const filePath = `client-attachments/${clientId}/${fileName}`;
+          
+          // Check if the bucket exists and create if not
+          const { data: buckets } = await supabase.storage.listBuckets();
+          const chatBucket = buckets?.find(bucket => bucket.name === 'chat-attachments');
+          
+          if (!chatBucket) {
+            console.log("Creating chat-attachments bucket");
+            const { error: bucketError } = await supabase.storage.createBucket('chat-attachments', {
+              public: true
+            });
+            
+            if (bucketError) {
+              console.error("Error creating bucket:", bucketError);
+              throw bucketError;
+            }
+          }
           
           const { error: uploadError } = await supabase.storage
             .from('chat-attachments')

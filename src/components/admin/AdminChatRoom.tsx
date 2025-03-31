@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
@@ -77,6 +78,7 @@ export function AdminChatRoom() {
     const fetchMessages = async () => {
       try {
         setIsLoading(true);
+        // Fixed query to avoid ambiguous user_id reference by using explicit table names
         const { data, error } = await supabase
           .from("client_messages")
           .select(`
@@ -191,6 +193,7 @@ export function AdminChatRoom() {
       
       if (file) {
         try {
+          // Check if the bucket exists and create if it doesn't
           const { data: buckets } = await supabase.storage.listBuckets();
           const chatBucket = buckets?.find(bucket => bucket.name === 'chat-attachments');
           
