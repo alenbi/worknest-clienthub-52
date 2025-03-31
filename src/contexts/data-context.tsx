@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Session } from '@supabase/supabase-js';
@@ -169,7 +168,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       
       console.log("Created resource successfully:", data);
       await fetchResources();
-      return data;
     } catch (error) {
       console.error('Error creating resource:', error);
       toast.error("Failed to add resource");
@@ -238,7 +236,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       
       console.log("Created video successfully:", data);
       await fetchVideos();
-      return data;
     } catch (error) {
       console.error('Error creating video:', error);
       toast.error("Failed to add video");
@@ -309,7 +306,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       
       console.log("Created offer successfully:", data);
       await fetchOffers();
-      return data;
     } catch (error) {
       console.error('Error creating offer:', error);
       toast.error("Failed to add offer");
