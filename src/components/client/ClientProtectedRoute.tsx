@@ -9,10 +9,13 @@ const ClientProtectedRoute = () => {
   
   // Check if trying to access admin routes
   const adminPaths = ['/dashboard', '/clients', '/tasks', '/settings', '/admin'];
-  const isAdminPath = adminPaths.some(path => location.pathname.startsWith(path));
+  const isAdminPath = adminPaths.some(path => 
+    location.pathname === path || location.pathname.startsWith(`${path}/`)
+  );
   
   // If authenticated as client but trying to access admin routes, redirect to client dashboard
   if (isAuthenticated && isAdminPath) {
+    console.log("Client trying to access admin path:", location.pathname);
     return <Navigate to="/client/dashboard" replace />;
   }
 

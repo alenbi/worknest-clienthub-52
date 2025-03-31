@@ -83,7 +83,7 @@ const App = () => (
                   </Route>
                 </Route>
                 
-                {/* Client Protected Routes */}
+                {/* Client Protected Routes - Block access to admin routes and forcefully redirect */}
                 <Route element={<ClientProtectedRoute />}>
                   <Route element={<ClientLayout />}>
                     <Route path="/client/dashboard" element={<ClientDashboard />} />
@@ -93,12 +93,15 @@ const App = () => (
                     <Route path="/client/videos" element={<ClientVideos />} />
                     <Route path="/client/offers" element={<ClientOffers />} />
                     <Route path="/client/profile" element={<ClientProfile />} />
-                    {/* Redirect any admin paths to client dashboard if accessed by client */}
-                    <Route path="/dashboard" element={<Navigate to="/client/dashboard" replace />} />
-                    <Route path="/clients" element={<Navigate to="/client/dashboard" replace />} />
-                    <Route path="/tasks" element={<Navigate to="/client/tasks" replace />} />
                   </Route>
                 </Route>
+                
+                {/* Catch-all admin routes when accessed by client - redirect to client dashboard */}
+                <Route path="/dashboard/*" element={<Navigate to="/client/dashboard" replace />} />
+                <Route path="/clients/*" element={<Navigate to="/client/dashboard" replace />} />
+                <Route path="/tasks/*" element={<Navigate to="/client/tasks" replace />} />
+                <Route path="/admin/*" element={<Navigate to="/client/dashboard" replace />} />
+                <Route path="/settings/*" element={<Navigate to="/client/dashboard" replace />} />
                 
                 <Route path="*" element={<NotFound />} />
               </Routes>
