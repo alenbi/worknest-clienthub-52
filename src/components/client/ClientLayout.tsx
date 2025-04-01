@@ -22,19 +22,19 @@ const ClientLayout = () => {
 
     // If not loading and not authenticated, redirect immediately
     if (!isLoading && !isAuthenticated) {
-      console.log("Client not authenticated, redirecting to login");
+      console.log("Client not authenticated, redirecting to login from ClientLayout");
       navigate("/client/login");
       return;
     }
     
-    // If still loading, set a timeout to redirect after 2.5 seconds (reduced from 4s)
+    // If still loading, set a timeout to redirect after 2 seconds (reduced from 2.5s)
     if (isLoading) {
       const timer = window.setTimeout(() => {
         if (!isAuthenticated) {
-          console.log("Client auth taking too long, redirecting to login");
+          console.log("Client auth taking too long in ClientLayout, redirecting to login");
           navigate("/client/login");
         }
-      }, 2500);
+      }, 2000);
       
       setRedirectTimer(timer);
       
@@ -60,6 +60,7 @@ const ClientLayout = () => {
         <div className="text-center">
           <Loader2 className="mx-auto h-12 w-12 animate-spin text-primary" />
           <p className="mt-4 text-muted-foreground">Loading your account...</p>
+          <p className="text-xs text-muted-foreground mt-2">Please wait a moment...</p>
         </div>
       </div>
     );

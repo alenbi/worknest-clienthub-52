@@ -82,6 +82,7 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
 
   useEffect(() => {
     let mounted = true;
+    let authTimeout: NodeJS.Timeout;
     
     const initializeAuth = async () => {
       try {
@@ -147,20 +148,15 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
             setUser(null);
             setIsClient(false);
           }
-        } else if (mounted) {
-          // No session
-          setUser(null);
-          setSession(null);
-          setIsClient(false);
         }
         
-        // Add shorter timeout as a safety measure
-        const authTimeoutId = setTimeout(() => {
+        // Add shorter timeout as a safety measure to ensure we always exit loading state
+        authTimeout = setTimeout(() => {
           if (mounted && isLoading) {
             console.warn("Client auth initialization timed out, finalizing auth state");
             setIsLoading(false);
           }
-        }, 3000); // 3 second timeout as a safety measure
+        }, 2000); // 2 second timeout as a safety measure
         
         if (mounted) {
           setIsLoading(false);
@@ -168,7 +164,6 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
         }
 
         return () => {
-          clearTimeout(authTimeoutId);
           subscription.unsubscribe();
         };
       } catch (error) {
@@ -186,6 +181,7 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
     
     return () => {
       mounted = false; // Prevent state updates after unmount
+      if (authTimeout) clearTimeout(authTimeout);
     };
   }, []);
 

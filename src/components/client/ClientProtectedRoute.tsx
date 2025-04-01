@@ -12,24 +12,25 @@ const ClientProtectedRoute = () => {
 
   // Add a safety timeout in case authentication hangs
   useEffect(() => {
-    // Further reduced timeout from 3 seconds to 2 seconds for better UX
+    // Further reduced timeout from 3 seconds to 1.5 seconds for better UX
     const timer = setTimeout(() => {
       if (isLoading) {
-        console.warn("Client authentication check timed out, redirecting to login");
+        console.warn("Client authentication check timed out after 1.5s, redirecting to login");
         setIsTimeoutExpired(true);
       }
-    }, 2000); // 2 seconds timeout (reduced from 3)
+    }, 1500); // 1.5 seconds timeout (reduced from 2)
     
     return () => clearTimeout(timer);
   }, [isLoading]);
 
-  // Add debug logging
+  // Add more detailed debug logging
   useEffect(() => {
     console.log("ClientProtectedRoute state:", { 
       isAuthenticated, 
       isLoading, 
       isClient,
-      isTimeoutExpired 
+      isTimeoutExpired,
+      timestamp: new Date().toISOString()
     });
   }, [isAuthenticated, isLoading, isClient, isTimeoutExpired]);
 
@@ -39,7 +40,8 @@ const ClientProtectedRoute = () => {
       isLoading, 
       isTimeoutExpired, 
       isAuthenticated, 
-      isClient 
+      isClient,
+      timestamp: new Date().toISOString()
     });
     return <Navigate to="/client/login" replace />;
   }
@@ -50,6 +52,7 @@ const ClientProtectedRoute = () => {
       <div className="min-h-screen flex flex-col items-center justify-center bg-background">
         <Loader2 className="h-10 w-10 animate-spin text-primary mb-4" />
         <p className="text-muted-foreground">Loading your account...</p>
+        <p className="text-xs text-muted-foreground mt-1">Please wait a moment...</p>
       </div>
     );
   }

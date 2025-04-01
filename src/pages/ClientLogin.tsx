@@ -1,13 +1,13 @@
-
 import { useState, useEffect } from "react";
 import { useClientAuth } from "@/contexts/client-auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Link, Navigate, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useSearchParams, useNavigate } from "react-router-dom";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 const ClientLogin = () => {
   const { login, isAuthenticated, isLoading, isClient } = useClientAuth();
@@ -18,6 +18,23 @@ const ClientLogin = () => {
   const [error, setError] = useState("");
   const [searchParams] = useSearchParams();
   const [isRedirected, setIsRedirected] = useState(false);
+  const navigate = useNavigate();
+
+  // Check for any existing session on load
+  useEffect(() => {
+    const checkExistingSession = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          console.log("Found existing session on ClientLogin page load");
+        }
+      } catch (err) {
+        console.error("Error checking session:", err);
+      }
+    };
+    
+    checkExistingSession();
+  }, []);
 
   // Check for email in URL params (when redirected from admin login)
   useEffect(() => {
@@ -31,9 +48,20 @@ const ClientLogin = () => {
     }
   }, [searchParams]);
 
+  // Log auth state changes for debugging
+  useEffect(() => {
+    console.log("ClientLogin auth state:", { 
+      isAuthenticated, 
+      isClient, 
+      isLoading, 
+      timestamp: new Date().toISOString() 
+    });
+  }, [isAuthenticated, isClient, isLoading]);
+
   // Redirect if already authenticated as client
   if (isAuthenticated && isClient && !isLoading) {
-    return <Navigate to="/client/dashboard" />;
+    console.log("Already authenticated as client, redirecting to dashboard");
+    return <Navigate to="/client/dashboard" replace />;
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -55,6 +83,9 @@ const ClientLogin = () => {
       
       await login(email, password);
       toast.success("Signed in successfully");
+      
+      // Force navigation to dashboard after successful login
+      navigate("/client/dashboard", { replace: true });
     } catch (error: any) {
       console.error("Client login error:", error);
       setError(error?.message || "Failed to sign in");
