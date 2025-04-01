@@ -1,3 +1,4 @@
+
 import { createContext, useContext, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Session, User } from "@supabase/supabase-js";
@@ -32,22 +33,35 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
   const navigate = useNavigate();
 
   // Function to check if user is a client
-  const checkClientRole = (user: User): boolean => {
-    return user.email !== 'support@digitalshopi.in';
+  const checkClientRole = async (currentUser: User): Promise<boolean> => {
+    if (!currentUser) return false;
+    if (currentUser.email === 'support@digitalshopi.in') return false;
+    
+    try {
+      const { data, error } = await supabase.rpc('is_client', { user_id: currentUser.id });
+      if (error) {
+        console.error("Error checking client role:", error);
+        return currentUser.email !== 'support@digitalshopi.in';
+      }
+      return !!data;
+    } catch (error) {
+      console.error("Failed to check client role:", error);
+      return currentUser.email !== 'support@digitalshopi.in';
+    }
   };
 
   // Function to update the user with client data
-  const updateUserWithClientData = async (currentUser: User) => {
+  const updateUserWithClientData = async (currentUser: User): Promise<ClientUserWithProfile | null> => {
     if (!currentUser) return null;
     
-    const isUserClient = checkClientRole(currentUser);
-    
-    if (!isUserClient) {
-      console.log("Admin user detected in client auth context");
-      return null;
-    }
-
     try {
+      const isUserClient = await checkClientRole(currentUser);
+      
+      if (!isUserClient) {
+        console.log("Admin user detected in client auth context");
+        return null;
+      }
+
       // Fetch client data from the database
       const { data: clientData, error } = await supabase
         .from("clients")
@@ -63,16 +77,14 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
         };
       }
       
-      const clientUserWithProfile: ClientUserWithProfile = {
+      return {
         ...currentUser,
         name: clientData?.name || "",
         company: clientData?.company || "",
         role: 'client'
       };
-  
-      return clientUserWithProfile;
     } catch (error) {
-      console.error("Error fetching client data:", error);
+      console.error("Error in updateUserWithClientData:", error);
       return {
         ...currentUser,
         role: 'client'
@@ -81,18 +93,18 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
   };
 
   useEffect(() => {
+    console.log("ClientAuthProvider mounted");
     let mounted = true;
     let authTimeout: NodeJS.Timeout;
     
     const initializeAuth = async () => {
       try {
         console.log("Initializing client auth context...");
-        setIsLoading(true);
         
-        // First set up the onAuthStateChange listener - BEFORE checking the current session
+        // First set up the onAuthStateChange listener
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
           async (event, currentSession) => {
-            console.log("Client auth state changed:", event, "with session:", currentSession ? "yes" : "no");
+            console.log("Client auth state changed:", event, "with session:", !!currentSession);
             
             if (!mounted) return;
             
@@ -100,72 +112,91 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
               setSession(null);
               setUser(null);
               setIsClient(false);
-            } else if (currentSession?.user) {
-              // Check if user is a client
-              const isUserClient = checkClientRole(currentSession.user);
+              console.log("User signed out, cleared auth state");
+            } 
+            else if (currentSession?.user) {
+              console.log("Session detected in auth change event");
               
-              if (isUserClient) {
-                setSession(currentSession);
-                const enhancedUser = await updateUserWithClientData(currentSession.user);
-                setUser(enhancedUser);
-                setIsClient(true);
-              } else {
-                // Not client - clear auth state in this context
-                setSession(null);
-                setUser(null);
-                setIsClient(false);
-              }
-            }
-            
-            if (mounted) {
-              setIsLoading(false);
+              // Use setTimeout to prevent deadlocks
+              setTimeout(async () => {
+                if (!mounted) return;
+                
+                try {
+                  const isUserClient = await checkClientRole(currentSession.user);
+                  
+                  if (isUserClient) {
+                    console.log("Client user authenticated");
+                    setSession(currentSession);
+                    const enhancedUser = await updateUserWithClientData(currentSession.user);
+                    setUser(enhancedUser);
+                    setIsClient(true);
+                  } else {
+                    console.log("Admin user detected, clearing client auth state");
+                    setSession(null);
+                    setUser(null);
+                    setIsClient(false);
+                  }
+                } catch (error) {
+                  console.error("Error processing auth state change:", error);
+                } finally {
+                  if (mounted) setIsLoading(false);
+                }
+              }, 0);
+            } else {
+              if (mounted) setIsLoading(false);
             }
           }
         );
         
-        // After setting up listener, check for existing session
-        const { data: { session: currentSession }, error } = await supabase.auth.getSession();
-        console.log("Current client session check:", currentSession ? "Session exists" : "No session");
+        // Then check for existing session
+        const { data, error } = await supabase.auth.getSession();
         
         if (error) {
           console.error("Error getting session:", error);
           if (mounted) setIsLoading(false);
-          return;
+          return subscription;
         }
+        
+        const currentSession = data.session;
+        console.log("Current client session check:", !!currentSession);
         
         if (currentSession?.user && mounted) {
-          // Check if user is a client
-          const isUserClient = checkClientRole(currentSession.user);
-          
-          if (isUserClient) {
-            setSession(currentSession);
-            const enhancedUser = await updateUserWithClientData(currentSession.user);
-            setUser(enhancedUser);
-            setIsClient(true);
-          } else {
-            // Not client
-            setSession(null);
-            setUser(null);
-            setIsClient(false);
+          try {
+            const isUserClient = await checkClientRole(currentSession.user);
+            
+            if (isUserClient) {
+              console.log("Client user session found");
+              setSession(currentSession);
+              const enhancedUser = await updateUserWithClientData(currentSession.user);
+              setUser(enhancedUser);
+              setIsClient(true);
+            } else {
+              console.log("Admin session found in client context, clearing");
+              setSession(null);
+              setUser(null);
+              setIsClient(false);
+            }
+          } catch (error) {
+            console.error("Error processing existing session:", error);
           }
+        } else {
+          console.log("No valid client session found");
         }
         
-        // Add shorter timeout as a safety measure to ensure we always exit loading state
+        // Add shorter timeout as a safety measure
         authTimeout = setTimeout(() => {
           if (mounted && isLoading) {
-            console.warn("Client auth initialization timed out, finalizing auth state");
+            console.warn("Client auth initialization timed out after 2s");
             setIsLoading(false);
           }
-        }, 2000); // 2 second timeout as a safety measure
+        }, 2000);
         
         if (mounted) {
           setIsLoading(false);
           console.log("Client auth initialization complete");
         }
 
-        return () => {
-          subscription.unsubscribe();
-        };
+        return subscription;
       } catch (error) {
         console.error("Error initializing client auth:", error);
         if (mounted) {
@@ -174,14 +205,19 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
           setIsClient(false);
           setIsLoading(false);
         }
+        return null;
       }
     };
 
-    initializeAuth();
+    const subscription = initializeAuth();
     
     return () => {
-      mounted = false; // Prevent state updates after unmount
+      console.log("ClientAuthProvider unmounting");
+      mounted = false;
       if (authTimeout) clearTimeout(authTimeout);
+      subscription.then(sub => {
+        if (sub) sub.unsubscribe();
+      });
     };
   }, []);
 
@@ -206,7 +242,7 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
 
       if (data.session) {
         // Double check this is not the admin
-        const isUserClient = checkClientRole(data.user);
+        const isUserClient = await checkClientRole(data.user);
         
         if (!isUserClient) {
           // Force logout if admin tried to login as client
@@ -218,6 +254,7 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
         const enhancedUser = await updateUserWithClientData(data.user);
         setUser(enhancedUser);
         setIsClient(true);
+        
         toast.success("Successfully signed in!");
         navigate("/client/dashboard");
       } else {
@@ -225,6 +262,7 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
       }
     } catch (error: any) {
       setUser(null);
+      setSession(null);
       setIsClient(false);
       throw error;
     } finally {
@@ -236,14 +274,18 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
     try {
       setIsLoading(true);
       const { error } = await supabase.auth.signOut();
+      
       if (error) throw error;
       
       // Clean up state
       setUser(null);
       setSession(null);
       setIsClient(false);
+      
+      console.log("Client logged out successfully");
       navigate("/client/login");
     } catch (error: any) {
+      console.error("Logout error:", error);
       toast.error(error.message || "Failed to sign out");
     } finally {
       setIsLoading(false);

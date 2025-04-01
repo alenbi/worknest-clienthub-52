@@ -12,6 +12,16 @@ const ClientLayout = () => {
   const navigate = useNavigate();
   const [redirectTimer, setRedirectTimer] = useState<number | null>(null);
 
+  // Log auth state for debugging
+  useEffect(() => {
+    console.log("ClientLayout auth state:", { 
+      isAuthenticated, 
+      isLoading,
+      hasUser: !!user,
+      timestamp: new Date().toISOString()
+    });
+  }, [isAuthenticated, isLoading, user]);
+
   // Ensure client is redirected to login if not authenticated
   useEffect(() => {
     // Clear any existing timer when component unmounts or deps change
@@ -23,18 +33,18 @@ const ClientLayout = () => {
     // If not loading and not authenticated, redirect immediately
     if (!isLoading && !isAuthenticated) {
       console.log("Client not authenticated, redirecting to login from ClientLayout");
-      navigate("/client/login");
+      navigate("/client/login", { replace: true });
       return;
     }
     
-    // If still loading, set a timeout to redirect after 2 seconds (reduced from 2.5s)
+    // If still loading, set a timeout to redirect after 1.5 seconds (reduced from 2s)
     if (isLoading) {
       const timer = window.setTimeout(() => {
         if (!isAuthenticated) {
           console.log("Client auth taking too long in ClientLayout, redirecting to login");
-          navigate("/client/login");
+          navigate("/client/login", { replace: true });
         }
-      }, 2000);
+      }, 1500);
       
       setRedirectTimer(timer);
       
@@ -59,8 +69,7 @@ const ClientLayout = () => {
       <div className="flex h-screen w-full items-center justify-center bg-background">
         <div className="text-center">
           <Loader2 className="mx-auto h-12 w-12 animate-spin text-primary" />
-          <p className="mt-4 text-muted-foreground">Loading your account...</p>
-          <p className="text-xs text-muted-foreground mt-2">Please wait a moment...</p>
+          <p className="mt-4 text-muted-foreground">Verifying your account...</p>
         </div>
       </div>
     );

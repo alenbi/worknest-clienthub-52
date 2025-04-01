@@ -35,10 +35,10 @@ export interface RPCFunctions {
 // Create the Supabase client with explicit auth configuration for better session persistence
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
-    storage: localStorage,
-    persistSession: true,
     autoRefreshToken: true,
+    persistSession: true,
     detectSessionInUrl: true,
+    storage: localStorage,
     flowType: 'implicit'
   }
 });

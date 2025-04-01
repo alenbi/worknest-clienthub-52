@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useClientAuth } from "@/contexts/client-auth-context";
 import { Button } from "@/components/ui/button";
@@ -18,18 +19,19 @@ const ClientLogin = () => {
   const [error, setError] = useState("");
   const [searchParams] = useSearchParams();
   const [isRedirected, setIsRedirected] = useState(false);
+  const [sessionChecked, setSessionChecked] = useState(false);
   const navigate = useNavigate();
 
-  // Check for any existing session on load
+  // Check for existing session on load
   useEffect(() => {
     const checkExistingSession = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
-          console.log("Found existing session on ClientLogin page load");
-        }
+        console.log("ClientLogin - Session check:", !!session);
+        setSessionChecked(true);
       } catch (err) {
         console.error("Error checking session:", err);
+        setSessionChecked(true);
       }
     };
     
@@ -41,9 +43,7 @@ const ClientLogin = () => {
     const emailParam = searchParams.get('email');
     if (emailParam) {
       setEmail(emailParam);
-      setIsRedirected(true); // Flag that we came from a redirect
-      
-      // Clear any loading or submitting states that might have persisted
+      setIsRedirected(true);
       setIsSubmitting(false);
     }
   }, [searchParams]);
@@ -54,12 +54,13 @@ const ClientLogin = () => {
       isAuthenticated, 
       isClient, 
       isLoading, 
+      sessionChecked,
       timestamp: new Date().toISOString() 
     });
-  }, [isAuthenticated, isClient, isLoading]);
+  }, [isAuthenticated, isClient, isLoading, sessionChecked]);
 
   // Redirect if already authenticated as client
-  if (isAuthenticated && isClient && !isLoading) {
+  if (sessionChecked && isAuthenticated && isClient && !isLoading) {
     console.log("Already authenticated as client, redirecting to dashboard");
     return <Navigate to="/client/dashboard" replace />;
   }
@@ -82,8 +83,8 @@ const ClientLogin = () => {
       }
       
       await login(email, password);
-      toast.success("Signed in successfully");
       
+      // Success notification already handled in the login function
       // Force navigation to dashboard after successful login
       navigate("/client/dashboard", { replace: true });
     } catch (error: any) {

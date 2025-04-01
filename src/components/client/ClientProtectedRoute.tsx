@@ -12,13 +12,13 @@ const ClientProtectedRoute = () => {
 
   // Add a safety timeout in case authentication hangs
   useEffect(() => {
-    // Further reduced timeout from 3 seconds to 1.5 seconds for better UX
+    // Set a shorter timeout for better UX
     const timer = setTimeout(() => {
       if (isLoading) {
-        console.warn("Client authentication check timed out after 1.5s, redirecting to login");
+        console.warn("Client authentication check timed out after 1s, redirecting to login");
         setIsTimeoutExpired(true);
       }
-    }, 1500); // 1.5 seconds timeout (reduced from 2)
+    }, 1000); // 1 second timeout (further reduced)
     
     return () => clearTimeout(timer);
   }, [isLoading]);
@@ -51,8 +51,7 @@ const ClientProtectedRoute = () => {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background">
         <Loader2 className="h-10 w-10 animate-spin text-primary mb-4" />
-        <p className="text-muted-foreground">Loading your account...</p>
-        <p className="text-xs text-muted-foreground mt-1">Please wait a moment...</p>
+        <p className="text-muted-foreground">Checking your authentication...</p>
       </div>
     );
   }
