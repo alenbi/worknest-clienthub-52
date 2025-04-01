@@ -1,6 +1,6 @@
 
-import { useState, useEffect, useRef, useCallback } from "react";
-import { ChatMessage, fetchClientMessages, sendMessage, subscribeToChatMessages, markMessageAsRead, uploadChatFile } from "@/lib/chat-utils";
+import { useState, useEffect, useRef } from "react";
+import { ChatMessage, fetchClientMessages, sendMessage, subscribeToChatMessages, markMessageAsRead } from "@/lib/chat-utils";
 import { useClientAuth } from "@/contexts/client-auth-context";
 import { ChatMessageList } from "@/components/chat/ChatMessageList";
 import { ChatInput } from "@/components/chat/ChatInput";
@@ -117,37 +117,18 @@ const ClientChat = () => {
     }
   }, [clientId]);
 
-  const handleSendMessage = async (text: string, file: File | null) => {
+  const handleSendMessage = async (text: string) => {
     if (!clientId || !user?.id) return;
 
     try {
       setSending(true);
-      
-      let attachmentUrl = null;
-      let attachmentType = null;
-      
-      // If there's a file, upload it first
-      if (file) {
-        try {
-          const result = await uploadChatFile(file, clientId, false);
-          attachmentUrl = result.url;
-          attachmentType = result.type;
-        } catch (error) {
-          console.error("Error uploading file:", error);
-          toast.error("Failed to upload file");
-          setSending(false);
-          return;
-        }
-      }
       
       await sendMessage({
         clientId,
         senderId: user.id,
         senderName: clientName || "Client",
         message: text,
-        isFromClient: true,
-        attachmentUrl,
-        attachmentType
+        isFromClient: true
       });
     } catch (error) {
       console.error("Error sending message:", error);

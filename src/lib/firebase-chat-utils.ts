@@ -1,12 +1,11 @@
+
 import { ref, push, set, onValue, off, get, query, orderByChild, update } from "firebase/database";
-import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
-import { database, storage } from "@/integrations/firebase/config";
+import { database } from "@/integrations/firebase/config";
 import { v4 as uuidv4 } from "uuid";
 import { toast } from "sonner";
 import { 
   fetchClientMessages as fetchSupabaseClientMessages,
   sendMessage as sendSupabaseMessage,
-  uploadChatFile as uploadSupabaseChatFile,
   markMessageAsRead as markSupabaseMessageAsRead
 } from "@/lib/chat-utils";
 
@@ -19,8 +18,6 @@ export interface ChatMessage {
   created_at: string;
   is_read: boolean;
   sender_name?: string;
-  attachment_url?: string;
-  attachment_type?: string;
 }
 
 export type MessageHandler = (message: ChatMessage) => void;
@@ -276,17 +273,13 @@ export async function sendMessage({
   senderId,
   senderName,
   message,
-  isFromClient,
-  attachmentUrl = null,
-  attachmentType = null
+  isFromClient
 }: {
   clientId: string;
   senderId: string;
   senderName: string;
   message: string;
   isFromClient: boolean;
-  attachmentUrl?: string | null;
-  attachmentType?: string | null;
 }): Promise<ChatMessage | null> {
   try {
     if (!isFirebaseAvailable) {
@@ -296,9 +289,7 @@ export async function sendMessage({
         senderId, 
         senderName,
         message, 
-        isFromClient, 
-        attachmentUrl, 
-        attachmentType
+        isFromClient
       });
       
       // Send email notification
@@ -310,15 +301,14 @@ export async function sendMessage({
     console.log("Sending Firebase message", {
       clientId,
       senderId,
-      isFromClient,
-      hasAttachment: !!attachmentUrl
+      isFromClient
     });
     
-    // Trim message but keep it if it's only an attachment
+    // Trim message
     const finalMessage = message ? message.trim() : '';
     
-    // If no message and no attachment, don't send anything
-    if (!finalMessage && !attachmentUrl) {
+    // If no message, don't send anything
+    if (!finalMessage) {
       return null;
     }
     
@@ -331,8 +321,6 @@ export async function sendMessage({
       sender_name: senderName,
       is_from_client: isFromClient,
       message: finalMessage,
-      attachment_url: attachmentUrl,
-      attachment_type: attachmentType,
       is_read: false,
       created_at: now
     };
@@ -361,9 +349,7 @@ export async function sendMessage({
         senderId, 
         senderName,
         message, 
-        isFromClient, 
-        attachmentUrl, 
-        attachmentType
+        isFromClient
       });
       
       // Send email notification
@@ -373,64 +359,6 @@ export async function sendMessage({
     } catch (fallbackError) {
       console.error("Fallback to Supabase also failed:", fallbackError);
       toast.error("Failed to send message. Please try again.");
-      throw error;
-    }
-  }
-}
-
-/**
- * Uploads a file to Firebase Storage
- */
-export async function uploadChatFile(
-  file: File,
-  clientId: string,
-  isAdmin: boolean
-): Promise<{ url: string; type: string }> {
-  try {
-    if (!isFirebaseAvailable || !storage) {
-      console.log("Firebase Storage not available, using Supabase for file upload");
-      return await uploadSupabaseChatFile(file, clientId, isAdmin);
-    }
-    
-    console.log("Uploading file to Firebase Storage");
-    
-    // Determine file type
-    const fileType = file.type.startsWith('image/') ? 'image' : 'file';
-    
-    // Create a unique file path
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${uuidv4()}.${fileExt}`;
-    const prefix = isAdmin ? 'admin-attachments' : 'client-attachments';
-    const filePath = `${prefix}/${clientId}/${fileName}`;
-    
-    // Upload file to Firebase Storage
-    const fileRef = storageRef(storage, `chat/${filePath}`);
-    
-    console.log("Uploading to Firebase path:", `chat/${filePath}`);
-    
-    // Upload the file
-    const snapshot = await uploadBytes(fileRef, file);
-    console.log("File uploaded successfully:", snapshot.metadata.name);
-    
-    // Get the download URL
-    const downloadUrl = await getDownloadURL(fileRef);
-    console.log("Download URL obtained:", downloadUrl);
-    
-    return {
-      url: downloadUrl,
-      type: fileType
-    };
-  } catch (error) {
-    console.error("File upload failed:", error);
-    isFirebaseAvailable = false;
-    
-    // Fallback to Supabase
-    try {
-      console.log("Falling back to Supabase for file upload");
-      return await uploadSupabaseChatFile(file, clientId, isAdmin);
-    } catch (fallbackError) {
-      console.error("Fallback to Supabase also failed:", fallbackError);
-      toast.error("Failed to upload file. Please try again.");
       throw error;
     }
   }

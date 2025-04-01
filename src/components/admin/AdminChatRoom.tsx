@@ -12,7 +12,6 @@ import {
   subscribeToChatMessages,
   fetchClientMessages, 
   sendMessage,
-  uploadChatFile,
   markMessageAsRead
 } from "@/lib/firebase-chat-utils";
 import { ChatMessageList } from "@/components/chat/ChatMessageList";
@@ -131,8 +130,8 @@ export function AdminChatRoom() {
     };
   }, [clientId, client, user?.id]);
 
-  const handleSendMessage = async (messageText: string, file: File | null) => {
-    if ((!messageText.trim() && !file) || !clientId || !user?.id) {
+  const handleSendMessage = async (messageText: string) => {
+    if (!messageText.trim() || !clientId || !user?.id) {
       return;
     }
     
@@ -140,29 +139,12 @@ export function AdminChatRoom() {
       setIsSending(true);
       setError(null);
       
-      let attachmentUrl = null;
-      let attachmentType = null;
-      
-      if (file) {
-        try {
-          const uploadResult = await uploadChatFile(file, clientId, true);
-          attachmentUrl = uploadResult.url;
-          attachmentType = uploadResult.type;
-        } catch (error) {
-          console.error("File upload failed:", error);
-          toast.error("Failed to upload file. Please try again.");
-          throw error;
-        }
-      }
-      
       await sendMessage({
         clientId,
         senderId: user.id,
         senderName: user.user_metadata?.full_name || user.email || 'Support Agent',
         message: messageText,
-        isFromClient: false,
-        attachmentUrl,
-        attachmentType
+        isFromClient: false
       });
       
     } catch (error: any) {

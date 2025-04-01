@@ -1,6 +1,6 @@
+
 import { supabase } from "@/integrations/supabase/client";
 import { v4 as uuidv4 } from "uuid";
-import { toast } from "sonner";
 import type { ChatMessage } from "@/lib/firebase-chat-utils";
 
 // For compatibility, export the Firebase chat utils functions for Supabase
@@ -9,7 +9,6 @@ export {
   subscribeToChatMessages, 
   fetchClientMessages, 
   sendMessage, 
-  uploadChatFile, 
   markMessageAsRead 
 } from "@/lib/firebase-chat-utils";
 
@@ -36,24 +35,20 @@ export async function sendSupabaseMessage({
   senderId,
   senderName,
   message,
-  isFromClient,
-  attachmentUrl = null,
-  attachmentType = null
+  isFromClient
 }: {
   clientId: string;
   senderId: string;
   senderName: string;
   message: string;
   isFromClient: boolean;
-  attachmentUrl?: string | null;
-  attachmentType?: string | null;
 }): Promise<ChatMessage> {
   try {
-    // Trim message but keep it if it's only an attachment
+    // Trim message
     const finalMessage = message ? message.trim() : '';
     
-    // If no message and no attachment, don't send anything
-    if (!finalMessage && !attachmentUrl) {
+    // If no message, don't send anything
+    if (!finalMessage) {
       throw new Error("Message cannot be empty");
     }
     
@@ -67,8 +62,6 @@ export async function sendSupabaseMessage({
       sender_name: senderName,
       is_from_client: isFromClient,
       message: finalMessage,
-      attachment_url: attachmentUrl,
-      attachment_type: attachmentType,
       is_read: false,
       created_at: now
     };
@@ -96,49 +89,6 @@ export async function markSupabaseMessageAsRead(clientId: string, messageId: str
     if (error) throw error;
   } catch (error) {
     console.error("Error marking message as read via Supabase:", error);
-    throw error;
-  }
-}
-
-export async function uploadSupabaseChatFile(
-  file: File,
-  clientId: string,
-  isAdmin: boolean
-): Promise<{ url: string; type: string }> {
-  try {
-    // Determine file type
-    const fileType = file.type.startsWith('image/') ? 'image' : 'file';
-    
-    // Create a unique file path
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${uuidv4()}.${fileExt}`;
-    const prefix = isAdmin ? 'admin-attachments' : 'client-attachments';
-    
-    // Make sure the chat-uploads bucket exists and create the path
-    const filePath = `${prefix}/${clientId}/${fileName}`;
-    
-    // Upload file to Supabase Storage
-    const { data, error } = await supabase.storage
-      .from('chat-uploads')
-      .upload(filePath, file, {
-        cacheControl: '3600',
-        upsert: false
-      });
-    
-    if (error) throw error;
-    
-    // Get the public URL
-    const { data: { publicUrl } } = supabase.storage
-      .from('chat-uploads')
-      .getPublicUrl(data.path);
-    
-    return {
-      url: publicUrl,
-      type: fileType
-    };
-  } catch (error) {
-    console.error("Error uploading file to Supabase Storage:", error);
-    toast.error("File upload failed. Please try again.");
     throw error;
   }
 }
