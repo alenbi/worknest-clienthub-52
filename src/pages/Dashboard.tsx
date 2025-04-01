@@ -33,6 +33,7 @@ const Dashboard = () => {
   const { user } = useAuth();
   const { clients, tasks, isLoading, refreshData } = useData();
   const [timeframe, setTimeframe] = useState<"week" | "month" | "year">("week");
+  const [isInitialLoadDone, setIsInitialLoadDone] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Helper function to get task completion time - defined BEFORE usage
@@ -41,22 +42,23 @@ const Dashboard = () => {
     return new Date(task.completed_at).getTime();
   };
 
-  // Force a data refresh only once when the dashboard loads
+  // Force a data refresh only once when the dashboard loads and not again
   useEffect(() => {
     const loadData = async () => {
-      if (!isRefreshing) {
+      if (!isInitialLoadDone && !isRefreshing) {
         setIsRefreshing(true);
         try {
           await refreshData();
           console.log("Dashboard refreshed data - one time initialization");
         } finally {
           setIsRefreshing(false);
+          setIsInitialLoadDone(true);
         }
       }
     };
     
     loadData();
-  }, [refreshData]);
+  }, [refreshData, isInitialLoadDone]);
 
   // Use memoization to prevent unnecessary recalculation
   const dashboardData = useMemo(() => {
@@ -158,7 +160,8 @@ const Dashboard = () => {
     };
   }, [clients, tasks, isLoading]);
 
-  if (isLoading || isRefreshing) {
+  // This is important: only show loading state during initial load, not during refreshes
+  if ((isLoading || isRefreshing) && !isInitialLoadDone) {
     return (
       <div className="flex h-full items-center justify-center">
         <div className="h-12 w-12 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
