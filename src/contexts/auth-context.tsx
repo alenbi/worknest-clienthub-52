@@ -1,4 +1,3 @@
-
 import { createContext, useContext, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Session, User } from "@supabase/supabase-js";
@@ -10,6 +9,14 @@ interface UserWithProfile extends User {
   name?: string;
   avatar?: string;
   role?: string;
+  // Additional properties inherited from User but needed explicitly for TypeScript
+  id: string;
+  email?: string;
+  user_metadata?: {
+    full_name?: string;
+    [key: string]: any;
+  };
+  created_at?: string;
 }
 
 interface AuthContextType {

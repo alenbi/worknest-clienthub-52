@@ -1,4 +1,3 @@
-
 import { createContext, useContext, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Session, User } from "@supabase/supabase-js";
@@ -10,6 +9,9 @@ interface ClientUserWithProfile extends User {
   name?: string;
   company?: string;
   role?: string;
+  id: string;
+  email?: string;
+  created_at?: string;
 }
 
 interface ClientAuthContextType {
