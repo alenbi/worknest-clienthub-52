@@ -39,7 +39,7 @@ BEGIN
   RETURN EXISTS (
     SELECT 1 FROM auth.users 
     WHERE id = user_id 
-    AND raw_app_meta_data->>'role' = 'admin'
+    AND (raw_app_meta_data->>'role' = 'admin' OR email = 'support@digitalshopi.in')
   );
 END;
 $$;
@@ -54,7 +54,8 @@ BEGIN
   RETURN EXISTS (
     SELECT 1 FROM auth.users 
     WHERE id = user_id 
-    AND raw_app_meta_data->>'role' = 'client'
+    AND email != 'support@digitalshopi.in'
+    AND (raw_app_meta_data->>'role' = 'client' OR raw_app_meta_data->>'role' IS NULL)
   );
 END;
 $$;

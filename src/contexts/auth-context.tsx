@@ -132,7 +132,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           const enhancedUser = await updateUserWithProfile(currentSession.user);
           setUser(enhancedUser);
           
-          // If user is not an admin, they'll be logged out by updateUserWithProfile
+          // User role check done inside updateUserWithProfile
           setIsAdmin(checkAdminRole(currentSession.user));
         } else {
           setUser(null);
