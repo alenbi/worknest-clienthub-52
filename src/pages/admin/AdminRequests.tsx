@@ -26,12 +26,18 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Label } from "@/components/ui/label";
 import { Request, Client } from "@/lib/models";
 
+interface RequestWithClientInfo extends Request {
+  client_name?: string;
+  client_email?: string;
+  client_company?: string;
+}
+
 const AdminRequests = () => {
-  const [requests, setRequests] = useState<Request[]>([]);
+  const [requests, setRequests] = useState<RequestWithClientInfo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [selectedRequest, setSelectedRequest] = useState<Request | null>(null);
+  const [selectedRequest, setSelectedRequest] = useState<RequestWithClientInfo | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
 
@@ -40,12 +46,13 @@ const AdminRequests = () => {
     try {
       setIsLoading(true);
       
-      // Get all requests with client information
-      const { data, error } = await supabase.rpc("get_all_requests");
+      // Get all requests with client information using custom RPC function
+      const { data, error } = await supabase.rpc('get_all_requests');
       
       if (error) throw error;
       
-      setRequests(data as Request[] || []);
+      // Type assertion to match our Request interface
+      setRequests(data as RequestWithClientInfo[] || []);
     } catch (error) {
       console.error("Error fetching requests:", error);
       toast.error("Failed to load requests");
@@ -69,9 +76,9 @@ const AdminRequests = () => {
     const matchesSearch = 
       request.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       request.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      request.client?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      request.client?.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      request.client?.company?.toLowerCase().includes(searchTerm.toLowerCase());
+      (request.client_name && request.client_name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (request.client_email && request.client_email.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (request.client_company && request.client_company.toLowerCase().includes(searchTerm.toLowerCase()));
     
     const matchesStatus = statusFilter === "all" || request.status === statusFilter;
     
@@ -99,7 +106,8 @@ const AdminRequests = () => {
     try {
       setIsUpdating(true);
       
-      const { error } = await supabase.rpc("update_request_status", {
+      // Use RPC function to update request status
+      const { error } = await supabase.rpc('update_request_status', {
         request_id: selectedRequest.id,
         new_status: status
       });
@@ -118,7 +126,7 @@ const AdminRequests = () => {
   };
 
   // Open dialog with request details
-  const openRequestDetails = (request: Request) => {
+  const openRequestDetails = (request: RequestWithClientInfo) => {
     setSelectedRequest(request);
     setIsDialogOpen(true);
   };
@@ -188,11 +196,11 @@ const AdminRequests = () => {
                   
                   <div className="flex flex-col xs:flex-row justify-between items-start xs:items-center text-xs text-muted-foreground">
                     <div className="flex flex-col xs:flex-row gap-1 xs:gap-3">
-                      <span>From: <span className="font-medium">{request.client?.name}</span></span>
-                      {request.client?.company && (
-                        <span className="hidden sm:inline">Company: <span className="font-medium">{request.client.company}</span></span>
+                      <span>From: <span className="font-medium">{request.client_name}</span></span>
+                      {request.client_company && (
+                        <span className="hidden sm:inline">Company: <span className="font-medium">{request.client_company}</span></span>
                       )}
-                      <span className="hidden md:inline">Email: <span className="font-medium">{request.client?.email}</span></span>
+                      <span className="hidden md:inline">Email: <span className="font-medium">{request.client_email}</span></span>
                     </div>
                     <span className="mt-1 xs:mt-0">Submitted: {formatDate(request.created_at)}</span>
                   </div>
@@ -222,10 +230,10 @@ const AdminRequests = () => {
             <div className="space-y-2">
               <Label>Client Information</Label>
               <div className="rounded-md bg-muted p-3">
-                <p><strong>Name:</strong> {selectedRequest?.client?.name}</p>
-                <p><strong>Email:</strong> {selectedRequest?.client?.email}</p>
-                {selectedRequest?.client?.company && (
-                  <p><strong>Company:</strong> {selectedRequest?.client?.company}</p>
+                <p><strong>Name:</strong> {selectedRequest?.client_name}</p>
+                <p><strong>Email:</strong> {selectedRequest?.client_email}</p>
+                {selectedRequest?.client_company && (
+                  <p><strong>Company:</strong> {selectedRequest?.client_company}</p>
                 )}
               </div>
             </div>

@@ -27,24 +27,13 @@ const ClientRequests = () => {
         
         if (!user?.id) return;
         
-        // First get the client ID
-        const { data: clientData, error: clientError } = await supabase
-          .from("clients")
-          .select("id")
-          .eq("user_id", user.id)
-          .single();
-          
-        if (clientError) throw clientError;
-        if (!clientData) {
-          setIsLoading(false);
-          return;
-        }
-        
-        // Then fetch requests for this client
+        // Use RPC function to get client requests
         const { data, error } = await supabase
-          .rpc("get_client_requests", { client_user_id: user.id });
+          .rpc('get_client_requests', { client_user_id: user.id });
           
         if (error) throw error;
+        
+        // Type assertion to ensure proper typing
         setRequests(data as Request[] || []);
       } catch (error) {
         console.error("Error fetching requests:", error);
@@ -70,21 +59,17 @@ const ClientRequests = () => {
     try {
       setIsSubmitting(true);
       
-      // Get client ID first
-      const { data: clientData, error: clientError } = await supabase
-        .from("clients")
-        .select("id")
-        .eq("user_id", user?.id)
-        .single();
-        
-      if (clientError) throw clientError;
+      if (!user?.id) {
+        toast.error("You must be logged in to submit a request");
+        return;
+      }
       
-      // Then create the request
+      // Use RPC function to create a new client request
       const { error } = await supabase
-        .rpc("create_client_request", {
+        .rpc('create_client_request', {
           req_title: title, 
           req_description: description, 
-          client_user_id: user?.id
+          client_user_id: user.id
         });
       
       if (error) throw error;
@@ -95,9 +80,11 @@ const ClientRequests = () => {
       
       // Refresh requests list
       const { data, error: fetchError } = await supabase
-        .rpc("get_client_requests", { client_user_id: user?.id });
+        .rpc('get_client_requests', { client_user_id: user.id });
         
       if (fetchError) throw fetchError;
+      
+      // Type assertion
       setRequests(data as Request[] || []);
       
     } catch (error) {
