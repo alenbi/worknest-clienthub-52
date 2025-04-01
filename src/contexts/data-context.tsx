@@ -1,7 +1,6 @@
-
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Session } from '@supabase/supabase-js';
+import { Session, User } from '@supabase/supabase-js';
 import { Resource, Video, Offer, Client, Task, TaskStatus, TaskPriority, Update } from '@/lib/models';
 import { useAuth } from '@/contexts/auth-context';
 import { toast } from 'sonner';
@@ -27,7 +26,7 @@ export { TaskStatus, TaskPriority };
 
 interface DataContextType {
   session: Session | null;
-  user: Session['user'] | null;
+  user: User | null;
   isAdmin: boolean;
   isLoading: boolean;
   
@@ -76,19 +75,13 @@ interface DataContextType {
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
-  const { session, user } = useAuth();
+  const { session, user: authUser } = useAuth();
   const [isAdmin, setIsAdmin] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isFirebaseAvailable, setIsFirebaseAvailable] = useState(false);
   
-  // State for data
-  const [resources, setResources] = useState<Resource[]>([]);
-  const [videos, setVideos] = useState<Video[]>([]);
-  const [offers, setOffers] = useState<Offer[]>([]);
-  const [clients, setClients] = useState<Client[]>([]);
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [updates, setUpdates] = useState<Update[]>([]);
-
+  const user: User | null = authUser as unknown as User | null;
+  
   useEffect(() => {
     const checkFirebaseConnection = async () => {
       const isConnected = await testFirebaseConnection();
@@ -104,7 +97,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       if (user) {
         try {
           setIsLoading(true);
-          // Use the is_admin function directly
           const { data, error } = await supabase.rpc('is_admin', {
             user_id: user.id
           });
@@ -139,7 +131,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     
     setIsLoading(true);
     try {
-      // Fetch all necessary data
       await Promise.all([
         fetchResources(),
         fetchVideos(),
@@ -180,7 +171,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     try {
       console.log("Creating resource:", resource);
       
-      // Ensure required fields for insert
       if (!resource.title || !resource.url || !resource.type) {
         throw new Error('Title, URL, and type are required');
       }
@@ -273,7 +263,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     try {
       console.log("Creating video:", video);
       
-      // Ensure required fields for insert
       if (!video.title || !video.youtube_id) {
         throw new Error('Title and YouTube ID are required');
       }
@@ -365,7 +354,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     try {
       console.log("Creating offer:", offer);
       
-      // Ensure required fields for insert
       if (!offer.title || !offer.valid_until) {
         throw new Error('Title and valid until date are required');
       }
@@ -451,7 +439,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   
   const addClient = async (client: Partial<Client>) => {
     try {
-      // Ensure required fields for insert
       if (!client.name || !client.email) {
         throw new Error('Name and email are required');
       }
@@ -497,7 +484,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   
   const updateClientPassword = async (clientId: string, newPassword: string) => {
     try {
-      // Get the user_id for the client
       const { data: clientData, error: clientError } = await supabase
         .from('clients')
         .select('user_id')
@@ -508,7 +494,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         throw new Error('Could not find user account for this client');
       }
       
-      // Update the password using Supabase Auth Admin API
       const { error: pwError } = await supabase.auth.admin.updateUserById(
         clientData.user_id,
         { password: newPassword }
@@ -531,7 +516,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       
       if (error) throw error;
       
-      // Convert string status and priority to enum values
       const typedTasks = data?.map(task => ({
         ...task,
         status: task.status as TaskStatus,
@@ -546,7 +530,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   
   const addTask = async (task: Partial<Task>) => {
     try {
-      // Ensure required fields for insert
       if (!task.title || !task.client_id || !task.due_date) {
         throw new Error('Title, client, and due date are required');
       }
@@ -570,7 +553,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const updateTask = async (id: string, task: Partial<Task>) => {
     try {
-      // Add completed_at date if status is changing to completed
       if (task.status === TaskStatus.COMPLETED) {
         const existingTask = tasks.find(t => t.id === id);
         if (existingTask && existingTask.status !== TaskStatus.COMPLETED) {
@@ -615,7 +597,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   
   const createUpdate = async (update: Partial<Update>) => {
     try {
-      // Ensure required fields for insert
       if (!update.title || !update.content) {
         throw new Error('Title and content are required');
       }
@@ -684,39 +665,32 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         user,
         isAdmin,
         isLoading,
-        // Resources
         resources,
         createResource,
         updateResource,
         deleteResource,
-        // Videos
         videos,
         createVideo,
         updateVideo,
         deleteVideo,
-        // Offers
         offers,
         createOffer,
         updateOffer,
         deleteOffer,
-        // Clients
         clients,
         addClient,
         updateClient,
         deleteClient,
         updateClientPassword,
-        // Tasks
         tasks,
         addTask,
         updateTask,
         deleteTask,
-        // Updates
         updates,
         createUpdate,
         updateUpdate,
         deleteUpdate,
         toggleUpdatePublished,
-        // Data management
         refreshData
       }}
     >

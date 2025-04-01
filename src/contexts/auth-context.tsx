@@ -1,3 +1,4 @@
+
 import { createContext, useContext, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Session, User } from "@supabase/supabase-js";
@@ -5,18 +6,16 @@ import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 
 // Extended User interface to include profile data and role
-interface UserWithProfile extends User {
+interface UserWithProfile {
+  id: string;
+  email?: string | null;
+  user_metadata: {
+    [key: string]: any;
+  };
+  created_at: string;
   name?: string;
   avatar?: string;
   role?: string;
-  // Additional properties inherited from User but needed explicitly for TypeScript
-  id: string;
-  email?: string;
-  user_metadata?: {
-    full_name?: string;
-    [key: string]: any;
-  };
-  created_at?: string;
 }
 
 interface AuthContextType {
@@ -67,7 +66,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         .maybeSingle();
       
       const userWithProfile: UserWithProfile = {
-        ...currentUser,
+        id: currentUser.id,
+        email: currentUser.email,
+        user_metadata: currentUser.user_metadata,
+        created_at: currentUser.created_at,
         name: profile?.full_name || "",
         avatar: profile?.avatar || "",
         role: 'admin'
@@ -77,7 +79,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     } catch (error) {
       console.error("Error fetching profile:", error);
       return {
-        ...currentUser,
+        id: currentUser.id,
+        email: currentUser.email,
+        user_metadata: currentUser.user_metadata,
+        created_at: currentUser.created_at,
         role: 'admin'
       };
     }

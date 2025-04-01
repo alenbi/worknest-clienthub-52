@@ -1,3 +1,4 @@
+
 import { createContext, useContext, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Session, User } from "@supabase/supabase-js";
@@ -5,13 +6,16 @@ import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 
 // Extended User interface to include profile data
-interface ClientUserWithProfile extends User {
+interface ClientUserWithProfile {
+  id: string;
+  email?: string | null;
+  user_metadata: {
+    [key: string]: any;
+  };
+  created_at: string;
   name?: string;
   company?: string;
   role?: string;
-  id: string;
-  email?: string;
-  created_at?: string;
 }
 
 interface ClientAuthContextType {
@@ -74,13 +78,19 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
       if (error) {
         console.error("Error fetching client data:", error);
         return {
-          ...currentUser,
+          id: currentUser.id,
+          email: currentUser.email,
+          user_metadata: currentUser.user_metadata,
+          created_at: currentUser.created_at,
           role: 'client'
         };
       }
       
       return {
-        ...currentUser,
+        id: currentUser.id,
+        email: currentUser.email,
+        user_metadata: currentUser.user_metadata,
+        created_at: currentUser.created_at,
         name: clientData?.name || "",
         company: clientData?.company || "",
         role: 'client'
@@ -88,7 +98,10 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
     } catch (error) {
       console.error("Error in updateUserWithClientData:", error);
       return {
-        ...currentUser,
+        id: currentUser.id,
+        email: currentUser.email,
+        user_metadata: currentUser.user_metadata,
+        created_at: currentUser.created_at,
         role: 'client'
       };
     }
