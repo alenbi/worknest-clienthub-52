@@ -23,8 +23,8 @@ const ProtectedRoute = () => {
   // Only allow access if authenticated and has admin role
   if (!isAuthenticated || !isAdmin) {
     return (
-      <>
-        <Alert variant="destructive" className="max-w-md mx-auto mt-8 mb-4">
+      <div className="min-h-screen flex flex-col items-center justify-center p-4">
+        <Alert variant="destructive" className="max-w-md mb-4">
           <AlertCircle className="h-4 w-4" />
           <AlertTitle>Access Denied</AlertTitle>
           <AlertDescription>
@@ -32,7 +32,7 @@ const ProtectedRoute = () => {
           </AlertDescription>
         </Alert>
         <Navigate to="/login" replace />
-      </>
+      </div>
     );
   }
 

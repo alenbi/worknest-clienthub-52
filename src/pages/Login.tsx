@@ -36,10 +36,11 @@ const Login = () => {
       
       // Only allow admin login if email is admin email
       if (email.toLowerCase() !== 'support@digitalshopi.in') {
-        throw new Error("This email is not authorized for admin access");
+        throw new Error("This account doesn't have admin access. Please use the client login page.");
       }
       
       await login(email, password);
+      toast.success("Signed in successfully");
     } catch (error: any) {
       console.error("Login error:", error);
       setError(error?.message || "Failed to sign in");

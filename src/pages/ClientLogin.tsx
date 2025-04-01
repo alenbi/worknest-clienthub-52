@@ -40,6 +40,7 @@ const ClientLogin = () => {
       }
       
       await login(email, password);
+      toast.success("Signed in successfully");
     } catch (error: any) {
       console.error("Client login error:", error);
       setError(error?.message || "Failed to sign in");
