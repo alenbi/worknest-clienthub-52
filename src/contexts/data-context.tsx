@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Session, User } from '@supabase/supabase-js';
@@ -79,6 +80,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [isAdmin, setIsAdmin] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isFirebaseAvailable, setIsFirebaseAvailable] = useState(false);
+  
+  // Add missing state variables
+  const [resources, setResources] = useState<Resource[]>([]);
+  const [videos, setVideos] = useState<Video[]>([]);
+  const [offers, setOffers] = useState<Offer[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [updates, setUpdates] = useState<Update[]>([]);
   
   const user: User | null = authUser as unknown as User | null;
   
