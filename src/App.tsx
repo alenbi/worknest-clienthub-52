@@ -67,8 +67,8 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider defaultTheme="light" storageKey="digitalshopi-theme">
       <AuthProvider>
-        <DataProvider>
-          <ClientAuthProvider>
+        <ClientAuthProvider>
+          <DataProvider>
             <TooltipProvider>
               <Toaster />
               <Sonner />
@@ -126,8 +126,8 @@ const App = () => (
                 <Route path="*" element={<NotFound />} />
               </Routes>
             </TooltipProvider>
-          </ClientAuthProvider>
-        </DataProvider>
+          </DataProvider>
+        </ClientAuthProvider>
       </AuthProvider>
     </ThemeProvider>
   </QueryClientProvider>
