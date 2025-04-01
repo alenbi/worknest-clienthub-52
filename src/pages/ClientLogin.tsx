@@ -1,11 +1,11 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useClientAuth } from "@/contexts/client-auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Link, Navigate } from "react-router-dom";
+import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -16,6 +16,15 @@ const ClientLogin = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [searchParams] = useSearchParams();
+
+  // Check for email in URL params (when redirected from admin login)
+  useEffect(() => {
+    const emailParam = searchParams.get('email');
+    if (emailParam) {
+      setEmail(emailParam);
+    }
+  }, [searchParams]);
 
   // Redirect if already authenticated as client
   if (isAuthenticated && isClient && !isLoading) {

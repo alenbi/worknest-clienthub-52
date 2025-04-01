@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Link, Navigate } from "react-router-dom";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -16,6 +16,7 @@ const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const navigate = useNavigate();
 
   // Redirect if already authenticated as admin
   if (isAuthenticated && isAdmin && !isLoading) {
@@ -36,7 +37,12 @@ const Login = () => {
       
       // Only allow admin login if email is admin email
       if (email.toLowerCase() !== 'support@digitalshopi.in') {
-        throw new Error("This account doesn't have admin access. Please use the client login page.");
+        // Instead of throwing an error, redirect to client login with the email
+        navigate(`/client/login?email=${encodeURIComponent(email)}`);
+        toast.info("Please use the client login page with your credentials", {
+          description: "You've been redirected to the appropriate login form"
+        });
+        return;
       }
       
       await login(email, password);
