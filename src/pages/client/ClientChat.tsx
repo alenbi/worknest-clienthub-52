@@ -15,6 +15,7 @@ const ClientChat = () => {
   const { user } = useClientAuth();
   const [clientId, setClientId] = useState<string | null>(null);
   const [clientName, setClientName] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const unsubscribeRef = useRef<(() => void) | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -25,26 +26,42 @@ const ClientChat = () => {
     }
   };
 
+  // Fetch client ID on component mount
   useEffect(() => {
     const fetchClientId = async () => {
-      if (!user?.id) return;
+      if (!user?.id) {
+        console.log("No user found, cannot fetch client ID");
+        setLoading(false);
+        setError("You must be logged in to view this chat.");
+        return;
+      }
 
       try {
+        console.log("Fetching client ID for user:", user.id);
         const { data, error } = await supabase
           .from("clients")
           .select("id, name")
           .eq("user_id", user.id)
           .single();
 
-        if (error) throw error;
+        if (error) {
+          console.error("Error fetching client ID:", error);
+          setError("Could not find your client profile. Please contact support.");
+          throw error;
+        }
+        
         if (data) {
+          console.log("Client ID found:", data.id);
           setClientId(data.id);
           setClientName(data.name || user.email || "Client");
-          console.log("Client ID found:", data.id);
+        } else {
+          setError("No client profile found for your account.");
         }
       } catch (error) {
-        console.error("Error fetching client ID:", error);
+        console.error("Error in fetchClientId:", error);
         toast.error("Could not load chat");
+      } finally {
+        setLoading(false);
       }
     };
 
@@ -52,22 +69,34 @@ const ClientChat = () => {
 
     return () => {
       if (unsubscribeRef.current) {
+        console.log("Cleaning up chat subscription");
         unsubscribeRef.current();
       }
     };
   }, [user]);
 
+  // Fetch messages and set up subscription when clientId is available
   useEffect(() => {
-    const fetchMessages = async () => {
-      if (!clientId) return;
-      setLoading(true);
+    if (!clientId) return;
+    
+    setLoading(true);
+    setError(null);
 
+    const fetchMessages = async () => {
       try {
+        console.log("Fetching messages for client:", clientId);
         const fetchedMessages = await fetchClientMessages(clientId);
         console.log("Messages fetched:", fetchedMessages.length);
-        setMessages(fetchedMessages);
+        
+        // Sort messages by creation date
+        const sortedMessages = [...fetchedMessages].sort((a, b) => 
+          new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+        );
+        
+        setMessages(sortedMessages);
 
-        for (const msg of fetchedMessages) {
+        // Mark messages from admin as read
+        for (const msg of sortedMessages) {
           if (!msg.is_from_client && !msg.is_read) {
             await markMessageAsRead(clientId, msg.id);
           }
@@ -75,6 +104,7 @@ const ClientChat = () => {
       } catch (error) {
         console.error("Error fetching messages:", error);
         toast.error("Could not load messages");
+        setError("Failed to load your conversation history.");
       } finally {
         setLoading(false);
         setTimeout(scrollToBottom, 100);
@@ -82,24 +112,27 @@ const ClientChat = () => {
     };
 
     const setupSubscription = () => {
-      if (!clientId) return;
-
       try {
-        const unsubscribe = subscribeToChatMessages(clientId, (message) => {
-          console.log("New message received:", message);
+        console.log("Setting up message subscription for client:", clientId);
+        const unsubscribe = subscribeToChatMessages(clientId, (newMessage) => {
+          console.log("New message received:", newMessage);
+          
           setMessages(prev => {
-            if (prev.find(m => m.id === message.id)) {
+            // Check if message already exists
+            if (prev.some(m => m.id === newMessage.id)) {
               return prev;
             }
             
-            const newMessages = [...prev, message];
-            return newMessages.sort((a, b) => 
+            // Add new message and sort
+            const updatedMessages = [...prev, newMessage];
+            return updatedMessages.sort((a, b) => 
               new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
             );
           });
 
-          if (!message.is_from_client && !message.is_read) {
-            markMessageAsRead(clientId, message.id).catch(console.error);
+          // Mark messages from admin as read
+          if (!newMessage.is_from_client && !newMessage.is_read) {
+            markMessageAsRead(clientId, newMessage.id).catch(console.error);
           }
 
           setTimeout(scrollToBottom, 100);
@@ -108,31 +141,68 @@ const ClientChat = () => {
         unsubscribeRef.current = unsubscribe;
       } catch (error) {
         console.error("Error setting up chat subscription:", error);
+        setError("Failed to connect to chat service. Please refresh the page.");
       }
     };
 
-    if (clientId) {
-      fetchMessages();
-      setupSubscription();
-    }
+    fetchMessages();
+    setupSubscription();
+    
   }, [clientId]);
 
-  const handleSendMessage = async (text: string) => {
+  const handleSendMessage = async (text: string, file?: File) => {
     if (!clientId || !user?.id) return;
-
+    
     try {
       setSending(true);
+      
+      let attachmentUrl = undefined;
+      let attachmentType = undefined;
+      
+      // If a file was uploaded, handle the upload
+      if (file) {
+        try {
+          const fileName = `${Date.now()}_${file.name}`;
+          const filePath = `chat_attachments/${clientId}/${fileName}`;
+          
+          const { data: uploadData, error: uploadError } = await supabase
+            .storage
+            .from('chat_attachments')
+            .upload(filePath, file);
+            
+          if (uploadError) throw uploadError;
+          
+          const { data: urlData } = await supabase
+            .storage
+            .from('chat_attachments')
+            .createSignedUrl(filePath, 60 * 60 * 24 * 7); // 7 days expiry
+            
+          if (urlData) {
+            attachmentUrl = urlData.signedUrl;
+            attachmentType = file.type;
+          }
+        } catch (uploadError) {
+          console.error("Error uploading file:", uploadError);
+          toast.error("Failed to upload file. Your message will be sent without the attachment.");
+        }
+      }
       
       await sendMessage({
         clientId,
         senderId: user.id,
         senderName: clientName || "Client",
         message: text,
-        isFromClient: true
+        isFromClient: true,
+        attachmentUrl,
+        attachmentType
       });
+      
+      // Clear any previous errors on successful send
+      setError(null);
     } catch (error) {
       console.error("Error sending message:", error);
       toast.error("Failed to send message");
+      setError("Your message couldn't be sent. Please try again.");
     } finally {
       setSending(false);
       setTimeout(scrollToBottom, 100);
@@ -143,10 +213,34 @@ const ClientChat = () => {
     scrollToBottom();
   }, [messages]);
 
-  if (!clientId) {
+  if (!user) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <p className="text-muted-foreground">Please log in to access the chat.</p>
+      </div>
+    );
+  }
+
+  if (error && !clientId && !loading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 text-center p-4">
+        <p className="text-destructive font-medium mb-2">Error</p>
+        <p className="text-muted-foreground mb-4">{error}</p>
+        <button 
+          onClick={() => window.location.reload()}
+          className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+        >
+          Refresh Page
+        </button>
+      </div>
+    );
+  }
+
+  if (!clientId && loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-primary mr-2" />
+        <span>Loading your chat...</span>
       </div>
     );
   }
@@ -161,18 +255,43 @@ const ClientChat = () => {
       </div>
       
       <div className="flex-1 overflow-y-auto">
-        <ChatMessageList 
-          messages={messages} 
-          currentUserId={user?.id || ""} 
-          isLoading={loading}
-        />
+        {error ? (
+          <div className="flex flex-col items-center justify-center h-full p-4 text-center">
+            <p className="text-destructive font-medium mb-2">Error</p>
+            <p className="text-muted-foreground mb-4">{error}</p>
+            <button 
+              onClick={() => {
+                setError(null);
+                setLoading(true);
+                fetchClientMessages(clientId!).then(msgs => {
+                  setMessages(msgs);
+                  setLoading(false);
+                }).catch(err => {
+                  console.error("Error refreshing messages:", err);
+                  setError("Failed to refresh messages. Please reload the page.");
+                  setLoading(false);
+                });
+              }}
+              className="px-4 py-2 bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+            >
+              Try Again
+            </button>
+          </div>
+        ) : (
+          <ChatMessageList 
+            messages={messages} 
+            currentUserId={user?.id || ""} 
+            isLoading={loading}
+          />
+        )}
         <div ref={messagesEndRef} />
       </div>
       
       <div>
         <ChatInput 
           onSendMessage={handleSendMessage} 
-          isLoading={sending} 
+          isLoading={sending}
+          disabled={!!error || !clientId} 
         />
       </div>
     </div>

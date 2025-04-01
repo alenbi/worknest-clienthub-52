@@ -25,17 +25,17 @@ export function ChatMessageList({
   
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="h-8 w-8 animate-spin text-primary mr-2" />
-        <span>Loading conversation...</span>
+      <div className="flex items-center justify-center h-full p-4">
+        <Loader2 className="h-6 w-6 animate-spin text-primary mr-2" />
+        <span className="text-muted-foreground">Loading conversation...</span>
       </div>
     );
   }
   
   if (messages.length === 0) {
     return (
-      <div className="flex h-full items-center justify-center">
-        <p className="text-muted-foreground">
+      <div className="flex h-full items-center justify-center p-4">
+        <p className="text-muted-foreground text-center">
           {emptyMessage}
         </p>
       </div>

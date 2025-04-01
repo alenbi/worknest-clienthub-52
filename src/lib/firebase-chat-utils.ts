@@ -97,7 +97,9 @@ export async function testFirebaseConnection(): Promise<boolean> {
 }
 
 // Test Firebase connection when module is loaded
-testFirebaseConnection();
+testFirebaseConnection().then(isAvailable => {
+  console.log("Firebase availability on load:", isAvailable);
+});
 
 /**
  * Subscribes to chat messages for a specific client
@@ -132,29 +134,34 @@ export function subscribeToChatMessages(
     
     console.log("Setting up Firebase messages subscription for client:", clientId);
     const messagesRef = ref(database, `messages/${clientId}`);
-    const messageQuery = query(messagesRef, orderByChild('created_at'));
-    
+
+    // Use a more efficient approach to listening for messages
     const handleNewMessage = (snapshot: any) => {
-      console.log("Firebase message snapshot received");
-      const data = snapshot.val();
-      if (!data) {
-        console.log("No data in Firebase message snapshot");
-        return;
-      }
+      const message = snapshot.val();
+      if (!message) return;
       
-      // Process all messages as they come in
-      Object.keys(data).forEach(key => {
-        const message = data[key];
-        console.log("Processing Firebase message:", key);
-        onNewMessage({
-          id: key,
-          ...message,
-        });
+      console.log("New Firebase message received");
+      onNewMessage({
+        id: snapshot.key,
+        ...message
       });
     };
     
-    console.log("Attaching Firebase onValue listener");
-    onValue(messageQuery, handleNewMessage, (error) => {
+    // Listen for child_added events for better performance
+    const unsubscribe = onValue(messagesRef, (snapshot) => {
+      if (!snapshot.exists()) return;
+      
+      const messages: Record<string, any> = snapshot.val();
+      
+      // Initialize with all current messages (on first load)
+      Object.keys(messages).forEach(key => {
+        const message = messages[key];
+        onNewMessage({
+          id: key,
+          ...message
+        });
+      });
+    }, (error) => {
       console.error("Firebase onValue error:", error);
       isFirebaseAvailable = false;
       toast.error("Chat connection lost, trying alternative connection...");
@@ -163,7 +170,7 @@ export function subscribeToChatMessages(
     // Return unsubscribe function
     return () => {
       console.log("Detaching Firebase message listener");
-      off(messagesRef);
+      unsubscribe();
     };
   } catch (error) {
     console.error("Error in subscribeToChatMessages:", error);
@@ -275,13 +282,17 @@ export async function sendMessage({
   senderId,
   senderName,
   message,
-  isFromClient
+  isFromClient,
+  attachmentUrl,
+  attachmentType
 }: {
   clientId: string;
   senderId: string;
   senderName: string;
   message: string;
   isFromClient: boolean;
+  attachmentUrl?: string;
+  attachmentType?: string;
 }): Promise<ChatMessage | null> {
   try {
     if (!isFirebaseAvailable) {
@@ -291,7 +302,9 @@ export async function sendMessage({
         senderId, 
         senderName,
         message, 
-        isFromClient
+        isFromClient,
+        attachmentUrl,
+        attachmentType
       });
       
       // Send email notification
@@ -309,15 +322,16 @@ export async function sendMessage({
     // Trim message
     const finalMessage = message ? message.trim() : '';
     
-    // If no message, don't send anything
-    if (!finalMessage) {
+    // If no message and no attachment, don't send anything
+    if (!finalMessage && !attachmentUrl) {
+      console.log("Empty message without attachment - not sending");
       return null;
     }
     
     const now = new Date().toISOString();
     const id = uuidv4();
     
-    const messageData = {
+    const messageData: Omit<ChatMessage, 'id'> = {
       client_id: clientId,
       sender_id: senderId,
       sender_name: senderName,
@@ -326,6 +340,12 @@ export async function sendMessage({
       is_read: false,
       created_at: now
     };
+    
+    // Add attachment if present
+    if (attachmentUrl && attachmentType) {
+      messageData.attachment_url = attachmentUrl;
+      messageData.attachment_type = attachmentType;
+    }
     
     const messagesRef = ref(database, `messages/${clientId}/${id}`);
     await set(messagesRef, messageData);
@@ -351,7 +371,9 @@ export async function sendMessage({
         senderId, 
         senderName,
         message, 
-        isFromClient
+        isFromClient,
+        attachmentUrl,
+        attachmentType
       });
       
       // Send email notification

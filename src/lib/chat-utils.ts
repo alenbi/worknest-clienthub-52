@@ -35,27 +35,31 @@ export async function sendSupabaseMessage({
   senderId,
   senderName,
   message,
-  isFromClient
+  isFromClient,
+  attachmentUrl,
+  attachmentType
 }: {
   clientId: string;
   senderId: string;
   senderName: string;
   message: string;
   isFromClient: boolean;
+  attachmentUrl?: string;
+  attachmentType?: string;
 }): Promise<ChatMessage> {
   try {
     // Trim message
     const finalMessage = message ? message.trim() : '';
     
-    // If no message, don't send anything
-    if (!finalMessage) {
+    // If no message and no attachment, don't send anything
+    if (!finalMessage && !attachmentUrl) {
       throw new Error("Message cannot be empty");
     }
     
     const id = uuidv4();
     const now = new Date().toISOString();
     
-    const messageData = {
+    const messageData: Omit<ChatMessage, 'id'> & { id: string } = {
       id,
       client_id: clientId,
       sender_id: senderId,
@@ -65,6 +69,12 @@ export async function sendSupabaseMessage({
       is_read: false,
       created_at: now
     };
+    
+    // Add attachment if present
+    if (attachmentUrl && attachmentType) {
+      messageData.attachment_url = attachmentUrl;
+      messageData.attachment_type = attachmentType;
+    }
     
     const { error } = await supabase
       .from('client_messages')
