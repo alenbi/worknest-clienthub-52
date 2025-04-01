@@ -1,3 +1,4 @@
+
 import { createContext, useContext, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Session, User } from "@supabase/supabase-js";
@@ -33,27 +34,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [isAdmin, setIsAdmin] = useState(false);
   const navigate = useNavigate();
 
-  // Function to fetch profile data
-  const fetchProfile = async (userId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", userId)
-        .maybeSingle();
-
-      if (error) {
-        console.error("Error fetching profile:", error);
-        return null;
-      }
-
-      return data;
-    } catch (error) {
-      console.error("Failed to fetch profile:", error);
-      return null;
-    }
-  };
-
   // Function to check if user is admin
   const checkAdminRole = (user: User): boolean => {
     return user.email === 'support@digitalshopi.in';
@@ -67,64 +47,78 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setIsAdmin(isUserAdmin);
     
     if (!isUserAdmin) {
-      console.log("Non-admin user detected in admin auth context, redirecting");
-      // We need to logout non-admin users from the admin auth context
-      setTimeout(async () => {
-        await supabase.auth.signOut();
-        navigate("/login");
-        toast.error("You don't have permission to access the admin area");
-      }, 0);
+      console.log("Non-admin user detected in admin auth context");
       return null;
     }
     
-    const profile = await fetchProfile(currentUser.id);
-    
-    const userWithProfile: UserWithProfile = {
-      ...currentUser,
-      name: profile?.full_name || "",
-      avatar: profile?.avatar || "",
-      role: 'admin'
-    };
-
-    return userWithProfile;
+    // Fetch profile data from the database
+    try {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("full_name, avatar")
+        .eq("id", currentUser.id)
+        .maybeSingle();
+      
+      const userWithProfile: UserWithProfile = {
+        ...currentUser,
+        name: profile?.full_name || "",
+        avatar: profile?.avatar || "",
+        role: 'admin'
+      };
+  
+      return userWithProfile;
+    } catch (error) {
+      console.error("Error fetching profile:", error);
+      return {
+        ...currentUser,
+        role: 'admin'
+      };
+    }
   };
 
   useEffect(() => {
     const initializeAuth = async () => {
       try {
         setIsLoading(true);
-        console.log("Initializing admin auth state...");
+        console.log("Initializing admin auth context...");
         
         // Set up auth state listener first to catch any events during initialization
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
           async (event, currentSession) => {
             console.log("Admin auth state changed:", event);
             
-            // Only update state if we're initialized to avoid race conditions
-            if (authInitialized) {
-              setSession(currentSession);
+            if (currentSession?.user) {
+              // Check if user is admin
+              const isUserAdmin = checkAdminRole(currentSession.user);
               
-              if (currentSession?.user) {
-                // Defer profile fetch to avoid Supabase auth deadlocks
-                setTimeout(async () => {
-                  const enhancedUser = await updateUserWithProfile(currentSession.user);
-                  setUser(enhancedUser);
-                  setIsLoading(false);
-                }, 0);
+              if (isUserAdmin) {
+                setSession(currentSession);
+                const enhancedUser = await updateUserWithProfile(currentSession.user);
+                setUser(enhancedUser);
+                setIsAdmin(true);
               } else {
+                // Not admin - clear auth state in this context
+                setSession(null);
                 setUser(null);
                 setIsAdmin(false);
-                setIsLoading(false);
               }
+            } else {
+              // No session
+              setSession(null);
+              setUser(null);
+              setIsAdmin(false);
             }
+            
+            setIsLoading(false);
           }
         );
         
         // Check for existing session
         const { data: { session: currentSession } } = await supabase.auth.getSession();
-        console.log("Current admin session check:", currentSession ? "Session exists" : "No session");
+        console.log("Current session check:", currentSession ? "Session exists" : "No session");
         
         if (currentSession?.user) {
+          // Check if user is admin
           const isUserAdmin = checkAdminRole(currentSession.user);
           
           if (isUserAdmin) {
@@ -133,20 +127,21 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             setUser(enhancedUser);
             setIsAdmin(true);
           } else {
-            // Not an admin, make sure we clear any session
-            console.log("Non-admin user session found, clearing");
+            // Not admin
+            setSession(null);
             setUser(null);
             setIsAdmin(false);
-            await supabase.auth.signOut();
           }
         } else {
+          // No session
           setUser(null);
+          setSession(null);
           setIsAdmin(false);
         }
         
         setIsLoading(false);
         setAuthInitialized(true);
-        console.log("Auth initialization complete, isAuthenticated:", !!user && isAdmin, "isAdmin:", isAdmin);
+        console.log("Admin auth initialization complete");
 
         return () => {
           subscription.unsubscribe();
@@ -169,8 +164,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     try {
       setIsLoading(true);
       
-      // Only allow admin email to login
-      if (email !== 'support@digitalshopi.in') {
+      // Verify that this is the admin email
+      if (email.toLowerCase() !== 'support@digitalshopi.in') {
         throw new Error("This email is not authorized for admin access");
       }
       
@@ -179,32 +174,31 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         password,
       });
 
-      console.log("Admin login response:", { data: data ? "Data exists" : "No data", error });
-
       if (error) {
         throw error;
       }
 
-      // Explicitly update state here for immediate feedback
       if (data.session) {
-        console.log("Setting session and user immediately after admin login");
-        setSession(data.session);
+        // Verify user is admin after login
+        const isUserAdmin = checkAdminRole(data.user);
         
-        // Update user with profile data
+        if (!isUserAdmin) {
+          // Force logout if not admin
+          await supabase.auth.signOut();
+          throw new Error("This account does not have administrator privileges");
+        }
+        
+        setSession(data.session);
         const enhancedUser = await updateUserWithProfile(data.user);
         setUser(enhancedUser);
         setIsAdmin(true);
-        
-        // Successfully logged in
         toast.success("Successfully signed in as admin!");
       } else {
         throw new Error("Failed to authenticate");
       }
     } catch (error: any) {
-      console.error("Login error details:", error);
       setUser(null);
       setIsAdmin(false);
-      toast.error(error.message || "Failed to sign in");
       throw error;
     } finally {
       setIsLoading(false);
@@ -214,20 +208,25 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const register = async (email: string, password: string, name: string) => {
     try {
       setIsLoading(true);
+      // Only allow registration if it's the admin email
+      if (email.toLowerCase() !== 'support@digitalshopi.in') {
+        throw new Error("Only the administrator account can be registered here");
+      }
+      
       const { error } = await supabase.auth.signUp({
         email,
         password,
         options: {
           data: {
             full_name: name,
-            role: 'admin' // Only admins should be registering through admin portal
+            role: 'admin'
           },
         },
       });
 
       if (error) throw error;
       
-      toast.success("Registration successful! You can now sign in.");
+      toast.success("Admin registration successful! You can now sign in.");
     } catch (error: any) {
       toast.error(error.message || "Failed to register");
       throw error;
@@ -246,8 +245,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setUser(null);
       setSession(null);
       setIsAdmin(false);
-      
-      // Redirect to login page after logout
       navigate("/login");
     } catch (error: any) {
       toast.error(error.message || "Failed to sign out");
@@ -256,14 +253,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
 
-  // Function to update user profile
   const updateProfile = async (data: { name?: string; avatar?: string }) => {
     try {
       setIsLoading(true);
       
       if (!user) throw new Error("Not authenticated");
       
-      // Update profile in database
       const { error } = await supabase
         .from("profiles")
         .update({
@@ -274,7 +269,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       
       if (error) throw error;
       
-      // Update local user state
       setUser(prev => {
         if (!prev) return null;
         return {
@@ -297,7 +291,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     <AuthContext.Provider
       value={{
         isAuthenticated: !!user && isAdmin,
-        isLoading: isLoading && !authInitialized,
+        isLoading,
         user,
         session,
         login,

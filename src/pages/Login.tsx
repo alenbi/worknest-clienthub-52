@@ -1,62 +1,24 @@
-import { useState, useEffect } from "react";
+
+import { useState } from "react";
 import { useAuth } from "@/contexts/auth-context";
-import { useClientAuth } from "@/contexts/client-auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
-import { Link, Navigate, useNavigate } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
 
 const Login = () => {
   const { login, isAuthenticated, isLoading, isAdmin } = useAuth();
-  const { isAuthenticated: isClientAuthenticated, logout: clientLogout } = useClientAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const navigate = useNavigate();
 
-  // Security check - detect existing client session and force logout
-  useEffect(() => {
-    const securityCheck = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      
-      if (session) {
-        console.log("Login security check:", {
-          hasSession: !!session,
-          email: session.user?.email
-        });
-        
-        // If client session exists, but trying to access admin login - force logout
-        if (session.user?.email !== 'support@digitalshopi.in') {
-          console.log("Found existing client session, logging out to prevent conflicts");
-          await supabase.auth.signOut();
-          if (isClientAuthenticated) {
-            await clientLogout();
-          }
-          toast.info("Logged out of client session for security");
-        }
-      }
-    };
-    
-    securityCheck();
-  }, [isClientAuthenticated, clientLogout]);
-  
-  // Redirect after authentication changes
-  useEffect(() => {
-    if (isAuthenticated && isAdmin && !isLoading) {
-      console.log("User is authenticated as admin, redirecting to dashboard");
-      navigate("/dashboard", { replace: true });
-    }
-  }, [isAuthenticated, isLoading, navigate, isAdmin]);
-
-  // Regular redirect check (still useful for initial load)
+  // Redirect if already authenticated as admin
   if (isAuthenticated && isAdmin && !isLoading) {
-    console.log("Rendering redirect to dashboard");
     return <Navigate to="/dashboard" />;
   }
 
@@ -69,17 +31,15 @@ const Login = () => {
     }
     
     try {
-      console.log("Attempting admin login with:", { email });
       setError("");
       setIsSubmitting(true);
       
       // Only allow admin login if email is admin email
-      if (email !== 'support@digitalshopi.in') {
+      if (email.toLowerCase() !== 'support@digitalshopi.in') {
         throw new Error("This email is not authorized for admin access");
       }
       
       await login(email, password);
-      // Navigation will be handled by the useEffect above
     } catch (error: any) {
       console.error("Login error:", error);
       setError(error?.message || "Failed to sign in");
