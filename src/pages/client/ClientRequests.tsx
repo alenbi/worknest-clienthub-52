@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,39 +9,43 @@ import { useClientAuth } from "@/contexts/client-auth-context";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
+import { Request } from "@/lib/models";
 
 const ClientRequests = () => {
   const { user } = useClientAuth();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [requests, setRequests] = useState<any[]>([]);
+  const [requests, setRequests] = useState<Request[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   // Fetch client's requests on component mount
-  useState(() => {
+  useEffect(() => {
     const fetchRequests = async () => {
       try {
         setIsLoading(true);
+        
+        if (!user?.id) return;
         
         // First get the client ID
         const { data: clientData, error: clientError } = await supabase
           .from("clients")
           .select("id")
-          .eq("user_id", user?.id)
+          .eq("user_id", user.id)
           .single();
           
         if (clientError) throw clientError;
+        if (!clientData) {
+          setIsLoading(false);
+          return;
+        }
         
         // Then fetch requests for this client
         const { data, error } = await supabase
-          .from("requests")
-          .select("*")
-          .eq("client_id", clientData.id)
-          .order("created_at", { ascending: false });
+          .rpc("get_client_requests", { client_user_id: user.id });
           
         if (error) throw error;
-        setRequests(data || []);
+        setRequests(data as Request[] || []);
       } catch (error) {
         console.error("Error fetching requests:", error);
         toast.error("Failed to load your requests");
@@ -76,12 +80,12 @@ const ClientRequests = () => {
       if (clientError) throw clientError;
       
       // Then create the request
-      const { error } = await supabase.from("requests").insert({
-        title,
-        description,
-        client_id: clientData.id,
-        status: "pending"
-      });
+      const { error } = await supabase
+        .rpc("create_client_request", {
+          req_title: title, 
+          req_description: description, 
+          client_user_id: user?.id
+        });
       
       if (error) throw error;
       
@@ -91,13 +95,11 @@ const ClientRequests = () => {
       
       // Refresh requests list
       const { data, error: fetchError } = await supabase
-        .from("requests")
-        .select("*")
-        .eq("client_id", clientData.id)
-        .order("created_at", { ascending: false });
+        .rpc("get_client_requests", { client_user_id: user?.id });
         
       if (fetchError) throw fetchError;
-      setRequests(data || []);
+      setRequests(data as Request[] || []);
+      
     } catch (error) {
       console.error("Error submitting request:", error);
       toast.error("Failed to submit request");

@@ -24,24 +24,7 @@ import {
 } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-
-interface Client {
-  id: string;
-  name: string;
-  email: string;
-  company: string | null;
-}
-
-interface Request {
-  id: string;
-  title: string;
-  description: string;
-  client_id: string;
-  status: string;
-  created_at: string;
-  updated_at: string;
-  client?: Client;
-}
+import { Request, Client } from "@/lib/models";
 
 const AdminRequests = () => {
   const [requests, setRequests] = useState<Request[]>([]);
@@ -58,17 +41,11 @@ const AdminRequests = () => {
       setIsLoading(true);
       
       // Get all requests with client information
-      const { data, error } = await supabase
-        .from("requests")
-        .select(`
-          *,
-          client:clients(id, name, email, company)
-        `)
-        .order("created_at", { ascending: false });
+      const { data, error } = await supabase.rpc("get_all_requests");
       
       if (error) throw error;
       
-      setRequests(data || []);
+      setRequests(data as Request[] || []);
     } catch (error) {
       console.error("Error fetching requests:", error);
       toast.error("Failed to load requests");
@@ -122,13 +99,10 @@ const AdminRequests = () => {
     try {
       setIsUpdating(true);
       
-      const { error } = await supabase
-        .from("requests")
-        .update({ 
-          status,
-          updated_at: new Date().toISOString()
-        })
-        .eq("id", selectedRequest.id);
+      const { error } = await supabase.rpc("update_request_status", {
+        request_id: selectedRequest.id,
+        new_status: status
+      });
       
       if (error) throw error;
       

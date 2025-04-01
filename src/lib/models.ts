@@ -1,4 +1,3 @@
-
 export interface Resource {
   id: string;
   title: string;
@@ -74,4 +73,15 @@ export interface Update {
   is_published: boolean;
   image_url?: string;
   created_at: string;
+}
+
+export interface Request {
+  id: string;
+  title: string;
+  description: string;
+  client_id: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  client?: Client;
 }
