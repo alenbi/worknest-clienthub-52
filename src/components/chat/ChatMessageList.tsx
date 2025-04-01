@@ -2,7 +2,7 @@
 import { useRef, useEffect } from "react";
 import { Loader2 } from "lucide-react";
 import { ChatMessage as ChatMessageType } from "@/lib/firebase-chat-utils";
-import { ChatMessage } from "./ChatMessage";
+import { ChatMessageComponent } from "./ChatMessage";
 
 interface ChatMessageListProps {
   messages: ChatMessageType[];
@@ -45,7 +45,7 @@ export function ChatMessageList({
   return (
     <div className="space-y-4 p-4">
       {messages.map((message) => (
-        <ChatMessage
+        <ChatMessageComponent
           key={message.id}
           message={message}
           isCurrentUser={message.sender_id === currentUserId}
