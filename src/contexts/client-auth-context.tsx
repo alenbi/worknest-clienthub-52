@@ -1,4 +1,3 @@
-
 import { createContext, useContext, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Session, User } from "@supabase/supabase-js";
@@ -30,6 +29,7 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isClient, setIsClient] = useState(false);
+  const [authInitialized, setAuthInitialized] = useState(false);
   const navigate = useNavigate();
 
   // Function to check if user is a client
@@ -79,7 +79,7 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
         setIsLoading(true);
         console.log("Initializing client auth context...");
         
-        // Set up auth state listener
+        // Set up auth state listener first
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
           async (event, currentSession) => {
             console.log("Client auth state changed:", event);
@@ -107,6 +107,7 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
             }
             
             setIsLoading(false);
+            setAuthInitialized(true);
           }
         );
         
@@ -136,11 +137,21 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
           setIsClient(false);
         }
         
+        // Force auth state to be determined after a maximum timeout
+        const authTimeoutId = setTimeout(() => {
+          if (!authInitialized) {
+            console.warn("Client auth initialization timed out");
+            setIsLoading(false);
+            setAuthInitialized(true);
+          }
+        }, 4000);
+        
         setIsLoading(false);
         console.log("Client auth initialization complete");
 
         return () => {
           subscription.unsubscribe();
+          clearTimeout(authTimeoutId);
         };
       } catch (error) {
         console.error("Error initializing client auth:", error);
@@ -148,11 +159,12 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
         setSession(null);
         setIsClient(false);
         setIsLoading(false);
+        setAuthInitialized(true);
       }
     };
 
     initializeAuth();
-  }, [navigate]);
+  }, []);
 
   const login = async (email: string, password: string) => {
     console.log("Client login function called with email:", email);
