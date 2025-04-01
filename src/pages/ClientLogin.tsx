@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useClientAuth } from "@/contexts/client-auth-context";
 import { useAuth } from "@/contexts/auth-context";
@@ -27,8 +26,7 @@ const ClientLogin = () => {
       const { data: { session } } = await supabase.auth.getSession();
       
       if (session) {
-        const role = session.user?.app_metadata?.role || 
-                    session.user?.raw_app_meta_data?.role;
+        const role = session.user?.app_metadata?.role;
                     
         const isUserAdmin = role === 'admin' || 
                           session.user?.email === 'support@digitalshopi.in';

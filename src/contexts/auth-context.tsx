@@ -57,7 +57,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   // Function to check if user is admin
   const checkAdminRole = (user: User): boolean => {
-    const role = user?.app_metadata?.role || user?.raw_app_meta_data?.role;
+    const role = user?.app_metadata?.role;
     return role === 'admin' || user.email === 'support@digitalshopi.in';
   };
 

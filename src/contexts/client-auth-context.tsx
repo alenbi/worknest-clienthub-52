@@ -36,7 +36,7 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
 
   // Function to check if user is a client
   const checkClientRole = (user: User): boolean => {
-    const role = user?.app_metadata?.role || user?.raw_app_meta_data?.role;
+    const role = user?.app_metadata?.role;
     return role === 'client' || (user.email !== 'support@digitalshopi.in');
   };
 
