@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
@@ -38,6 +37,8 @@ const Login = () => {
       // Only allow admin login if email is admin email
       if (email.toLowerCase() !== 'support@digitalshopi.in') {
         // Instead of throwing an error, redirect to client login with the email
+        // Reset the form state before redirecting
+        setIsSubmitting(false); 
         navigate(`/client/login?email=${encodeURIComponent(email)}`);
         toast.info("Please use the client login page with your credentials", {
           description: "You've been redirected to the appropriate login form"

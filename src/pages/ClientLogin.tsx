@@ -17,12 +17,17 @@ const ClientLogin = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
   const [searchParams] = useSearchParams();
+  const [isRedirected, setIsRedirected] = useState(false);
 
   // Check for email in URL params (when redirected from admin login)
   useEffect(() => {
     const emailParam = searchParams.get('email');
     if (emailParam) {
       setEmail(emailParam);
+      setIsRedirected(true); // Flag that we came from a redirect
+      
+      // Clear any loading or submitting states that might have persisted
+      setIsSubmitting(false);
     }
   }, [searchParams]);
 
@@ -73,6 +78,11 @@ const ClientLogin = () => {
             {error && (
               <div className="rounded-md bg-destructive/15 p-3 text-sm text-destructive">
                 {error}
+              </div>
+            )}
+            {isRedirected && (
+              <div className="rounded-md bg-blue-100 p-3 text-sm text-blue-800">
+                Please log in with your client credentials
               </div>
             )}
             <div className="space-y-2">
@@ -131,7 +141,7 @@ const ClientLogin = () => {
             <Button 
               type="submit" 
               className="w-full" 
-              disabled={isSubmitting || isLoading}
+              disabled={isSubmitting}
             >
               {isSubmitting ? (
                 <>
