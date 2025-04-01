@@ -7,9 +7,10 @@ import { SendIcon, Loader2 } from "lucide-react";
 interface ChatInputProps {
   onSendMessage: (message: string) => Promise<void>;
   isLoading: boolean;
+  disabled?: boolean; // Add the disabled prop
 }
 
-export function ChatInput({ onSendMessage, isLoading }: ChatInputProps) {
+export function ChatInput({ onSendMessage, isLoading, disabled = false }: ChatInputProps) {
   const [message, setMessage] = useState("");
   
   const handleSubmit = async (e?: React.FormEvent) => {
@@ -34,7 +35,7 @@ export function ChatInput({ onSendMessage, isLoading }: ChatInputProps) {
         placeholder="Type your message..."
         value={message}
         onChange={(e) => setMessage(e.target.value)}
-        disabled={isLoading}
+        disabled={isLoading || disabled}
         className="flex-1 min-h-10"
         onKeyDown={(e) => {
           if (e.key === 'Enter' && !e.shiftKey) {
@@ -44,7 +45,7 @@ export function ChatInput({ onSendMessage, isLoading }: ChatInputProps) {
         }}
       />
       
-      <Button type="submit" disabled={!message.trim() || isLoading}>
+      <Button type="submit" disabled={!message.trim() || isLoading || disabled}>
         {isLoading ? (
           <Loader2 className="h-4 w-4 animate-spin" />
         ) : (

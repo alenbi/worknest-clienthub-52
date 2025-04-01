@@ -1,25 +1,75 @@
 
-import React from 'react';
+import React, { memo } from 'react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 import { ChatMessage } from '@/lib/firebase-chat-utils';
-import { FileText, Image, FileIcon, ExternalLink } from 'lucide-react';
+import { FileText, Image as ImageIcon, FileIcon, ExternalLink } from 'lucide-react';
 
 interface ChatMessageProps {
   message: ChatMessage;
   isCurrentUser: boolean;
 }
 
+// Memoize the FilePreview component to prevent unnecessary re-renders
+const FilePreview = memo(({ url, type }: { url: string; type: string }) => {
+  if (type.startsWith('image/')) {
+    return (
+      <a 
+        href={url} 
+        target="_blank" 
+        rel="noopener noreferrer" 
+        className="block mt-2"
+      >
+        <div className="relative">
+          <img 
+            src={url} 
+            alt="Attachment" 
+            className="max-w-full max-h-40 rounded border object-cover" 
+            loading="lazy" // Add lazy loading
+            onError={(e) => {
+              (e.target as HTMLImageElement).src = '/placeholder.svg';
+            }}
+          />
+          <div className="absolute bottom-1 right-1">
+            <ExternalLink className="h-4 w-4 text-white drop-shadow-md" />
+          </div>
+        </div>
+      </a>
+    );
+  }
+  
+  return (
+    <a 
+      href={url} 
+      target="_blank" 
+      rel="noopener noreferrer"
+      className="flex items-center text-xs underline mt-2 hover:text-primary transition-colors"
+    >
+      {type.includes('pdf') ? (
+        <FileText className="h-4 w-4 mr-1" />
+      ) : type.includes('image') ? (
+        <ImageIcon className="h-4 w-4 mr-1" />
+      ) : (
+        <FileIcon className="h-4 w-4 mr-1" />
+      )}
+      <span className="truncate max-w-[200px]">
+        {url.split('/').pop() || 'Attachment'}
+      </span>
+    </a>
+  );
+});
+
+// Optimize the component with memo to prevent unnecessary re-renders
 const ChatMessageComponent = ({ message, isCurrentUser }: ChatMessageProps) => {
   const initial = message.sender_name ? message.sender_name[0] : (isCurrentUser ? 'Y' : 'O');
   
   const displayName = message.sender_name || (isCurrentUser ? 'You' : 'Other');
-
-  const getFileIcon = (type: string) => {
-    if (type.includes('pdf')) return <FileText className="h-4 w-4 mr-1" />;
-    if (type.includes('image')) return <Image className="h-4 w-4 mr-1" />;
-    return <FileIcon className="h-4 w-4 mr-1" />;
-  };
+  
+  const formattedTime = new Date(message.created_at).toLocaleTimeString([], { 
+    hour: '2-digit', 
+    minute: '2-digit',
+    hour12: true
+  });
   
   return (
     <div className={cn(
@@ -45,49 +95,12 @@ const ChatMessageComponent = ({ message, isCurrentUser }: ChatMessageProps) => {
         
         {message.attachment_url && message.attachment_type && (
           <div className="mt-2">
-            {message.attachment_type.startsWith('image/') ? (
-              <a 
-                href={message.attachment_url} 
-                target="_blank" 
-                rel="noopener noreferrer" 
-                className="block mt-2"
-              >
-                <div className="relative">
-                  <img 
-                    src={message.attachment_url} 
-                    alt="Attachment" 
-                    className="max-w-full max-h-40 rounded border object-cover" 
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = '/placeholder.svg';
-                    }}
-                  />
-                  <div className="absolute bottom-1 right-1">
-                    <ExternalLink className="h-4 w-4 text-white drop-shadow-md" />
-                  </div>
-                </div>
-              </a>
-            ) : (
-              <a 
-                href={message.attachment_url} 
-                target="_blank" 
-                rel="noopener noreferrer"
-                className="flex items-center text-xs underline mt-2 hover:text-primary transition-colors"
-              >
-                {getFileIcon(message.attachment_type)}
-                <span className="truncate max-w-[200px]">
-                  {message.attachment_url.split('/').pop() || 'Attachment'}
-                </span>
-              </a>
-            )}
+            <FilePreview url={message.attachment_url} type={message.attachment_type} />
           </div>
         )}
         
         <div className="text-xs opacity-70 mt-1">
-          {new Date(message.created_at).toLocaleTimeString([], { 
-            hour: '2-digit', 
-            minute: '2-digit',
-            hour12: true
-          })}
+          {formattedTime}
           {message.is_read && isCurrentUser && (
             <span className="ml-2">✓</span>
           )}

@@ -1,5 +1,5 @@
 
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, memo } from "react";
 import { Loader2 } from "lucide-react";
 import { ChatMessage as ChatMessageType } from "@/lib/firebase-chat-utils";
 import { ChatMessageComponent } from "./ChatMessage";
@@ -11,6 +11,9 @@ interface ChatMessageListProps {
   emptyMessage?: string;
 }
 
+// Use memo to prevent unnecessary re-renders
+const MemoizedChatMessage = memo(ChatMessageComponent);
+
 export function ChatMessageList({ 
   messages, 
   currentUserId, 
@@ -19,8 +22,13 @@ export function ChatMessageList({
 }: ChatMessageListProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
+  // Scroll to bottom when messages change, using requestAnimationFrame for smoother scrolling
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (messages.length > 0) {
+      requestAnimationFrame(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      });
+    }
   }, [messages]);
   
   if (isLoading) {
@@ -45,7 +53,7 @@ export function ChatMessageList({
   return (
     <div className="space-y-4 p-4">
       {messages.map((message) => (
-        <ChatMessageComponent
+        <MemoizedChatMessage
           key={message.id}
           message={message}
           isCurrentUser={message.sender_id === currentUserId}
