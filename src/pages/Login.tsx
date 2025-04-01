@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/auth-context";
 import { useClientAuth } from "@/contexts/client-auth-context";
@@ -27,19 +26,13 @@ const Login = () => {
       const { data: { session } } = await supabase.auth.getSession();
       
       if (session) {
-        const role = session.user?.app_metadata?.role;
-                    
-        const isUserAdmin = role === 'admin' || 
-                          session.user?.email === 'support@digitalshopi.in';
-        
-        console.log("Login security check:", { 
-          hasSession: !!session, 
-          isUserAdmin, 
-          isClientAuthenticated 
+        console.log("Login security check:", {
+          hasSession: !!session,
+          email: session.user?.email
         });
         
         // If client session exists, but trying to access admin login - force logout
-        if (!isUserAdmin && session) {
+        if (session.user?.email !== 'support@digitalshopi.in') {
           console.log("Found existing client session, logging out to prevent conflicts");
           await supabase.auth.signOut();
           if (isClientAuthenticated) {
@@ -86,7 +79,6 @@ const Login = () => {
       }
       
       await login(email, password);
-      
       // Navigation will be handled by the useEffect above
     } catch (error: any) {
       console.error("Login error:", error);

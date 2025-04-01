@@ -276,6 +276,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      ensure_admin_role: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
       get_client_id_from_user: {
         Args: {
           user_id: string
@@ -283,6 +287,12 @@ export type Database = {
         Returns: string
       }
       is_admin: {
+        Args: {
+          user_id: string
+        }
+        Returns: boolean
+      }
+      is_client: {
         Args: {
           user_id: string
         }

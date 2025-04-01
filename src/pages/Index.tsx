@@ -1,4 +1,3 @@
-
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useNavigate } from "react-router-dom";
@@ -20,36 +19,28 @@ const Index = () => {
       const { data: { session } } = await supabase.auth.getSession();
       
       if (session) {
-        // If there's a session, check user metadata for role
-        const role = session.user?.app_metadata?.role;
-        
-        const isUserAdmin = role === 'admin' || 
-                             session.user?.email === 'support@digitalshopi.in';
-                             
         console.log("Session check:", { 
-          hasSession: !!session, 
-          role, 
-          isUserAdmin,
+          hasSession: !!session,
           email: session.user?.email
         });
         
-        if (isUserAdmin) {
+        if (session.user?.email === 'support@digitalshopi.in') {
           if (isAuthenticated && isAdmin) {
             console.log("User is authenticated as admin, redirecting to admin dashboard");
             navigate('/dashboard', { replace: true });
-          } else if (!isAdmin) {
-            // Admin session exists but admin context not authenticated - force reload
-            console.log("Admin session detected but context not ready, forcing auth refresh");
-            await supabase.auth.refreshSession();
+          } else {
+            // Admin session exists but admin context not authenticated
+            console.log("Admin session detected but context not ready");
+            // Let the auth context handle this
           }
         } else {
           if (isClientAuthenticated && isClient) {
             console.log("User is authenticated as client, redirecting to client dashboard");
             navigate('/client/dashboard', { replace: true });
-          } else if (!isClient) {
-            // Client session exists but client context not authenticated - force reload
-            console.log("Client session detected but context not ready, forcing auth refresh");
-            await supabase.auth.refreshSession();
+          } else {
+            // Client session exists but client context not authenticated
+            console.log("Client session detected but context not ready");
+            // Let the client auth context handle this
           }
         }
       }

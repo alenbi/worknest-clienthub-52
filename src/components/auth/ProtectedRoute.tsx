@@ -19,7 +19,6 @@ const ProtectedRoute = () => {
     console.log("SECURITY BLOCK: Client account attempting to access admin route", location.pathname);
     
     // If we detect a client trying to access admin routes directly, log them out of client auth
-    // This is a security measure to prevent unauthorized access
     useEffect(() => {
       const handleBlockedAccess = async () => {
         console.log("Logging out client from admin restricted area");
@@ -34,7 +33,7 @@ const ProtectedRoute = () => {
       };
       
       handleBlockedAccess();
-    }, [clientLogout, navigate]);
+    }, []);
     
     return (
       <>
@@ -51,39 +50,27 @@ const ProtectedRoute = () => {
     );
   }
 
-  // Check admin role specifically
+  // Check admin role specifically - get the current session
   useEffect(() => {
     const validateAdminAccess = async () => {
-      if (!isLoading && user && !isAdmin) {
-        console.log("SECURITY CHECK: User authenticated but not an admin, logging out");
-        toast.error("You don't have permission to access the admin area");
-        
-        // Force sign out from Supabase auth
-        await supabase.auth.signOut();
-        
-        // Redirect to login
-        navigate("/login", { replace: true });
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!isLoading && session) {
+        if (session.user?.email !== 'support@digitalshopi.in') {
+          console.log("SECURITY CHECK: Non-admin user attempting to access admin routes");
+          toast.error("You don't have permission to access the admin area");
+          
+          // Force sign out from Supabase auth
+          await supabase.auth.signOut();
+          
+          // Redirect to login
+          navigate("/login", { replace: true });
+        }
       }
     };
     
     validateAdminAccess();
   }, [isAdmin, isLoading, user, navigate]);
-
-  useEffect(() => {
-    console.log("ProtectedRoute state:", { 
-      isAuthenticated, 
-      isLoading, 
-      isClientAuthenticated, 
-      isAdmin, 
-      path: location.pathname 
-    });
-    
-    // If authentication is complete and user is not authenticated, redirect to login
-    if (!isLoading && !isAuthenticated) {
-      console.log("User not authenticated, redirecting to login");
-      navigate("/login", { replace: true });
-    }
-  }, [isAuthenticated, isLoading, isClientAuthenticated, navigate, location.pathname, isAdmin]);
 
   // Only show loading if we're genuinely still checking auth
   if (isLoading) {

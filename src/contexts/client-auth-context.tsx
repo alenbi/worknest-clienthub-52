@@ -1,4 +1,3 @@
-
 import { createContext, useContext, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Session, User } from "@supabase/supabase-js";
@@ -36,8 +35,6 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
 
   // Function to check if user is a client
   const checkClientRole = (user: User): boolean => {
-    const role = user?.app_metadata?.role;
-    // Only consider client if not the admin email
     return user.email !== 'support@digitalshopi.in';
   };
 
@@ -85,7 +82,6 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
     if (!clientData && isUserClient) {
       console.warn("User is a client but has no client data record:", currentUser.id);
       // This is a client user with no client record - might be a new user
-      // Could handle this by creating a client record or showing an onboarding process
     }
     
     const clientUserWithProfile: ClientUserWithProfile = {
@@ -109,7 +105,6 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
           async (event, currentSession) => {
             console.log("Client auth state changed:", event);
             
-            // Only update state if we're initialized to avoid race conditions
             if (authInitialized) {
               setSession(currentSession);
               
@@ -132,15 +127,22 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
         // Check for existing session
         const { data: { session: currentSession } } = await supabase.auth.getSession();
         console.log("Current client session check:", currentSession ? "Session exists" : "No session");
-        setSession(currentSession);
         
         if (currentSession?.user) {
-          const enhancedUser = await updateUserWithClientData(currentSession.user);
-          setUser(enhancedUser);
-          
-          // User role check done inside updateUserWithClientData
           const isUserClient = checkClientRole(currentSession.user);
-          setIsClient(isUserClient);
+          
+          if (isUserClient) {
+            setSession(currentSession);
+            const enhancedUser = await updateUserWithClientData(currentSession.user);
+            setUser(enhancedUser);
+            setIsClient(true);
+          } else {
+            // Admin user, clear session for client auth
+            console.log("Admin user session found in client context, clearing");
+            setUser(null);
+            setIsClient(false);
+            await supabase.auth.signOut();
+          }
         } else {
           setUser(null);
           setIsClient(false);
@@ -148,7 +150,7 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
         
         setIsLoading(false);
         setAuthInitialized(true);
-        console.log("Client auth initialization complete, isAuthenticated:", !!currentSession?.user, "isClient:", isClient);
+        console.log("Client auth initialization complete, isAuthenticated:", !!user && isClient, "isClient:", isClient);
 
         return () => {
           subscription.unsubscribe();
@@ -170,26 +172,25 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
     console.log("Client login function called with email:", email);
     try {
       setIsLoading(true);
+      
+      // Block admin email from logging in through client portal
+      if (email === 'support@digitalshopi.in') {
+        throw new Error("Admin users should use the admin login");
+      }
+      
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      console.log("Client login response:", { data, error });
+      console.log("Client login response:", { data: data ? "Data exists" : "No data", error });
 
       if (error) {
         throw error;
       }
 
-      // Check if the user is not the admin
-      if (data.user && data.user.email === 'support@digitalshopi.in') {
-        // If it's the admin, log them out immediately
-        await supabase.auth.signOut();
-        throw new Error("Admin users should use the admin portal");
-      }
-
       // Explicitly update state here for immediate feedback
-      if (data.session && checkClientRole(data.user)) {
+      if (data.session) {
         console.log("Setting session and user immediately after client login");
         setSession(data.session);
         
@@ -201,10 +202,12 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
         // Successfully logged in
         toast.success("Successfully signed in!");
       } else {
-        throw new Error("You don't have access to the client portal");
+        throw new Error("Failed to authenticate");
       }
     } catch (error: any) {
       console.error("Client login error details:", error);
+      setUser(null);
+      setIsClient(false);
       toast.error(error.message || "Failed to sign in");
       throw error;
     } finally {

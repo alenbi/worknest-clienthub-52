@@ -35,14 +35,9 @@ const ClientProtectedRoute = () => {
         }
         
         // Ensure complete session cleanup if needed
-        if (isClient) {
-          toast.warning("Redirecting to client area");
-          navigate("/client/dashboard", { replace: true });
-        } else {
-          toast.error("Access denied. Please log in as client");
-          await supabase.auth.signOut();
-          navigate("/client/login", { replace: true });
-        }
+        await supabase.auth.signOut();
+        toast.error("Access denied. Please log in as client");
+        navigate("/client/login", { replace: true });
       };
       
       securityCleanup();
@@ -56,7 +51,7 @@ const ClientProtectedRoute = () => {
           <AlertTitle>Access Denied</AlertTitle>
           <AlertDescription>
             You don't have permission to access admin areas.
-            Redirecting to client dashboard...
+            Redirecting to client login...
           </AlertDescription>
         </Alert>
         <Navigate to="/client/login" replace />
@@ -67,34 +62,26 @@ const ClientProtectedRoute = () => {
   // Check client role specifically
   useEffect(() => {
     const validateClientAccess = async () => {
-      if (!isLoading && isAuthenticated && !isClient) {
-        console.log("SECURITY CHECK: User authenticated but not a client, logging out");
-        toast.error("Admins should use the admin portal");
-        
-        // Force sign out from Supabase auth
-        await supabase.auth.signOut();
-        
-        // Redirect to client login
-        navigate("/client/login", { replace: true });
+      // Get the current session
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!isLoading && session) {
+        // Check if it's the admin email trying to access client routes
+        if (session.user?.email === 'support@digitalshopi.in') {
+          console.log("SECURITY CHECK: Admin user trying to access client routes");
+          toast.error("Admins should use the admin portal");
+          
+          // Force sign out from Supabase auth
+          await supabase.auth.signOut();
+          
+          // Redirect to admin login
+          navigate("/login", { replace: true });
+        }
       }
     };
     
     validateClientAccess();
   }, [isClient, isLoading, isAuthenticated, navigate]);
-
-  // Admin safeguard - ensure admin accounts can't access client pages
-  useEffect(() => {
-    const blockAdminAccess = async () => {
-      if (isAdmin && isAdminAuthenticated) {
-        console.log("SECURITY BLOCK: Admin tried to access client pages");
-        toast.error("Please use the admin portal");
-        await supabase.auth.signOut();
-        navigate("/login", { replace: true });
-      }
-    };
-    
-    blockAdminAccess();
-  }, [isAdmin, isAdminAuthenticated, navigate]);
 
   // Only show loading if we're genuinely still checking auth
   if (isLoading) {
