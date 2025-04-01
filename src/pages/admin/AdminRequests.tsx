@@ -99,15 +99,16 @@ const AdminRequests = () => {
     }
   };
 
-  // Helper function to generate badge variant based on status
+  // Modified helper function to generate badge variant based on status
+  // Using only allowed Badge variants: "default", "destructive", "outline", "secondary"
   const getStatusBadgeVariant = (status: string) => {
     switch (status.toLowerCase()) {
       case "pending":
-        return "warning";
+        return "secondary";
       case "in_progress":
         return "default";
       case "completed":
-        return "success";
+        return "outline";
       case "rejected":
         return "destructive";
       default:
