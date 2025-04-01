@@ -1,3 +1,4 @@
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useNavigate } from "react-router-dom";
@@ -20,8 +21,7 @@ const Index = () => {
       
       if (session) {
         // If there's a session, check user metadata for role
-        const role = session.user?.app_metadata?.role || 
-                      session.user?.raw_app_meta_data?.role;
+        const role = session.user?.app_metadata?.role;
         
         const isUserAdmin = role === 'admin' || 
                              session.user?.email === 'support@digitalshopi.in';
