@@ -49,7 +49,7 @@ const queryClient = new QueryClient({
       refetchOnWindowFocus: false,
       retry: 2,
       staleTime: 60 * 1000, // Keep data fresh for 1 minute to reduce flickering
-      cacheTime: 5 * 60 * 1000, // Cache for 5 minutes
+      gcTime: 5 * 60 * 1000, // Cache for 5 minutes (previously cacheTime)
     },
   },
 });
