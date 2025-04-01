@@ -62,9 +62,12 @@ const ClientRequests = () => {
         setIsLoading(true);
         console.log("Fetching requests for client ID:", clientId);
         
-        // Use RPC function to get requests for this client
+        // Use a direct query instead of RPC to avoid type issues
         const { data, error } = await supabase
-          .rpc('get_client_requests', { client_id_param: clientId });
+          .from('requests')
+          .select('*')
+          .eq('client_id', clientId)
+          .order('created_at', { ascending: false });
         
         if (error) {
           console.error("Error details:", error);
@@ -130,9 +133,12 @@ const ClientRequests = () => {
       setTitle("");
       setDescription("");
       
-      // Use the same RPC function to refresh the requests list
+      // Refresh the requests list using direct query instead of RPC
       const { data: refreshedData, error: fetchError } = await supabase
-        .rpc('get_client_requests', { client_id_param: clientId });
+        .from('requests')
+        .select('*')
+        .eq('client_id', clientId)
+        .order('created_at', { ascending: false });
         
       if (fetchError) throw fetchError;
       

@@ -48,9 +48,18 @@ const AdminRequests = () => {
       
       console.log("Admin: Fetching all requests with client info");
       
-      // Use an RPC function to get all requests with client information
+      // Use a join query instead of an RPC function to avoid TypeScript errors
       const { data, error } = await supabase
-        .rpc('get_all_requests_with_client_info');
+        .from('requests')
+        .select(`
+          *,
+          clients:client_id (
+            name as client_name,
+            email as client_email,
+            company as client_company
+          )
+        `)
+        .order('created_at', { ascending: false });
       
       if (error) {
         console.error("Error details:", error);
@@ -59,9 +68,21 @@ const AdminRequests = () => {
       
       console.log("Admin: Received requests data:", data);
       
-      // Set the data directly since the RPC function should return requests with client info
+      // Transform the data to match our expected interface
       if (Array.isArray(data)) {
-        setRequests(data);
+        const transformedData: RequestWithClientInfo[] = data.map(item => ({
+          id: item.id,
+          title: item.title,
+          description: item.description,
+          client_id: item.client_id,
+          status: item.status,
+          created_at: item.created_at,
+          updated_at: item.updated_at,
+          client_name: item.clients?.client_name,
+          client_email: item.clients?.client_email,
+          client_company: item.clients?.client_company
+        }));
+        setRequests(transformedData);
       } else {
         console.error("Unexpected data format:", data);
         setRequests([]);
