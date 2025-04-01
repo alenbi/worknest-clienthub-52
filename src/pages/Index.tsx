@@ -6,22 +6,58 @@ import { useAuth } from "@/contexts/auth-context";
 import { useClientAuth } from "@/contexts/client-auth-context";
 import { useEffect } from "react";
 import { ArrowRight, User, Building2 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 const Index = () => {
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuth();
-  const { isAuthenticated: isClientAuthenticated } = useClientAuth();
+  const { isAuthenticated, isAdmin } = useAuth();
+  const { isAuthenticated: isClientAuthenticated, isClient } = useClientAuth();
 
   // Automatically redirect based on authentication status
   useEffect(() => {
-    if (isAuthenticated) {
-      console.log("User is authenticated as admin, redirecting to admin dashboard");
-      navigate('/dashboard', { replace: true });
-    } else if (isClientAuthenticated) {
-      console.log("User is authenticated as client, redirecting to client dashboard");
-      navigate('/client/dashboard', { replace: true });
-    }
-  }, [isAuthenticated, isClientAuthenticated, navigate]);
+    const checkAuthAndRedirect = async () => {
+      // Get the current session to check if there's an active session
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session) {
+        // If there's a session, check user metadata for role
+        const role = session.user?.app_metadata?.role || 
+                      session.user?.raw_app_meta_data?.role;
+        
+        const isUserAdmin = role === 'admin' || 
+                             session.user?.email === 'support@digitalshopi.in';
+                             
+        console.log("Session check:", { 
+          hasSession: !!session, 
+          role, 
+          isUserAdmin,
+          email: session.user?.email
+        });
+        
+        if (isUserAdmin) {
+          if (isAuthenticated && isAdmin) {
+            console.log("User is authenticated as admin, redirecting to admin dashboard");
+            navigate('/dashboard', { replace: true });
+          } else if (!isAdmin) {
+            // Admin session exists but admin context not authenticated - force reload
+            console.log("Admin session detected but context not ready, forcing auth refresh");
+            await supabase.auth.refreshSession();
+          }
+        } else {
+          if (isClientAuthenticated && isClient) {
+            console.log("User is authenticated as client, redirecting to client dashboard");
+            navigate('/client/dashboard', { replace: true });
+          } else if (!isClient) {
+            // Client session exists but client context not authenticated - force reload
+            console.log("Client session detected but context not ready, forcing auth refresh");
+            await supabase.auth.refreshSession();
+          }
+        }
+      }
+    };
+    
+    checkAuthAndRedirect();
+  }, [isAuthenticated, isClientAuthenticated, isAdmin, isClient, navigate]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">

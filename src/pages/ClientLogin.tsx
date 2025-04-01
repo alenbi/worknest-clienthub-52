@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useClientAuth } from "@/contexts/client-auth-context";
 import { useAuth } from "@/contexts/auth-context";
@@ -8,9 +9,10 @@ import { Label } from "@/components/ui/label";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 const ClientLogin = () => {
-  const { login, isAuthenticated, isLoading } = useClientAuth();
+  const { login, isAuthenticated, isLoading, isClient } = useClientAuth();
   const { isAuthenticated: isAdminAuthenticated, logout: adminLogout } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -19,29 +21,49 @@ const ClientLogin = () => {
   const [error, setError] = useState("");
   const navigate = useNavigate();
 
-  // Force logout admin session if exists to prevent conflicts
+  // Security check - detect existing admin session and force logout
   useEffect(() => {
-    const handleSessionConflict = async () => {
-      if (isAdminAuthenticated) {
-        console.log("Found existing admin session, logging out to prevent conflicts");
-        await adminLogout();
-        toast.info("Logged out of admin session to prevent conflicts");
+    const securityCheck = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session) {
+        const role = session.user?.app_metadata?.role || 
+                    session.user?.raw_app_meta_data?.role;
+                    
+        const isUserAdmin = role === 'admin' || 
+                          session.user?.email === 'support@digitalshopi.in';
+        
+        console.log("Client login security check:", { 
+          hasSession: !!session, 
+          isUserAdmin, 
+          isAdminAuthenticated 
+        });
+        
+        // If admin session exists, but trying to access client login - force logout
+        if (isUserAdmin && session) {
+          console.log("Found existing admin session, logging out to prevent conflicts");
+          await supabase.auth.signOut();
+          if (isAdminAuthenticated) {
+            await adminLogout();
+          }
+          toast.info("Logged out of admin session for security");
+        }
       }
     };
     
-    handleSessionConflict();
+    securityCheck();
   }, [isAdminAuthenticated, adminLogout]);
   
   // Effect to handle redirect after authentication changes
   useEffect(() => {
-    if (isAuthenticated && !isLoading) {
+    if (isAuthenticated && isClient && !isLoading) {
       console.log("Client is authenticated, redirecting to client dashboard");
       navigate("/client/dashboard", { replace: true });
     }
-  }, [isAuthenticated, isLoading, navigate]);
+  }, [isAuthenticated, isLoading, navigate, isClient]);
 
   // Regular redirect check (still useful for initial load)
-  if (isAuthenticated && !isLoading) {
+  if (isAuthenticated && isClient && !isLoading) {
     console.log("Rendering redirect to client dashboard");
     return <Navigate to="/client/dashboard" />;
   }
@@ -57,6 +79,12 @@ const ClientLogin = () => {
     try {
       setError("");
       setIsSubmitting(true);
+      
+      // Block admin email from logging in through client portal
+      if (email === 'support@digitalshopi.in') {
+        throw new Error("Admin users should use the admin login");
+      }
+      
       await login(email, password);
       // Navigation is handled by the useEffect above
     } catch (error: any) {

@@ -1,13 +1,16 @@
+
 import { createContext, useContext, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Session, User } from "@supabase/supabase-js";
 import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
 
 // Extended User interface to include profile data
 interface ClientUserWithProfile extends User {
   name?: string;
   company?: string;
   id: string; // Ensure id is required
+  role?: string;
 }
 
 interface ClientAuthContextType {
@@ -18,6 +21,7 @@ interface ClientAuthContextType {
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   updateProfile?: (data: { name?: string; company?: string }) => Promise<void>;
+  isClient: boolean;
 }
 
 const ClientAuthContext = createContext<ClientAuthContextType | undefined>(undefined);
@@ -27,6 +31,14 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [authInitialized, setAuthInitialized] = useState(false);
+  const [isClient, setIsClient] = useState(false);
+  const navigate = useNavigate();
+
+  // Function to check if user is a client
+  const checkClientRole = (user: User): boolean => {
+    const role = user?.app_metadata?.role || user?.raw_app_meta_data?.role;
+    return role === 'client' || (user.email !== 'support@digitalshopi.in');
+  };
 
   // Function to fetch client data
   const fetchClientData = async (userId: string) => {
@@ -52,13 +64,34 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
   // Function to update the user with client data
   const updateUserWithClientData = async (currentUser: User) => {
     if (!currentUser) return null;
+    
+    const isUserClient = checkClientRole(currentUser);
+    setIsClient(isUserClient);
+    
+    if (!isUserClient) {
+      console.log("Admin user detected in client auth context, redirecting");
+      // We need to logout admin users trying to use the client auth context
+      setTimeout(async () => {
+        await supabase.auth.signOut();
+        navigate("/client/login");
+        toast.error("Admins should use the admin login");
+      }, 0);
+      return null;
+    }
 
     const clientData = await fetchClientData(currentUser.id);
+    
+    if (!clientData && isUserClient) {
+      console.warn("User is a client but has no client data record:", currentUser.id);
+      // This is a client user with no client record - might be a new user
+      // Could handle this by creating a client record or showing an onboarding process
+    }
     
     const clientUserWithProfile: ClientUserWithProfile = {
       ...currentUser,
       name: clientData?.name || "",
       company: clientData?.company || "",
+      role: 'client'
     };
 
     return clientUserWithProfile;
@@ -88,6 +121,7 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
                 }, 0);
               } else {
                 setUser(null);
+                setIsClient(false);
                 setIsLoading(false);
               }
             }
@@ -102,13 +136,17 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
         if (currentSession?.user) {
           const enhancedUser = await updateUserWithClientData(currentSession.user);
           setUser(enhancedUser);
+          
+          // User role check done inside updateUserWithClientData
+          setIsClient(checkClientRole(currentSession.user));
         } else {
           setUser(null);
+          setIsClient(false);
         }
         
         setIsLoading(false);
         setAuthInitialized(true);
-        console.log("Client auth initialization complete, isAuthenticated:", !!currentSession?.user);
+        console.log("Client auth initialization complete, isAuthenticated:", !!currentSession?.user, "isClient:", isClient);
 
         return () => {
           subscription.unsubscribe();
@@ -117,13 +155,14 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
         console.error("Error initializing client auth:", error);
         setUser(null);
         setSession(null);
+        setIsClient(false);
         setIsLoading(false);
         setAuthInitialized(true);
       }
     };
 
     initializeAuth();
-  }, []);
+  }, [navigate]);
 
   const login = async (email: string, password: string) => {
     console.log("Client login function called with email:", email);
@@ -140,19 +179,28 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
         throw error;
       }
 
+      // Check if the user is not the admin
+      if (data.user && data.user.email === 'support@digitalshopi.in') {
+        // If it's the admin, log them out immediately
+        await supabase.auth.signOut();
+        throw new Error("Admin users should use the admin portal");
+      }
+
       // Explicitly update state here for immediate feedback
-      if (data.session) {
+      if (data.session && checkClientRole(data.user)) {
         console.log("Setting session and user immediately after client login");
         setSession(data.session);
         
         // Update user with profile data
         const enhancedUser = await updateUserWithClientData(data.user);
         setUser(enhancedUser);
+        setIsClient(true);
+        
+        // Successfully logged in
+        toast.success("Successfully signed in!");
+      } else {
+        throw new Error("You don't have access to the client portal");
       }
-
-      // Successfully logged in
-      toast.success("Successfully signed in!");
-      
     } catch (error: any) {
       console.error("Client login error details:", error);
       toast.error(error.message || "Failed to sign in");
@@ -171,6 +219,10 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
       // Clean up state
       setUser(null);
       setSession(null);
+      setIsClient(false);
+      
+      // Redirect to client login page after logout
+      navigate("/client/login");
     } catch (error: any) {
       toast.error(error.message || "Failed to sign out");
     } finally {
@@ -227,13 +279,14 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
   return (
     <ClientAuthContext.Provider
       value={{
-        isAuthenticated: !!user,
+        isAuthenticated: !!user && isClient,
         isLoading,
         user,
         session,
         login,
         logout,
         updateProfile,
+        isClient,
       }}
     >
       {children}
