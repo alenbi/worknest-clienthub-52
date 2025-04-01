@@ -72,7 +72,12 @@ const ClientRequests = () => {
         }
         
         console.log("Received requests:", data);
-        setRequests(data || []);
+        if (Array.isArray(data)) {
+          setRequests(data);
+        } else {
+          console.error("Unexpected data format:", data);
+          setRequests([]);
+        }
       } catch (error) {
         console.error("Error fetching requests:", error);
         toast.error("Failed to load your requests");
@@ -131,7 +136,11 @@ const ClientRequests = () => {
         
       if (fetchError) throw fetchError;
       
-      setRequests(refreshedData || []);
+      if (Array.isArray(refreshedData)) {
+        setRequests(refreshedData);
+      } else {
+        console.error("Unexpected data format in refresh:", refreshedData);
+      }
       
     } catch (error: any) {
       console.error("Error submitting request:", error);

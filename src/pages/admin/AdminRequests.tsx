@@ -60,7 +60,12 @@ const AdminRequests = () => {
       console.log("Admin: Received requests data:", data);
       
       // Set the data directly since the RPC function should return requests with client info
-      setRequests(data || []);
+      if (Array.isArray(data)) {
+        setRequests(data);
+      } else {
+        console.error("Unexpected data format:", data);
+        setRequests([]);
+      }
     } catch (error) {
       console.error("Error fetching requests:", error);
       toast.error("Failed to load requests");

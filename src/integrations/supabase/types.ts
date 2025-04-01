@@ -318,11 +318,40 @@ export type Database = {
         Args: Record<PropertyKey, never>
         Returns: undefined
       }
+      get_all_requests_with_client_info: {
+        Args: Record<PropertyKey, never>
+        Returns: {
+          id: string
+          title: string
+          description: string
+          client_id: string
+          status: string
+          created_at: string
+          updated_at: string
+          client_name: string
+          client_email: string
+          client_company: string
+        }[]
+      }
       get_client_id_from_user: {
         Args: {
           user_id: string
         }
         Returns: string
+      }
+      get_client_requests: {
+        Args: {
+          client_id_param: string
+        }
+        Returns: {
+          client_id: string
+          created_at: string
+          description: string
+          id: string
+          status: string
+          title: string
+          updated_at: string
+        }[]
       }
       is_admin: {
         Args: {
