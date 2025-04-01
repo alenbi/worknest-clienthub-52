@@ -14,31 +14,44 @@ const ClientLayout = () => {
 
   // Ensure client is redirected to login if not authenticated
   useEffect(() => {
-    // Clear any existing timer
+    // Clear any existing timer when component unmounts or deps change
     if (redirectTimer) {
       clearTimeout(redirectTimer);
+      setRedirectTimer(null);
     }
 
     // If not loading and not authenticated, redirect immediately
     if (!isLoading && !isAuthenticated) {
+      console.log("Client not authenticated, redirecting to login");
       navigate("/client/login");
       return;
     }
     
-    // If still loading, set a timeout to redirect after 4 seconds if still not authenticated
+    // If still loading, set a timeout to redirect after 2.5 seconds (reduced from 4s)
     if (isLoading) {
       const timer = window.setTimeout(() => {
         if (!isAuthenticated) {
           console.log("Client auth taking too long, redirecting to login");
           navigate("/client/login");
         }
-      }, 4000);
+      }, 2500);
       
       setRedirectTimer(timer);
       
-      return () => clearTimeout(timer);
+      return () => {
+        clearTimeout(timer);
+        setRedirectTimer(null);
+      };
     }
-  }, [isAuthenticated, isLoading, navigate]);
+    
+    // Cleanup function to clear timer on unmount
+    return () => {
+      if (redirectTimer) {
+        clearTimeout(redirectTimer);
+        setRedirectTimer(null);
+      }
+    };
+  }, [isAuthenticated, isLoading, navigate, redirectTimer]);
 
   // Show loading state while authentication status is being determined
   if (isLoading) {

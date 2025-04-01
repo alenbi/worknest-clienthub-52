@@ -1,3 +1,4 @@
+
 import { createContext, useContext, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Session, User } from "@supabase/supabase-js";
@@ -50,11 +51,19 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
 
     try {
       // Fetch client data from the database
-      const { data: clientData } = await supabase
+      const { data: clientData, error } = await supabase
         .from("clients")
         .select("name, company")
         .eq("user_id", currentUser.id)
         .maybeSingle();
+      
+      if (error) {
+        console.error("Error fetching client data:", error);
+        return {
+          ...currentUser,
+          role: 'client'
+        };
+      }
       
       const clientUserWithProfile: ClientUserWithProfile = {
         ...currentUser,
@@ -76,13 +85,20 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
   useEffect(() => {
     const initializeAuth = async () => {
       try {
-        setIsLoading(true);
         console.log("Initializing client auth context...");
         
-        // Set up auth state listener first
+        // First set up the onAuthStateChange listener
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
           async (event, currentSession) => {
             console.log("Client auth state changed:", event);
+            
+            if (event === 'SIGNED_OUT') {
+              setSession(null);
+              setUser(null);
+              setIsClient(false);
+              setIsLoading(false);
+              return;
+            }
             
             if (currentSession?.user) {
               // Check if user is a client
@@ -99,8 +115,8 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
                 setUser(null);
                 setIsClient(false);
               }
-            } else {
-              // No session
+            } else if (event !== 'INITIAL_SESSION') {
+              // No session and not initial setup
               setSession(null);
               setUser(null);
               setIsClient(false);
@@ -111,9 +127,16 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
           }
         );
         
-        // Check for existing session
-        const { data: { session: currentSession } } = await supabase.auth.getSession();
+        // After setting up listener, check for existing session
+        const { data: { session: currentSession }, error } = await supabase.auth.getSession();
         console.log("Current client session check:", currentSession ? "Session exists" : "No session");
+        
+        if (error) {
+          console.error("Error getting session:", error);
+          setIsLoading(false);
+          setAuthInitialized(true);
+          return;
+        }
         
         if (currentSession?.user) {
           // Check if user is a client
@@ -144,7 +167,7 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
             setIsLoading(false);
             setAuthInitialized(true);
           }
-        }, 4000);
+        }, 3000); // Reduced from 4s to 3s
         
         setIsLoading(false);
         console.log("Client auth initialization complete");
