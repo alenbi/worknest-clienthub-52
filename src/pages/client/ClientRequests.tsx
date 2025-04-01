@@ -38,7 +38,8 @@ const ClientRequests = () => {
         if (error) {
           console.error("Error fetching client ID:", error);
           setLoadError("Failed to find your client information");
-          throw error;
+          setIsLoading(false);
+          return;
         }
         
         console.log("Received client ID:", data?.id);
@@ -46,19 +47,20 @@ const ClientRequests = () => {
           setClientId(data.id);
         } else {
           setLoadError("No client profile found for your account");
+          setIsLoading(false);
         }
       } catch (error) {
         console.error("Error in fetchClientId:", error);
         setLoadError("Failed to load your profile information");
-      } finally {
-        if (!clientId) {
-          setIsLoading(false);
-        }
+        setIsLoading(false);
       }
     };
     
     if (user?.id) {
       fetchClientId();
+    } else {
+      setIsLoading(false);
+      setLoadError("Not authenticated. Please login again.");
     }
   }, [user?.id]);
 
@@ -75,10 +77,10 @@ const ClientRequests = () => {
         const data = await fetchClientRequests(clientId);
         console.log("Received requests:", data);
         setRequests(data || []);
+        setIsLoading(false);
       } catch (error) {
         console.error("Error fetching requests:", error);
         setLoadError("Failed to load your requests. Please try again later.");
-      } finally {
         setIsLoading(false);
       }
     };
@@ -133,6 +135,8 @@ const ClientRequests = () => {
     switch (status.toLowerCase()) {
       case "pending":
         return "bg-yellow-100 text-yellow-800";
+      case "in_progress":
+        return "bg-blue-100 text-blue-800";
       case "completed":
         return "bg-green-100 text-green-800";
       case "rejected":

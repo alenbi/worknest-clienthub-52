@@ -21,7 +21,7 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
 // Utility functions for common database operations
 export async function fetchRequestsWithClientInfo() {
   try {
-    // For admin - get all requests with client info
+    // For admin - get all requests
     const { data: requestsData, error: requestsError } = await supabase
       .from('requests')
       .select('*')
@@ -32,7 +32,7 @@ export async function fetchRequestsWithClientInfo() {
       throw requestsError;
     }
     
-    // Get all clients in a separate query to avoid the permission denied for table users error
+    // Get all clients separately
     const { data: clientsData, error: clientsError } = await supabase
       .from('clients')
       .select('id, name, email, company');
