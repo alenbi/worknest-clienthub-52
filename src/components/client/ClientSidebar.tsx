@@ -12,14 +12,27 @@ import {
   Tag,
   Bell,
   FileQuestion,
+  X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { useClientAuth } from "@/contexts/client-auth-context";
 import { Separator } from "@/components/ui/separator";
+import { useEffect } from "react";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 export function ClientSidebar() {
   const { logout, user } = useClientAuth();
+  const isMobile = useIsMobile();
+
+  // Fix the issue with client sidebar ID
+  useEffect(() => {
+    // Ensure the sidebar has the correct ID for the toggle to work
+    const sidebar = document.querySelector('aside');
+    if (sidebar) {
+      sidebar.id = "client-sidebar";
+    }
+  }, []);
 
   const menuItems = [
     {
@@ -72,17 +85,37 @@ export function ClientSidebar() {
     },
   ];
 
+  // Close sidebar when clicking a link on mobile
+  const closeSidebar = () => {
+    if (isMobile) {
+      const sidebar = document.getElementById("client-sidebar");
+      if (sidebar) {
+        sidebar.classList.add("-translate-x-full");
+      }
+    }
+  };
+
   return (
     <aside
-      id="sidebar"
-      className="bg-sidebar fixed inset-y-0 left-0 z-20 w-64 transform border-r transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:w-64 -translate-x-full"
+      id="client-sidebar"
+      className="fixed inset-y-0 left-0 z-20 w-64 transform border-r bg-sidebar transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:w-64 -translate-x-full"
     >
       <div className="flex h-full flex-col">
-        <div className="flex h-16 items-center border-b px-6">
+        <div className="flex h-16 items-center justify-between border-b px-6">
           <h2 className="text-lg font-semibold text-sidebar-foreground">
             Client
             <span className="text-primary">Portal</span>
           </h2>
+          {isMobile && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={closeSidebar}
+              className="lg:hidden"
+            >
+              <X className="h-5 w-5" />
+            </Button>
+          )}
         </div>
         
         {user && (
@@ -113,6 +146,7 @@ export function ClientSidebar() {
               <NavLink
                 key={item.path}
                 to={item.path}
+                onClick={closeSidebar}
                 className={({ isActive }) =>
                   cn(
                     "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium",
@@ -135,6 +169,7 @@ export function ClientSidebar() {
               <NavLink
                 key={item.path}
                 to={item.path}
+                onClick={closeSidebar}
                 className={({ isActive }) =>
                   cn(
                     "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium",

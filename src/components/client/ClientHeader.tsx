@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Bell, MessageSquare, User, Menu, LogOut } from "lucide-react";
@@ -39,7 +40,7 @@ export function ClientHeader() {
         <span className="sr-only">Toggle menu</span>
       </Button>
       
-      <div className="hidden md:block">
+      <div className="md:block">
         <h1 className="text-xl font-semibold">Client Portal</h1>
       </div>
       
