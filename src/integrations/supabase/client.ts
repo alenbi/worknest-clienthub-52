@@ -22,9 +22,8 @@ declare module '@supabase/supabase-js' {
 
 // Define our custom RPC function types for type checking
 export interface RPCFunctions {
-  get_all_requests: () => Promise<{ data: Request[]; error: null } | { data: null; error: any }>;
-  get_client_requests: (params: { client_user_id: string }) => Promise<{ data: Request[]; error: null } | { data: null; error: any }>;
-  create_client_request: (params: { req_title: string; req_description: string; client_user_id: string }) => Promise<{ data: any; error: null } | { data: null; error: any }>;
+  get_client_requests: (params: { client_id: string }) => Promise<{ data: Request[]; error: null } | { data: null; error: any }>;
+  create_client_request: (params: { req_title: string; req_description: string; client_id: string }) => Promise<{ data: any; error: null } | { data: null; error: any }>;
   update_request_status: (params: { request_id: string; new_status: string }) => Promise<{ data: any; error: null } | { data: null; error: any }>;
   ensure_admin_role: () => Promise<{ data: any; error: null } | { data: null; error: any }>;
   get_client_id_from_user: (params: { user_id: string }) => Promise<{ data: any; error: null } | { data: null; error: any }>;

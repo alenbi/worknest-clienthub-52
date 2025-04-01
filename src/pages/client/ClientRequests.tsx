@@ -18,24 +18,54 @@ const ClientRequests = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [requests, setRequests] = useState<Request[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [clientId, setClientId] = useState<string | null>(null);
 
-  // Fetch client's requests on component mount
+  // First get the client's ID from their user ID
+  useEffect(() => {
+    const fetchClientId = async () => {
+      if (!user?.id) return;
+      
+      try {
+        console.log("Fetching client ID for user:", user.id);
+        const { data, error } = await supabase
+          .rpc('get_client_id_from_user', { user_id: user.id });
+        
+        if (error) {
+          console.error("Error fetching client ID:", error);
+          throw error;
+        }
+        
+        console.log("Received client ID:", data);
+        setClientId(data);
+      } catch (error) {
+        console.error("Error in fetchClientId:", error);
+        toast.error("Failed to load your profile information");
+      }
+    };
+    
+    if (user?.id) {
+      fetchClientId();
+    }
+  }, [user?.id]);
+
+  // Then fetch the client's requests using their client ID
   useEffect(() => {
     const fetchRequests = async () => {
+      if (!clientId) return;
+      
       try {
         setIsLoading(true);
+        console.log("Fetching requests for client ID:", clientId);
         
-        if (!user?.id) return;
-        
-        // Use type assertion for the RPC call
+        // Directly query the requests table for this client
         const { data, error } = await supabase
-          .rpc('get_client_requests', { client_user_id: user.id }) as unknown as {
-            data: Request[];
-            error: Error | null;
-          };
-          
+          .from('requests')
+          .select('*')
+          .eq('client_id', clientId);
+        
         if (error) throw error;
         
+        console.log("Received requests:", data);
         setRequests(data || []);
       } catch (error) {
         console.error("Error fetching requests:", error);
@@ -45,10 +75,10 @@ const ClientRequests = () => {
       }
     };
     
-    if (user?.id) {
+    if (clientId) {
       fetchRequests();
     }
-  }, [user?.id]);
+  }, [clientId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -61,21 +91,24 @@ const ClientRequests = () => {
     try {
       setIsSubmitting(true);
       
-      if (!user?.id) {
-        toast.error("You must be logged in to submit a request");
+      if (!clientId) {
+        toast.error("Your account information could not be found");
         return;
       }
       
-      // Use type assertion for the RPC call
+      console.log("Creating request with client ID:", clientId);
+      
+      // Insert directly into the requests table
       const { error } = await supabase
-        .rpc('create_client_request', {
-          req_title: title, 
-          req_description: description, 
-          client_user_id: user.id
-        }) as unknown as {
-          data: any;
-          error: Error | null;
-        };
+        .from('requests')
+        .insert({
+          title, 
+          description, 
+          client_id: clientId,
+          status: 'pending',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        });
       
       if (error) throw error;
       
@@ -83,12 +116,11 @@ const ClientRequests = () => {
       setTitle("");
       setDescription("");
       
-      // Refresh requests list with type assertion
+      // Refresh requests list
       const { data, error: fetchError } = await supabase
-        .rpc('get_client_requests', { client_user_id: user.id }) as unknown as {
-          data: Request[];
-          error: Error | null;
-        };
+        .from('requests')
+        .select('*')
+        .eq('client_id', clientId);
         
       if (fetchError) throw fetchError;
       
@@ -160,7 +192,7 @@ const ClientRequests = () => {
               />
             </div>
             
-            <Button type="submit" className="w-full" disabled={isSubmitting}>
+            <Button type="submit" className="w-full" disabled={isSubmitting || !clientId}>
               {isSubmitting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
