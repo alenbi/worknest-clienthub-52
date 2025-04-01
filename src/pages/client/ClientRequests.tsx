@@ -27,16 +27,21 @@ const ClientRequests = () => {
       
       try {
         console.log("Fetching client ID for user:", user.id);
+        
+        // Query the clients table directly to get the client ID
         const { data, error } = await supabase
-          .rpc('get_client_id_from_user', { user_id: user.id });
+          .from('clients')
+          .select('id')
+          .eq('user_id', user.id)
+          .single();
         
         if (error) {
           console.error("Error fetching client ID:", error);
           throw error;
         }
         
-        console.log("Received client ID:", data);
-        setClientId(data);
+        console.log("Received client ID:", data?.id);
+        setClientId(data?.id);
       } catch (error) {
         console.error("Error in fetchClientId:", error);
         toast.error("Failed to load your profile information");

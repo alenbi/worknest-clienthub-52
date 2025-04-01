@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -25,7 +26,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Label } from "@/components/ui/label";
 import { Request, Client } from "@/lib/models";
 
-type RequestWithClientInfo = Request;
+// Extended type for requests with client info
+interface RequestWithClientInfo extends Request {
+  client_name?: string;
+  client_email?: string;
+  client_company?: string;
+}
 
 const AdminRequests = () => {
   const [requests, setRequests] = useState<RequestWithClientInfo[]>([]);
@@ -40,14 +46,36 @@ const AdminRequests = () => {
     try {
       setIsLoading(true);
       
-      const { data, error } = await supabase.rpc('get_all_requests') as unknown as { 
-        data: RequestWithClientInfo[];
-        error: Error | null;
-      };
+      console.log("Admin: Fetching all requests with client info");
       
-      if (error) throw error;
+      // Using a direct query that joins the requests and clients tables
+      const { data, error } = await supabase
+        .from('requests')
+        .select(`
+          *,
+          clients:client_id (
+            name,
+            email,
+            company
+          )
+        `);
       
-      setRequests(data || []);
+      if (error) {
+        console.error("Error fetching requests:", error);
+        throw error;
+      }
+      
+      console.log("Admin: Received requests data:", data);
+      
+      // Transform the data to match our expected format
+      const formattedRequests: RequestWithClientInfo[] = data?.map(req => ({
+        ...req,
+        client_name: req.clients?.name || 'Unknown',
+        client_email: req.clients?.email || 'No email',
+        client_company: req.clients?.company || ''
+      })) || [];
+      
+      setRequests(formattedRequests);
     } catch (error) {
       console.error("Error fetching requests:", error);
       toast.error("Failed to load requests");
@@ -97,13 +125,11 @@ const AdminRequests = () => {
     try {
       setIsUpdating(true);
       
-      const { error } = await supabase.rpc('update_request_status', {
-        request_id: selectedRequest.id,
-        new_status: status
-      }) as unknown as {
-        data: any;
-        error: Error | null;
-      };
+      // Direct update to the requests table
+      const { error } = await supabase
+        .from('requests')
+        .update({ status, updated_at: new Date().toISOString() })
+        .eq('id', selectedRequest.id);
       
       if (error) throw error;
       

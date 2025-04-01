@@ -26,9 +26,10 @@ export interface RPCFunctions {
   create_client_request: (params: { req_title: string; req_description: string; client_id: string }) => Promise<{ data: any; error: null } | { data: null; error: any }>;
   update_request_status: (params: { request_id: string; new_status: string }) => Promise<{ data: any; error: null } | { data: null; error: any }>;
   ensure_admin_role: () => Promise<{ data: any; error: null } | { data: null; error: any }>;
-  get_client_id_from_user: (params: { user_id: string }) => Promise<{ data: any; error: null } | { data: null; error: any }>;
+  get_client_id_from_user: (params: { user_id: string }) => Promise<{ data: string; error: null } | { data: null; error: any }>;
   is_admin: (params: { user_id: string }) => Promise<{ data: boolean; error: null } | { data: null; error: any }>;
   is_client: (params: { user_id: string }) => Promise<{ data: boolean; error: null } | { data: null; error: any }>;
+  get_all_requests: () => Promise<{ data: any[]; error: null } | { data: null; error: any }>;
 }
 
 // Create the Supabase client with explicit auth configuration for better session persistence
