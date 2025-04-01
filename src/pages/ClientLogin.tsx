@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useClientAuth } from "@/contexts/client-auth-context";
 import { useAuth } from "@/contexts/auth-context";
@@ -20,19 +19,26 @@ const ClientLogin = () => {
   const [error, setError] = useState("");
   const navigate = useNavigate();
 
+  // Force logout admin session if exists to prevent conflicts
+  useEffect(() => {
+    const handleSessionConflict = async () => {
+      if (isAdminAuthenticated) {
+        console.log("Found existing admin session, logging out to prevent conflicts");
+        await adminLogout();
+        toast.info("Logged out of admin session to prevent conflicts");
+      }
+    };
+    
+    handleSessionConflict();
+  }, [isAdminAuthenticated, adminLogout]);
+  
   // Effect to handle redirect after authentication changes
   useEffect(() => {
-    // If authenticated as admin, log them out of admin auth
-    if (isAdminAuthenticated) {
-      adminLogout();
-      console.log("Logging out of admin account to avoid conflicts");
-    }
-    
     if (isAuthenticated && !isLoading) {
       console.log("Client is authenticated, redirecting to client dashboard");
       navigate("/client/dashboard", { replace: true });
     }
-  }, [isAuthenticated, isAdminAuthenticated, isLoading, navigate, adminLogout]);
+  }, [isAuthenticated, isLoading, navigate]);
 
   // Regular redirect check (still useful for initial load)
   if (isAuthenticated && !isLoading) {
@@ -53,9 +59,6 @@ const ClientLogin = () => {
       setIsSubmitting(true);
       await login(email, password);
       // Navigation is handled by the useEffect above
-      if (isAuthenticated) {
-        navigate("/client/dashboard", { replace: true });
-      }
     } catch (error: any) {
       console.error("Client login error:", error);
       setError(error?.message || "Failed to sign in");

@@ -4,7 +4,7 @@ import { useData, Task } from "@/contexts/data-context";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertTriangle, CheckCircle2, Clock, ListTodo, UserRound } from "lucide-react";
 import { format } from "date-fns";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Chart as ChartJS,
@@ -33,6 +33,7 @@ const Dashboard = () => {
   const { user } = useAuth();
   const { clients, tasks, isLoading, refreshData } = useData();
   const [timeframe, setTimeframe] = useState<"week" | "month" | "year">("week");
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Helper function to get task completion time - defined BEFORE usage
   const getTaskCompletionTime = (task: Task) => {
@@ -40,13 +41,124 @@ const Dashboard = () => {
     return new Date(task.completed_at).getTime();
   };
 
-  // Force a data refresh when the dashboard loads
+  // Force a data refresh only once when the dashboard loads
   useEffect(() => {
-    refreshData();
-    console.log("Dashboard refreshed data");
+    const loadData = async () => {
+      if (!isRefreshing) {
+        setIsRefreshing(true);
+        try {
+          await refreshData();
+          console.log("Dashboard refreshed data - one time initialization");
+        } finally {
+          setIsRefreshing(false);
+        }
+      }
+    };
+    
+    loadData();
   }, [refreshData]);
 
-  if (isLoading) {
+  // Use memoization to prevent unnecessary recalculation
+  const dashboardData = useMemo(() => {
+    console.log("Calculating dashboard data");
+    
+    if (isLoading || clients.length === 0) {
+      return {
+        pendingTasks: [],
+        completedTasks: [],
+        highPriorityTasks: [],
+        overdueTasks: [],
+        completionRate: 0,
+        statusChartData: null,
+        priorityChartData: null,
+        upcomingTasks: [],
+        recentlyCompletedTasks: [],
+      };
+    }
+
+    // Count tasks by status
+    const pendingTasks = tasks.filter((task) => task.status === "pending");
+    const completedTasks = tasks.filter((task) => task.status === "completed");
+
+    // Count high priority tasks
+    const highPriorityTasks = tasks.filter((task) => task.priority === "high");
+    
+    // Calculate overdue tasks
+    const overdueTasks = tasks.filter(
+      (task) => new Date(task.due_date) < new Date() && task.status !== "completed"
+    );
+
+    // Calculate completion rate
+    const completionRate = tasks.length > 0
+      ? Math.round((completedTasks.length / tasks.length) * 100)
+      : 0;
+
+    // Prepare data for task status pie chart
+    const statusChartData = {
+      labels: ["Pending", "Completed"],
+      datasets: [
+        {
+          data: [pendingTasks.length, completedTasks.length],
+          backgroundColor: ["#f97316", "#10b981"],
+          borderColor: ["#f97316", "#10b981"],
+          borderWidth: 1,
+        },
+      ],
+    };
+
+    // Prepare data for task priority bar chart
+    const priorityChartData = {
+      labels: ["Low", "Medium", "High"],
+      datasets: [
+        {
+          label: "Tasks by Priority",
+          data: [
+            tasks.filter((task) => task.priority === "low").length,
+            tasks.filter((task) => task.priority === "medium").length,
+            tasks.filter((task) => task.priority === "high").length,
+          ],
+          backgroundColor: ["#6366f1", "#f59e0b", "#ef4444"],
+        },
+      ],
+    };
+
+    // Tasks due soon (next 7 days)
+    const today = new Date();
+    const nextWeek = new Date();
+    nextWeek.setDate(today.getDate() + 7);
+    
+    const upcomingTasks = tasks
+      .filter(
+        (task) => 
+          new Date(task.due_date) > today && 
+          new Date(task.due_date) <= nextWeek && 
+          task.status !== "completed"
+      )
+      .sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime())
+      .slice(0, 5);
+
+    // Recently completed tasks
+    const recentlyCompletedTasks = tasks
+      .filter((task) => task.status === "completed")
+      .sort((a, b) => 
+        (getTaskCompletionTime(b) || 0) - (getTaskCompletionTime(a) || 0)
+      )
+      .slice(0, 5);
+
+    return {
+      pendingTasks,
+      completedTasks,
+      highPriorityTasks,
+      overdueTasks,
+      completionRate,
+      statusChartData,
+      priorityChartData,
+      upcomingTasks,
+      recentlyCompletedTasks,
+    };
+  }, [clients, tasks, isLoading]);
+
+  if (isLoading || isRefreshing) {
     return (
       <div className="flex h-full items-center justify-center">
         <div className="h-12 w-12 animate-spin rounded-full border-4 border-primary border-t-transparent"></div>
@@ -54,76 +166,16 @@ const Dashboard = () => {
     );
   }
 
-  console.log("Dashboard render - clients:", clients.length, "tasks:", tasks.length);
-
-  // Count tasks by status
-  const pendingTasks = tasks.filter((task) => task.status === "pending");
-  const completedTasks = tasks.filter((task) => task.status === "completed");
-
-  // Count high priority tasks
-  const highPriorityTasks = tasks.filter((task) => task.priority === "high");
-  
-  // Calculate overdue tasks
-  const overdueTasks = tasks.filter(
-    (task) => new Date(task.due_date) < new Date() && task.status !== "completed"
-  );
-
-  // Calculate completion rate
-  const completionRate = tasks.length > 0
-    ? Math.round((completedTasks.length / tasks.length) * 100)
-    : 0;
-
-  // Prepare data for task status pie chart
-  const statusChartData = {
-    labels: ["Pending", "Completed"],
-    datasets: [
-      {
-        data: [pendingTasks.length, completedTasks.length],
-        backgroundColor: ["#f97316", "#10b981"],
-        borderColor: ["#f97316", "#10b981"],
-        borderWidth: 1,
-      },
-    ],
-  };
-
-  // Prepare data for task priority bar chart
-  const priorityChartData = {
-    labels: ["Low", "Medium", "High"],
-    datasets: [
-      {
-        label: "Tasks by Priority",
-        data: [
-          tasks.filter((task) => task.priority === "low").length,
-          tasks.filter((task) => task.priority === "medium").length,
-          tasks.filter((task) => task.priority === "high").length,
-        ],
-        backgroundColor: ["#6366f1", "#f59e0b", "#ef4444"],
-      },
-    ],
-  };
-
-  // Tasks due soon (next 7 days)
-  const today = new Date();
-  const nextWeek = new Date();
-  nextWeek.setDate(today.getDate() + 7);
-  
-  const upcomingTasks = tasks
-    .filter(
-      (task) => 
-        new Date(task.due_date) > today && 
-        new Date(task.due_date) <= nextWeek && 
-        task.status !== "completed"
-    )
-    .sort((a, b) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime())
-    .slice(0, 5);
-
-  // Recently completed tasks
-  const recentlyCompletedTasks = tasks
-    .filter((task) => task.status === "completed")
-    .sort((a, b) => 
-      (getTaskCompletionTime(b) || 0) - (getTaskCompletionTime(a) || 0)
-    )
-    .slice(0, 5);
+  const { 
+    pendingTasks, 
+    completedTasks, 
+    overdueTasks, 
+    completionRate,
+    statusChartData,
+    priorityChartData,
+    upcomingTasks,
+    recentlyCompletedTasks
+  } = dashboardData;
 
   return (
     <div className="space-y-6">
@@ -204,7 +256,9 @@ const Dashboard = () => {
           </CardHeader>
           <CardContent>
             <div className="h-[300px] w-full flex justify-center">
-              <Pie data={statusChartData} options={{ maintainAspectRatio: false }} />
+              {statusChartData && (
+                <Pie data={statusChartData} options={{ maintainAspectRatio: false }} />
+              )}
             </div>
           </CardContent>
         </Card>
@@ -217,20 +271,22 @@ const Dashboard = () => {
           </CardHeader>
           <CardContent>
             <div className="h-[300px] w-full">
-              <Bar
-                data={priorityChartData}
-                options={{
-                  maintainAspectRatio: false,
-                  scales: {
-                    y: {
-                      beginAtZero: true,
-                      ticks: {
-                        precision: 0,
+              {priorityChartData && (
+                <Bar
+                  data={priorityChartData}
+                  options={{
+                    maintainAspectRatio: false,
+                    scales: {
+                      y: {
+                        beginAtZero: true,
+                        ticks: {
+                          precision: 0,
+                        },
                       },
                     },
-                  },
-                }}
-              />
+                  }}
+                />
+              )}
             </div>
           </CardContent>
         </Card>

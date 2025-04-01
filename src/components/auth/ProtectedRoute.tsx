@@ -1,5 +1,5 @@
 
-import { Navigate, Outlet, useNavigate } from "react-router-dom";
+import { Navigate, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/auth-context";
 import { useEffect } from "react";
 import { useClientAuth } from "@/contexts/client-auth-context";
@@ -9,25 +9,50 @@ import { toast } from "sonner";
 
 const ProtectedRoute = () => {
   const { isAuthenticated, isLoading, user } = useAuth();
-  const { isAuthenticated: isClientAuthenticated } = useClientAuth();
+  const { isAuthenticated: isClientAuthenticated, logout: clientLogout } = useClientAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // Immediate security check - if client is authenticated, block admin access immediately
+  if (isClientAuthenticated && !isAuthenticated && !isLoading) {
+    console.log("SECURITY BLOCK: Client account attempting to access admin route", location.pathname);
+    
+    // If we detect a client trying to access admin routes directly, log them out of client auth
+    // This is a security measure to prevent unauthorized access
+    useEffect(() => {
+      const handleBlockedAccess = async () => {
+        console.log("Logging out client from admin restricted area");
+        toast.error("You don't have permission to access the admin area");
+        await clientLogout();
+      };
+      
+      handleBlockedAccess();
+    }, [clientLogout]);
+    
+    return (
+      <>
+        <Alert variant="destructive" className="max-w-md mx-auto mt-8 mb-4">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Access Denied</AlertTitle>
+          <AlertDescription>
+            Client accounts cannot access admin areas.
+            Redirecting to client login...
+          </AlertDescription>
+        </Alert>
+        <Navigate to="/client/login" replace />
+      </>
+    );
+  }
 
   useEffect(() => {
-    console.log("ProtectedRoute state:", { isAuthenticated, isLoading, isClientAuthenticated });
+    console.log("ProtectedRoute state:", { isAuthenticated, isLoading, isClientAuthenticated, path: location.pathname });
     
     // If authentication is complete and user is not authenticated, redirect to login
     if (!isLoading && !isAuthenticated) {
       console.log("User not authenticated, redirecting to login");
       navigate("/login", { replace: true });
     }
-    
-    // If the user is authenticated but is identified as a client, they should be redirected to client pages
-    if (!isAuthenticated && isClientAuthenticated) {
-      console.log("User is authenticated as client but accessing admin routes, redirecting to client dashboard");
-      toast.error("You don't have permission to access the admin area");
-      navigate("/client/dashboard", { replace: true });
-    }
-  }, [isAuthenticated, isLoading, isClientAuthenticated, navigate]);
+  }, [isAuthenticated, isLoading, isClientAuthenticated, navigate, location.pathname]);
 
   // Only show loading if we're genuinely still checking auth
   if (isLoading) {
@@ -41,23 +66,7 @@ const ProtectedRoute = () => {
     );
   }
 
-  // If user is authenticated as a client, they shouldn't access admin routes
-  if (isClientAuthenticated && !isAuthenticated) {
-    return (
-      <>
-        <Alert variant="destructive" className="max-w-md mx-auto mt-8 mb-4">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Access Denied</AlertTitle>
-          <AlertDescription>
-            Client accounts cannot access admin areas.
-            Redirecting to client dashboard...
-          </AlertDescription>
-        </Alert>
-        <Navigate to="/client/dashboard" replace />
-      </>
-    );
-  }
-
+  // Perform final check before rendering outlet
   return isAuthenticated ? <Outlet /> : <Navigate to="/login" replace />;
 };
 

@@ -42,12 +42,14 @@ import AdminVideos from "./pages/admin/AdminVideos";
 import AdminOffers from "./pages/admin/AdminOffers";
 import AdminUpdates from "./pages/admin/AdminUpdates";
 
-// Create query client with better error handling
+// Create query client with better error handling and optimizations
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       refetchOnWindowFocus: false,
       retry: 2,
+      staleTime: 60 * 1000, // Keep data fresh for 1 minute to reduce flickering
+      cacheTime: 5 * 60 * 1000, // Cache for 5 minutes
     },
   },
 });
@@ -77,7 +79,7 @@ const App = () => (
                 <Route path="/register" element={<Register />} />
                 <Route path="/client/login" element={<ClientLogin />} />
                 
-                {/* Admin Protected Routes */}
+                {/* Admin Protected Routes - Blocks client access completely */}
                 <Route element={<ProtectedRoute />}>
                   <Route element={<Layout />}>
                     <Route path="/dashboard" element={<Dashboard />} />
@@ -95,7 +97,7 @@ const App = () => (
                   </Route>
                 </Route>
                 
-                {/* Client Protected Routes - Block access to admin routes and forcefully redirect */}
+                {/* Client Protected Routes */}
                 <Route element={<ClientProtectedRoute />}>
                   <Route element={<ClientLayout />}>
                     <Route path="/client/dashboard" element={<ClientDashboard />} />
@@ -110,10 +112,10 @@ const App = () => (
                   </Route>
                 </Route>
                 
-                {/* Catch-all admin routes when accessed by client - redirect to client dashboard */}
+                {/* Catch-all routes - direct clients to client dashboard, others to not found */}
                 <Route path="/dashboard/*" element={<Navigate to="/client/dashboard" replace />} />
                 <Route path="/clients/*" element={<Navigate to="/client/dashboard" replace />} />
-                <Route path="/tasks/*" element={<Navigate to="/client/tasks" replace />} />
+                <Route path="/tasks/*" element={<Navigate to="/client/dashboard" replace />} />
                 <Route path="/admin/*" element={<Navigate to="/client/dashboard" replace />} />
                 <Route path="/settings/*" element={<Navigate to="/client/dashboard" replace />} />
                 

@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/auth-context";
 import { useClientAuth } from "@/contexts/client-auth-context";
@@ -20,20 +19,26 @@ const Login = () => {
   const [error, setError] = useState("");
   const navigate = useNavigate();
 
-  // Effect to handle redirect after authentication changes
+  // Force logout client session if exists to prevent conflicts
   useEffect(() => {
-    // If authenticated as client, log them out of client auth
-    if (isClientAuthenticated) {
-      clientLogout();
-      console.log("Logging out of client account to avoid conflicts");
-    }
+    const handleSessionConflict = async () => {
+      if (isClientAuthenticated) {
+        console.log("Found existing client session, logging out to prevent conflicts");
+        await clientLogout();
+        toast.info("Logged out of client session to prevent conflicts");
+      }
+    };
     
-    // Only redirect if admin auth is confirmed
+    handleSessionConflict();
+  }, [isClientAuthenticated, clientLogout]);
+  
+  // Redirect after authentication changes
+  useEffect(() => {
     if (isAuthenticated && !isLoading) {
       console.log("User is authenticated as admin, redirecting to dashboard");
       navigate("/dashboard", { replace: true });
     }
-  }, [isAuthenticated, isClientAuthenticated, isLoading, navigate, clientLogout]);
+  }, [isAuthenticated, isLoading, navigate]);
 
   // Regular redirect check (still useful for initial load)
   if (isAuthenticated && !isLoading) {
@@ -55,11 +60,7 @@ const Login = () => {
       setIsSubmitting(true);
       await login(email, password);
       
-      // Force navigation here in addition to the useEffect
-      if (isAuthenticated) {
-        console.log("Manually navigating to dashboard after successful login");
-        navigate("/dashboard", { replace: true });
-      }
+      // Navigation will be handled by the useEffect above
     } catch (error: any) {
       console.error("Login error:", error);
       setError(error?.message || "Failed to sign in");
