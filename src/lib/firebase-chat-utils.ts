@@ -18,6 +18,8 @@ export interface ChatMessage {
   created_at: string;
   is_read: boolean;
   sender_name?: string;
+  attachment_url?: string;
+  attachment_type?: string;
 }
 
 export type MessageHandler = (message: ChatMessage) => void;

@@ -177,6 +177,6 @@ const ClientChat = () => {
       </div>
     </div>
   );
-};
+}
 
 export default ClientChat;
