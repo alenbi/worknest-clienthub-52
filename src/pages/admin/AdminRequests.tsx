@@ -48,34 +48,19 @@ const AdminRequests = () => {
       
       console.log("Admin: Fetching all requests with client info");
       
-      // Using a direct query that joins the requests and clients tables
+      // Use an RPC function to get all requests with client information
       const { data, error } = await supabase
-        .from('requests')
-        .select(`
-          *,
-          clients:client_id (
-            name,
-            email,
-            company
-          )
-        `);
+        .rpc('get_all_requests_with_client_info');
       
       if (error) {
-        console.error("Error fetching requests:", error);
+        console.error("Error details:", error);
         throw error;
       }
       
       console.log("Admin: Received requests data:", data);
       
-      // Transform the data to match our expected format
-      const formattedRequests: RequestWithClientInfo[] = data?.map(req => ({
-        ...req,
-        client_name: req.clients?.name || 'Unknown',
-        client_email: req.clients?.email || 'No email',
-        client_company: req.clients?.company || ''
-      })) || [];
-      
-      setRequests(formattedRequests);
+      // Set the data directly since the RPC function should return requests with client info
+      setRequests(data || []);
     } catch (error) {
       console.error("Error fetching requests:", error);
       toast.error("Failed to load requests");
@@ -128,10 +113,16 @@ const AdminRequests = () => {
       // Direct update to the requests table
       const { error } = await supabase
         .from('requests')
-        .update({ status, updated_at: new Date().toISOString() })
+        .update({ 
+          status, 
+          updated_at: new Date().toISOString() 
+        })
         .eq('id', selectedRequest.id);
       
-      if (error) throw error;
+      if (error) {
+        console.error("Update error details:", error);
+        throw error;
+      }
       
       toast.success(`Request marked as ${status}`);
       setIsDialogOpen(false);
@@ -214,11 +205,11 @@ const AdminRequests = () => {
                   
                   <div className="flex flex-col xs:flex-row justify-between items-start xs:items-center text-xs text-muted-foreground">
                     <div className="flex flex-col xs:flex-row gap-1 xs:gap-3">
-                      <span>From: <span className="font-medium">{request.client_name}</span></span>
+                      <span>From: <span className="font-medium">{request.client_name || 'Unknown'}</span></span>
                       {request.client_company && (
                         <span className="hidden sm:inline">Company: <span className="font-medium">{request.client_company}</span></span>
                       )}
-                      <span className="hidden md:inline">Email: <span className="font-medium">{request.client_email}</span></span>
+                      <span className="hidden md:inline">Email: <span className="font-medium">{request.client_email || 'No email'}</span></span>
                     </div>
                     <span className="mt-1 xs:mt-0">Submitted: {formatDate(request.created_at)}</span>
                   </div>
@@ -247,8 +238,8 @@ const AdminRequests = () => {
             <div className="space-y-2">
               <Label>Client Information</Label>
               <div className="rounded-md bg-muted p-3">
-                <p><strong>Name:</strong> {selectedRequest?.client_name}</p>
-                <p><strong>Email:</strong> {selectedRequest?.client_email}</p>
+                <p><strong>Name:</strong> {selectedRequest?.client_name || 'Unknown'}</p>
+                <p><strong>Email:</strong> {selectedRequest?.client_email || 'No email'}</p>
                 {selectedRequest?.client_company && (
                   <p><strong>Company:</strong> {selectedRequest?.client_company}</p>
                 )}
@@ -260,7 +251,7 @@ const AdminRequests = () => {
               <div className="flex items-center gap-2">
                 {selectedRequest?.status && getStatusIcon(selectedRequest.status)}
                 <span className="font-medium">
-                  {selectedRequest?.status?.charAt(0).toUpperCase() + selectedRequest?.status?.slice(1)}
+                  {selectedRequest?.status?.charAt(0).toUpperCase() + selectedRequest?.status?.slice(1) || 'Unknown'}
                 </span>
               </div>
             </div>

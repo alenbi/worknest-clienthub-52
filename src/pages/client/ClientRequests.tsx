@@ -62,13 +62,14 @@ const ClientRequests = () => {
         setIsLoading(true);
         console.log("Fetching requests for client ID:", clientId);
         
-        // Directly query the requests table for this client
+        // Use RPC function to get requests for this client
         const { data, error } = await supabase
-          .from('requests')
-          .select('*')
-          .eq('client_id', clientId);
+          .rpc('get_client_requests', { client_id_param: clientId });
         
-        if (error) throw error;
+        if (error) {
+          console.error("Error details:", error);
+          throw error;
+        }
         
         console.log("Received requests:", data);
         setRequests(data || []);
@@ -115,23 +116,24 @@ const ClientRequests = () => {
           updated_at: new Date().toISOString()
         });
       
-      if (error) throw error;
+      if (error) {
+        console.error("Insert error details:", error);
+        throw error;
+      }
       
       toast.success("Request submitted successfully");
       setTitle("");
       setDescription("");
       
-      // Refresh requests list
-      const { data, error: fetchError } = await supabase
-        .from('requests')
-        .select('*')
-        .eq('client_id', clientId);
+      // Use the same RPC function to refresh the requests list
+      const { data: refreshedData, error: fetchError } = await supabase
+        .rpc('get_client_requests', { client_id_param: clientId });
         
       if (fetchError) throw fetchError;
       
-      setRequests(data || []);
+      setRequests(refreshedData || []);
       
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error submitting request:", error);
       toast.error("Failed to submit request");
     } finally {
