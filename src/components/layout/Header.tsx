@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 
-export function Header() {
+export function Header({ toggleSidebar }) {
   const { user, logout } = useAuth();
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const navigate = useNavigate();
@@ -44,12 +44,7 @@ export function Header() {
           variant="ghost"
           size="icon"
           className="mr-2"
-          onClick={() => {
-            const sidebar = document.getElementById("sidebar");
-            if (sidebar) {
-              sidebar.classList.toggle("-translate-x-full");
-            }
-          }}
+          onClick={toggleSidebar}
         >
           <Menu className="h-5 w-5" />
           <span className="sr-only">Toggle sidebar</span>

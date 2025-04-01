@@ -1,5 +1,6 @@
 
 import { useState, useRef } from "react";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { SendIcon, Paperclip, ImageIcon, Loader2, File } from "lucide-react";
@@ -13,6 +14,7 @@ export function ChatInput({ onSendMessage, isLoading }: ChatInputProps) {
   const [message, setMessage] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isMobile = useIsMobile();
   
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -75,7 +77,7 @@ export function ChatInput({ onSendMessage, isLoading }: ChatInputProps) {
       )}
       
       <form 
-        className="flex gap-2 w-full border-t p-4"
+        className="flex gap-2 w-full border-t p-3 md:p-4"
         onSubmit={handleSubmit}
       >
         <input
@@ -92,6 +94,7 @@ export function ChatInput({ onSendMessage, isLoading }: ChatInputProps) {
           size="icon" 
           disabled={isLoading}
           onClick={handleFileSelect}
+          className="shrink-0"
         >
           <Paperclip className="h-4 w-4" />
           <span className="sr-only">Attach file</span>
@@ -102,16 +105,21 @@ export function ChatInput({ onSendMessage, isLoading }: ChatInputProps) {
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           disabled={isLoading}
-          className="flex-1 min-h-10"
+          className="flex-1 min-h-10 text-sm md:text-base resize-none"
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
               e.preventDefault();
               handleSubmit();
             }
           }}
+          rows={isMobile ? 1 : 2}
         />
         
-        <Button type="submit" disabled={(!message.trim() && !file) || isLoading}>
+        <Button 
+          type="submit" 
+          disabled={(!message.trim() && !file) || isLoading}
+          className="shrink-0"
+        >
           {isLoading ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
