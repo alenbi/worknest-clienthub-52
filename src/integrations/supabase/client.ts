@@ -32,4 +32,11 @@ export interface RPCFunctions {
   is_client: (params: { user_id: string }) => Promise<{ data: boolean; error: null } | { data: null; error: any }>;
 }
 
-export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+// Create the Supabase client with explicit auth configuration for better persistence
+export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+  auth: {
+    storage: localStorage,
+    persistSession: true,
+    autoRefreshToken: true,
+  }
+});

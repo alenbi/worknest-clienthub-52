@@ -1,4 +1,3 @@
-
 import { createContext, useContext, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Session, User } from "@supabase/supabase-js";
@@ -30,7 +29,6 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isClient, setIsClient] = useState(false);
-  const [authInitialized, setAuthInitialized] = useState(false);
   const navigate = useNavigate();
 
   // Function to check if user is a client
@@ -83,24 +81,25 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
   };
 
   useEffect(() => {
+    let mounted = true;
+    
     const initializeAuth = async () => {
       try {
         console.log("Initializing client auth context...");
+        setIsLoading(true);
         
-        // First set up the onAuthStateChange listener
+        // First set up the onAuthStateChange listener - BEFORE checking the current session
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
           async (event, currentSession) => {
-            console.log("Client auth state changed:", event);
+            console.log("Client auth state changed:", event, "with session:", currentSession ? "yes" : "no");
+            
+            if (!mounted) return;
             
             if (event === 'SIGNED_OUT') {
               setSession(null);
               setUser(null);
               setIsClient(false);
-              setIsLoading(false);
-              return;
-            }
-            
-            if (currentSession?.user) {
+            } else if (currentSession?.user) {
               // Check if user is a client
               const isUserClient = checkClientRole(currentSession.user);
               
@@ -115,15 +114,11 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
                 setUser(null);
                 setIsClient(false);
               }
-            } else if (event !== 'INITIAL_SESSION') {
-              // No session and not initial setup
-              setSession(null);
-              setUser(null);
-              setIsClient(false);
             }
             
-            setIsLoading(false);
-            setAuthInitialized(true);
+            if (mounted) {
+              setIsLoading(false);
+            }
           }
         );
         
@@ -133,12 +128,11 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
         
         if (error) {
           console.error("Error getting session:", error);
-          setIsLoading(false);
-          setAuthInitialized(true);
+          if (mounted) setIsLoading(false);
           return;
         }
         
-        if (currentSession?.user) {
+        if (currentSession?.user && mounted) {
           // Check if user is a client
           const isUserClient = checkClientRole(currentSession.user);
           
@@ -153,40 +147,46 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
             setUser(null);
             setIsClient(false);
           }
-        } else {
+        } else if (mounted) {
           // No session
           setUser(null);
           setSession(null);
           setIsClient(false);
         }
         
-        // Force auth state to be determined after a maximum timeout
+        // Add shorter timeout as a safety measure
         const authTimeoutId = setTimeout(() => {
-          if (!authInitialized) {
-            console.warn("Client auth initialization timed out");
+          if (mounted && isLoading) {
+            console.warn("Client auth initialization timed out, finalizing auth state");
             setIsLoading(false);
-            setAuthInitialized(true);
           }
-        }, 3000); // Reduced from 4s to 3s
+        }, 3000); // 3 second timeout as a safety measure
         
-        setIsLoading(false);
-        console.log("Client auth initialization complete");
+        if (mounted) {
+          setIsLoading(false);
+          console.log("Client auth initialization complete");
+        }
 
         return () => {
-          subscription.unsubscribe();
           clearTimeout(authTimeoutId);
+          subscription.unsubscribe();
         };
       } catch (error) {
         console.error("Error initializing client auth:", error);
-        setUser(null);
-        setSession(null);
-        setIsClient(false);
-        setIsLoading(false);
-        setAuthInitialized(true);
+        if (mounted) {
+          setUser(null);
+          setSession(null);
+          setIsClient(false);
+          setIsLoading(false);
+        }
       }
     };
 
     initializeAuth();
+    
+    return () => {
+      mounted = false; // Prevent state updates after unmount
+    };
   }, []);
 
   const login = async (email: string, password: string) => {
