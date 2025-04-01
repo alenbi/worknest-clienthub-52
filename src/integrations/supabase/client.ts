@@ -17,3 +17,32 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
     storage: localStorage
   }
 });
+
+// Utility functions for common database operations
+export async function fetchRequestsWithClientInfo() {
+  const { data, error } = await supabase
+    .from('requests')
+    .select('*, clients(name, email, company)')
+    .order('created_at', { ascending: false });
+  
+  if (error) throw error;
+  
+  return data.map(request => ({
+    ...request,
+    client_name: request.clients?.name,
+    client_email: request.clients?.email,
+    client_company: request.clients?.company
+  }));
+}
+
+export async function fetchClientRequests(clientId: string) {
+  const { data, error } = await supabase
+    .from('requests')
+    .select('*')
+    .eq('client_id', clientId)
+    .order('created_at', { ascending: false });
+  
+  if (error) throw error;
+  
+  return data;
+}

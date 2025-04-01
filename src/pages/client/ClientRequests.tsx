@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -6,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useClientAuth } from "@/contexts/client-auth-context";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase, fetchClientRequests } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Loader2 } from "lucide-react";
 import { Request } from "@/lib/models";
@@ -20,7 +19,6 @@ const ClientRequests = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [clientId, setClientId] = useState<string | null>(null);
 
-  // First get the client's ID from their user ID
   useEffect(() => {
     const fetchClientId = async () => {
       if (!user?.id) return;
@@ -28,7 +26,6 @@ const ClientRequests = () => {
       try {
         console.log("Fetching client ID for user:", user.id);
         
-        // Query the clients table directly to get the client ID
         const { data, error } = await supabase
           .from('clients')
           .select('id')
@@ -53,34 +50,18 @@ const ClientRequests = () => {
     }
   }, [user?.id]);
 
-  // Then fetch the client's requests using their client ID
   useEffect(() => {
-    const fetchRequests = async () => {
+    const loadRequests = async () => {
       if (!clientId) return;
       
       try {
         setIsLoading(true);
         console.log("Fetching requests for client ID:", clientId);
         
-        // Use a direct query instead of RPC to avoid type issues
-        const { data, error } = await supabase
-          .from('requests')
-          .select('*')
-          .eq('client_id', clientId)
-          .order('created_at', { ascending: false });
-        
-        if (error) {
-          console.error("Error details:", error);
-          throw error;
-        }
+        const data = await fetchClientRequests(clientId);
         
         console.log("Received requests:", data);
-        if (Array.isArray(data)) {
-          setRequests(data);
-        } else {
-          console.error("Unexpected data format:", data);
-          setRequests([]);
-        }
+        setRequests(data);
       } catch (error) {
         console.error("Error fetching requests:", error);
         toast.error("Failed to load your requests");
@@ -90,7 +71,7 @@ const ClientRequests = () => {
     };
     
     if (clientId) {
-      fetchRequests();
+      loadRequests();
     }
   }, [clientId]);
 
@@ -112,7 +93,6 @@ const ClientRequests = () => {
       
       console.log("Creating request with client ID:", clientId);
       
-      // Insert directly into the requests table
       const { error } = await supabase
         .from('requests')
         .insert({
@@ -133,19 +113,11 @@ const ClientRequests = () => {
       setTitle("");
       setDescription("");
       
-      // Refresh the requests list using direct query instead of RPC
-      const { data: refreshedData, error: fetchError } = await supabase
-        .from('requests')
-        .select('*')
-        .eq('client_id', clientId)
-        .order('created_at', { ascending: false });
-        
-      if (fetchError) throw fetchError;
-      
-      if (Array.isArray(refreshedData)) {
+      try {
+        const refreshedData = await fetchClientRequests(clientId);
         setRequests(refreshedData);
-      } else {
-        console.error("Unexpected data format in refresh:", refreshedData);
+      } catch (fetchError) {
+        console.error("Error refreshing requests:", fetchError);
       }
       
     } catch (error: any) {
@@ -156,13 +128,11 @@ const ClientRequests = () => {
     }
   };
 
-  // Format date for display
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString() + " " + date.toLocaleTimeString();
   };
 
-  // Get status color class
   const getStatusClass = (status: string) => {
     switch (status.toLowerCase()) {
       case "pending":

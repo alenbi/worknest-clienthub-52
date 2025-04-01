@@ -1,8 +1,7 @@
-
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase, fetchRequestsWithClientInfo } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { 
   Check, 
@@ -48,45 +47,10 @@ const AdminRequests = () => {
       
       console.log("Admin: Fetching all requests with client info");
       
-      // Use a join query instead of an RPC function to avoid TypeScript errors
-      const { data, error } = await supabase
-        .from('requests')
-        .select(`
-          *,
-          clients:client_id (
-            name as client_name,
-            email as client_email,
-            company as client_company
-          )
-        `)
-        .order('created_at', { ascending: false });
-      
-      if (error) {
-        console.error("Error details:", error);
-        throw error;
-      }
+      const data = await fetchRequestsWithClientInfo();
       
       console.log("Admin: Received requests data:", data);
-      
-      // Transform the data to match our expected interface
-      if (Array.isArray(data)) {
-        const transformedData: RequestWithClientInfo[] = data.map(item => ({
-          id: item.id,
-          title: item.title,
-          description: item.description,
-          client_id: item.client_id,
-          status: item.status,
-          created_at: item.created_at,
-          updated_at: item.updated_at,
-          client_name: item.clients?.client_name,
-          client_email: item.clients?.client_email,
-          client_company: item.clients?.client_company
-        }));
-        setRequests(transformedData);
-      } else {
-        console.error("Unexpected data format:", data);
-        setRequests([]);
-      }
+      setRequests(data);
     } catch (error) {
       console.error("Error fetching requests:", error);
       toast.error("Failed to load requests");
@@ -136,7 +100,6 @@ const AdminRequests = () => {
     try {
       setIsUpdating(true);
       
-      // Direct update to the requests table
       const { error } = await supabase
         .from('requests')
         .update({ 
