@@ -82,7 +82,33 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setIsLoading(true);
         console.log("Initializing admin auth context...");
         
-        // Set up auth state listener first to catch any events during initialization
+        // Check for existing session first
+        const { data: { session: currentSession } } = await supabase.auth.getSession();
+        console.log("Current session check:", currentSession ? "Session exists" : "No session");
+        
+        if (currentSession?.user) {
+          // Check if user is admin
+          const isUserAdmin = checkAdminRole(currentSession.user);
+          
+          if (isUserAdmin) {
+            setSession(currentSession);
+            const enhancedUser = await updateUserWithProfile(currentSession.user);
+            setUser(enhancedUser);
+            setIsAdmin(true);
+          } else {
+            // Not admin - clear auth state in this context
+            setSession(null);
+            setUser(null);
+            setIsAdmin(false);
+          }
+        } else {
+          // No session
+          setSession(null);
+          setUser(null);
+          setIsAdmin(false);
+        }
+        
+        // Set up auth state listener after initial check
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
           async (event, currentSession) => {
             console.log("Admin auth state changed:", event);
@@ -108,37 +134,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
               setUser(null);
               setIsAdmin(false);
             }
-            
-            setIsLoading(false);
           }
         );
         
-        // Check for existing session
-        const { data: { session: currentSession } } = await supabase.auth.getSession();
-        console.log("Current session check:", currentSession ? "Session exists" : "No session");
-        
-        if (currentSession?.user) {
-          // Check if user is admin
-          const isUserAdmin = checkAdminRole(currentSession.user);
-          
-          if (isUserAdmin) {
-            setSession(currentSession);
-            const enhancedUser = await updateUserWithProfile(currentSession.user);
-            setUser(enhancedUser);
-            setIsAdmin(true);
-          } else {
-            // Not admin
-            setSession(null);
-            setUser(null);
-            setIsAdmin(false);
-          }
-        } else {
-          // No session
-          setUser(null);
-          setSession(null);
-          setIsAdmin(false);
-        }
-        
+        // Ensure we always complete loading regardless of what happens
         setIsLoading(false);
         setAuthInitialized(true);
         console.log("Admin auth initialization complete");
@@ -151,12 +150,23 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setUser(null);
         setSession(null);
         setIsAdmin(false);
-        setIsLoading(false);
+        setIsLoading(false); // Make sure to set this to false even on error
         setAuthInitialized(true);
       }
     };
 
     initializeAuth();
+    
+    // Add timeout safety net to prevent infinite loading
+    const timeoutId = setTimeout(() => {
+      if (isLoading) {
+        console.warn("Auth initialization timed out, forcing completion");
+        setIsLoading(false);
+        setAuthInitialized(true);
+      }
+    }, 5000); // 5 second timeout
+    
+    return () => clearTimeout(timeoutId);
   }, [navigate]);
 
   const login = async (email: string, password: string) => {

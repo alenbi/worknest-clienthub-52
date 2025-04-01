@@ -4,12 +4,26 @@ import { useAuth } from "@/contexts/auth-context";
 import { Loader2 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
+import { useEffect, useState } from "react";
 
 const ProtectedRoute = () => {
   const { isAuthenticated, isLoading, isAdmin } = useAuth();
+  const [isTimeoutExpired, setIsTimeoutExpired] = useState(false);
+
+  // Add a safety timeout in case authentication hangs
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (isLoading) {
+        console.warn("Authentication check timed out, showing access denied");
+        setIsTimeoutExpired(true);
+      }
+    }, 8000); // 8 seconds timeout
+    
+    return () => clearTimeout(timer);
+  }, [isLoading]);
 
   // Show loading state while checking authentication
-  if (isLoading) {
+  if (isLoading && !isTimeoutExpired) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
