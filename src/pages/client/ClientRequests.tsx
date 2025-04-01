@@ -33,8 +33,8 @@ const ClientRequests = () => {
           
         if (error) throw error;
         
-        // Type assertion to ensure proper typing
-        setRequests((data as Request[]) || []);
+        // Ensure data is properly typed
+        setRequests(data as Request[] || []);
       } catch (error) {
         console.error("Error fetching requests:", error);
         toast.error("Failed to load your requests");
@@ -84,8 +84,8 @@ const ClientRequests = () => {
         
       if (fetchError) throw fetchError;
       
-      // Type assertion
-      setRequests((data as Request[]) || []);
+      // Ensure data is properly typed
+      setRequests(data as Request[] || []);
       
     } catch (error) {
       console.error("Error submitting request:", error);

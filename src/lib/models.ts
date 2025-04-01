@@ -1,4 +1,3 @@
-
 export interface Resource {
   id: string;
   title: string;
@@ -84,7 +83,6 @@ export interface Request {
   status: string;
   created_at: string;
   updated_at: string;
-  client?: Client;
   
   // Additional client info fields that might come from RPC functions
   client_name?: string;

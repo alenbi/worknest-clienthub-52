@@ -44,8 +44,7 @@ const AdminRequests = () => {
       
       if (error) throw error;
       
-      const typedData = data as RequestWithClientInfo[];
-      setRequests(typedData || []);
+      setRequests(data as RequestWithClientInfo[] || []);
     } catch (error) {
       console.error("Error fetching requests:", error);
       toast.error("Failed to load requests");
