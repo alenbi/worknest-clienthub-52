@@ -27,14 +27,16 @@ const ClientRequests = () => {
         
         if (!user?.id) return;
         
-        // Use RPC function to get client requests
+        // Use type assertion for the RPC call
         const { data, error } = await supabase
-          .rpc('get_client_requests', { client_user_id: user.id });
+          .rpc('get_client_requests', { client_user_id: user.id }) as unknown as {
+            data: Request[];
+            error: Error | null;
+          };
           
         if (error) throw error;
         
-        // Ensure data is properly typed
-        setRequests(data as Request[] || []);
+        setRequests(data || []);
       } catch (error) {
         console.error("Error fetching requests:", error);
         toast.error("Failed to load your requests");
@@ -64,13 +66,16 @@ const ClientRequests = () => {
         return;
       }
       
-      // Use RPC function to create a new client request
+      // Use type assertion for the RPC call
       const { error } = await supabase
         .rpc('create_client_request', {
           req_title: title, 
           req_description: description, 
           client_user_id: user.id
-        });
+        }) as unknown as {
+          data: any;
+          error: Error | null;
+        };
       
       if (error) throw error;
       
@@ -78,14 +83,16 @@ const ClientRequests = () => {
       setTitle("");
       setDescription("");
       
-      // Refresh requests list
+      // Refresh requests list with type assertion
       const { data, error: fetchError } = await supabase
-        .rpc('get_client_requests', { client_user_id: user.id });
+        .rpc('get_client_requests', { client_user_id: user.id }) as unknown as {
+          data: Request[];
+          error: Error | null;
+        };
         
       if (fetchError) throw fetchError;
       
-      // Ensure data is properly typed
-      setRequests(data as Request[] || []);
+      setRequests(data || []);
       
     } catch (error) {
       console.error("Error submitting request:", error);

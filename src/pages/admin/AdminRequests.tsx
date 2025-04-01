@@ -40,11 +40,14 @@ const AdminRequests = () => {
     try {
       setIsLoading(true);
       
-      const { data, error } = await supabase.rpc('get_all_requests');
+      const { data, error } = await supabase.rpc('get_all_requests') as unknown as { 
+        data: RequestWithClientInfo[];
+        error: Error | null;
+      };
       
       if (error) throw error;
       
-      setRequests(data as RequestWithClientInfo[] || []);
+      setRequests(data || []);
     } catch (error) {
       console.error("Error fetching requests:", error);
       toast.error("Failed to load requests");
@@ -97,7 +100,10 @@ const AdminRequests = () => {
       const { error } = await supabase.rpc('update_request_status', {
         request_id: selectedRequest.id,
         new_status: status
-      });
+      }) as unknown as {
+        data: any;
+        error: Error | null;
+      };
       
       if (error) throw error;
       
