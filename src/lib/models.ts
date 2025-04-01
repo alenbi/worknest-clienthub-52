@@ -85,4 +85,9 @@ export interface Request {
   created_at: string;
   updated_at: string;
   client?: Client;
+  
+  // Additional client info fields that might come from RPC functions
+  client_name?: string;
+  client_email?: string;
+  client_company?: string;
 }

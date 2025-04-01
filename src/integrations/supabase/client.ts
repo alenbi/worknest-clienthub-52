@@ -11,12 +11,12 @@ const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiO
 
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
-// Add type declarations for our custom RPC functions
+// Add RPC function types
 declare module '@supabase/supabase-js' {
   interface SupabaseClient<Database> {
-    rpc<T extends keyof Database['public']['Functions']>(
+    rpc<T extends string>(
       fn: T,
-      params?: Database['public']['Functions'][T]['Args']
-    ): Promise<{ data: Database['public']['Functions'][T]['Returns']; error: null } | { data: null; error: any }>;
+      params?: Record<string, any>
+    ): Promise<{ data: any; error: null } | { data: null; error: any }>;
   }
 }

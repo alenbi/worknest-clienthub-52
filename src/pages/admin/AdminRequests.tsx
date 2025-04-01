@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -26,11 +25,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Label } from "@/components/ui/label";
 import { Request, Client } from "@/lib/models";
 
-interface RequestWithClientInfo extends Request {
-  client_name?: string;
-  client_email?: string;
-  client_company?: string;
-}
+type RequestWithClientInfo = Request;
 
 const AdminRequests = () => {
   const [requests, setRequests] = useState<RequestWithClientInfo[]>([]);
@@ -41,18 +36,16 @@ const AdminRequests = () => {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
 
-  // Fetch all requests with client information
   const fetchRequests = async () => {
     try {
       setIsLoading(true);
       
-      // Get all requests with client information using custom RPC function
       const { data, error } = await supabase.rpc('get_all_requests');
       
       if (error) throw error;
       
-      // Type assertion to match our Request interface
-      setRequests(data as RequestWithClientInfo[] || []);
+      const typedData = data as RequestWithClientInfo[];
+      setRequests(typedData || []);
     } catch (error) {
       console.error("Error fetching requests:", error);
       toast.error("Failed to load requests");
@@ -65,13 +58,11 @@ const AdminRequests = () => {
     fetchRequests();
   }, []);
 
-  // Format date for display
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString() + " " + date.toLocaleTimeString();
   };
 
-  // Filter requests based on search term and status
   const filteredRequests = requests.filter((request) => {
     const matchesSearch = 
       request.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -85,7 +76,6 @@ const AdminRequests = () => {
     return matchesSearch && matchesStatus;
   });
 
-  // Get status icon
   const getStatusIcon = (status: string) => {
     switch (status.toLowerCase()) {
       case "pending":
@@ -99,14 +89,12 @@ const AdminRequests = () => {
     }
   };
 
-  // Update request status
   const updateRequestStatus = async (status: string) => {
     if (!selectedRequest) return;
     
     try {
       setIsUpdating(true);
       
-      // Use RPC function to update request status
       const { error } = await supabase.rpc('update_request_status', {
         request_id: selectedRequest.id,
         new_status: status
@@ -125,7 +113,6 @@ const AdminRequests = () => {
     }
   };
 
-  // Open dialog with request details
   const openRequestDetails = (request: RequestWithClientInfo) => {
     setSelectedRequest(request);
     setIsDialogOpen(true);
@@ -216,7 +203,6 @@ const AdminRequests = () => {
         </CardContent>
       </Card>
 
-      {/* Request Details Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
@@ -243,7 +229,7 @@ const AdminRequests = () => {
               <div className="flex items-center gap-2">
                 {selectedRequest?.status && getStatusIcon(selectedRequest.status)}
                 <span className="font-medium">
-                  {selectedRequest?.status.charAt(0).toUpperCase() + selectedRequest?.status.slice(1)}
+                  {selectedRequest?.status?.charAt(0).toUpperCase() + selectedRequest?.status?.slice(1)}
                 </span>
               </div>
             </div>
