@@ -21,25 +21,45 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
 // Utility functions for common database operations
 export async function fetchRequestsWithClientInfo() {
   try {
-    const { data, error } = await supabase
+    // For admin - get all requests with client info
+    const { data: requestsData, error: requestsError } = await supabase
       .from('requests')
-      .select(`
-        *,
-        clients(name, email, company)
-      `)
+      .select('*')
       .order('created_at', { ascending: false });
     
-    if (error) {
-      console.error("Error fetching requests with client info:", error);
-      throw error;
+    if (requestsError) {
+      console.error("Error fetching requests:", requestsError);
+      throw requestsError;
     }
     
-    return data.map(request => ({
-      ...request,
-      client_name: request.clients?.name,
-      client_email: request.clients?.email,
-      client_company: request.clients?.company
-    }));
+    // Get all clients in a separate query to avoid the permission denied for table users error
+    const { data: clientsData, error: clientsError } = await supabase
+      .from('clients')
+      .select('id, name, email, company');
+    
+    if (clientsError) {
+      console.error("Error fetching clients:", clientsError);
+      throw clientsError;
+    }
+    
+    // Create a map of client IDs to client data for faster lookup
+    const clientsMap = {};
+    clientsData.forEach(client => {
+      clientsMap[client.id] = client;
+    });
+    
+    // Combine requests with client info
+    const enrichedRequests = requestsData.map(request => {
+      const clientInfo = clientsMap[request.client_id] || {};
+      return {
+        ...request,
+        client_name: clientInfo.name || 'Unknown',
+        client_email: clientInfo.email || 'Unknown',
+        client_company: clientInfo.company || 'Unknown'
+      };
+    });
+    
+    return enrichedRequests;
   } catch (error) {
     console.error("Failed to fetch requests with client info:", error);
     throw error;
@@ -48,6 +68,8 @@ export async function fetchRequestsWithClientInfo() {
 
 export async function fetchClientRequests(clientId: string) {
   try {
+    console.log("Fetching requests for client ID:", clientId);
+    
     const { data, error } = await supabase
       .from('requests')
       .select('*')
@@ -59,9 +81,64 @@ export async function fetchClientRequests(clientId: string) {
       throw error;
     }
     
-    return data;
+    console.log("Fetched client requests:", data);
+    return data || [];
   } catch (error) {
     console.error("Failed to fetch client requests:", error);
+    throw error;
+  }
+}
+
+export async function createClientRequest(clientId: string, title: string, description: string) {
+  try {
+    console.log("Creating request for client ID:", clientId);
+    
+    const { data, error } = await supabase
+      .from('requests')
+      .insert({
+        client_id: clientId,
+        title,
+        description,
+        status: 'pending',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .select('*')
+      .single();
+    
+    if (error) {
+      console.error("Error creating client request:", error);
+      throw error;
+    }
+    
+    console.log("Created client request:", data);
+    return data;
+  } catch (error) {
+    console.error("Failed to create client request:", error);
+    throw error;
+  }
+}
+
+export async function updateRequestStatus(requestId: string, status: string) {
+  try {
+    const { data, error } = await supabase
+      .from('requests')
+      .update({ 
+        status,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', requestId)
+      .select('*')
+      .single();
+    
+    if (error) {
+      console.error("Error updating request status:", error);
+      throw error;
+    }
+    
+    return data;
+  } catch (error) {
+    console.error("Failed to update request status:", error);
     throw error;
   }
 }

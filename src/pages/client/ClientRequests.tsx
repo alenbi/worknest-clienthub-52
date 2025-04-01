@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -5,10 +6,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useClientAuth } from "@/contexts/client-auth-context";
-import { supabase, fetchClientRequests } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Loader2 } from "lucide-react";
+import { Loader2, AlertCircle } from "lucide-react";
 import { Request } from "@/lib/models";
+import { supabase, fetchClientRequests, createClientRequest } from "@/integrations/supabase/client";
 
 const ClientRequests = () => {
   const { user } = useClientAuth();
@@ -17,8 +18,10 @@ const ClientRequests = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [requests, setRequests] = useState<Request[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [clientId, setClientId] = useState<string | null>(null);
 
+  // Fetch client ID when component mounts
   useEffect(() => {
     const fetchClientId = async () => {
       if (!user?.id) return;
@@ -34,14 +37,23 @@ const ClientRequests = () => {
         
         if (error) {
           console.error("Error fetching client ID:", error);
+          setLoadError("Failed to find your client information");
           throw error;
         }
         
         console.log("Received client ID:", data?.id);
-        setClientId(data?.id);
+        if (data?.id) {
+          setClientId(data.id);
+        } else {
+          setLoadError("No client profile found for your account");
+        }
       } catch (error) {
         console.error("Error in fetchClientId:", error);
-        toast.error("Failed to load your profile information");
+        setLoadError("Failed to load your profile information");
+      } finally {
+        if (!clientId) {
+          setIsLoading(false);
+        }
       }
     };
     
@@ -50,21 +62,22 @@ const ClientRequests = () => {
     }
   }, [user?.id]);
 
+  // Fetch requests when client ID is available
   useEffect(() => {
     const loadRequests = async () => {
       if (!clientId) return;
       
       try {
         setIsLoading(true);
+        setLoadError(null);
         console.log("Fetching requests for client ID:", clientId);
         
         const data = await fetchClientRequests(clientId);
-        
         console.log("Received requests:", data);
-        setRequests(data);
+        setRequests(data || []);
       } catch (error) {
         console.error("Error fetching requests:", error);
-        toast.error("Failed to load your requests");
+        setLoadError("Failed to load your requests. Please try again later.");
       } finally {
         setIsLoading(false);
       }
@@ -93,32 +106,15 @@ const ClientRequests = () => {
       
       console.log("Creating request with client ID:", clientId);
       
-      const { error } = await supabase
-        .from('requests')
-        .insert({
-          title, 
-          description, 
-          client_id: clientId,
-          status: 'pending',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        });
-      
-      if (error) {
-        console.error("Insert error details:", error);
-        throw error;
-      }
+      await createClientRequest(clientId, title, description);
       
       toast.success("Request submitted successfully");
       setTitle("");
       setDescription("");
       
-      try {
-        const refreshedData = await fetchClientRequests(clientId);
-        setRequests(refreshedData);
-      } catch (fetchError) {
-        console.error("Error refreshing requests:", fetchError);
-      }
+      // Refresh the requests list
+      const refreshedData = await fetchClientRequests(clientId);
+      setRequests(refreshedData);
       
     } catch (error: any) {
       console.error("Error submitting request:", error);
@@ -145,6 +141,31 @@ const ClientRequests = () => {
         return "bg-gray-100 text-gray-800";
     }
   };
+
+  // Handle error state
+  if (loadError && !isLoading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Submit a Request</h1>
+          <p className="text-muted-foreground">
+            Submit a new request or view your existing requests
+          </p>
+        </div>
+        
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-8">
+            <AlertCircle className="h-12 w-12 text-red-500 mb-4" />
+            <h3 className="text-lg font-semibold mb-2">Error Loading Requests</h3>
+            <p className="text-muted-foreground text-center mb-4">{loadError}</p>
+            <Button variant="outline" onClick={() => window.location.reload()}>
+              Try Again
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
