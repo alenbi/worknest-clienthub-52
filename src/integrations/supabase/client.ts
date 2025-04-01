@@ -20,29 +20,48 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
 
 // Utility functions for common database operations
 export async function fetchRequestsWithClientInfo() {
-  const { data, error } = await supabase
-    .from('requests')
-    .select('*, clients(name, email, company)')
-    .order('created_at', { ascending: false });
-  
-  if (error) throw error;
-  
-  return data.map(request => ({
-    ...request,
-    client_name: request.clients?.name,
-    client_email: request.clients?.email,
-    client_company: request.clients?.company
-  }));
+  try {
+    const { data, error } = await supabase
+      .from('requests')
+      .select(`
+        *,
+        clients(name, email, company)
+      `)
+      .order('created_at', { ascending: false });
+    
+    if (error) {
+      console.error("Error fetching requests with client info:", error);
+      throw error;
+    }
+    
+    return data.map(request => ({
+      ...request,
+      client_name: request.clients?.name,
+      client_email: request.clients?.email,
+      client_company: request.clients?.company
+    }));
+  } catch (error) {
+    console.error("Failed to fetch requests with client info:", error);
+    throw error;
+  }
 }
 
 export async function fetchClientRequests(clientId: string) {
-  const { data, error } = await supabase
-    .from('requests')
-    .select('*')
-    .eq('client_id', clientId)
-    .order('created_at', { ascending: false });
-  
-  if (error) throw error;
-  
-  return data;
+  try {
+    const { data, error } = await supabase
+      .from('requests')
+      .select('*')
+      .eq('client_id', clientId)
+      .order('created_at', { ascending: false });
+    
+    if (error) {
+      console.error("Error fetching client requests:", error);
+      throw error;
+    }
+    
+    return data;
+  } catch (error) {
+    console.error("Failed to fetch client requests:", error);
+    throw error;
+  }
 }
