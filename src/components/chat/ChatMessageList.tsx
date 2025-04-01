@@ -1,8 +1,8 @@
 
-import { useRef, useEffect, memo } from "react";
+import { useRef, useEffect } from "react";
 import { Loader2 } from "lucide-react";
 import { ChatMessage as ChatMessageType } from "@/lib/firebase-chat-utils";
-import { ChatMessageComponent } from "./ChatMessage";
+import { ChatMessage } from "./ChatMessage";
 
 interface ChatMessageListProps {
   messages: ChatMessageType[];
@@ -10,9 +10,6 @@ interface ChatMessageListProps {
   isLoading: boolean;
   emptyMessage?: string;
 }
-
-// Use memo to prevent unnecessary re-renders
-const MemoizedChatMessage = memo(ChatMessageComponent);
 
 export function ChatMessageList({ 
   messages, 
@@ -22,28 +19,23 @@ export function ChatMessageList({
 }: ChatMessageListProps) {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
-  // Scroll to bottom when messages change, using requestAnimationFrame for smoother scrolling
   useEffect(() => {
-    if (messages.length > 0) {
-      requestAnimationFrame(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-      });
-    }
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
   
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center h-full p-4">
-        <Loader2 className="h-6 w-6 animate-spin text-primary mr-2" />
-        <span className="text-muted-foreground">Loading conversation...</span>
+      <div className="flex items-center justify-center h-full">
+        <Loader2 className="h-8 w-8 animate-spin text-primary mr-2" />
+        <span>Loading conversation...</span>
       </div>
     );
   }
   
   if (messages.length === 0) {
     return (
-      <div className="flex h-full items-center justify-center p-4">
-        <p className="text-muted-foreground text-center">
+      <div className="flex h-full items-center justify-center">
+        <p className="text-muted-foreground">
           {emptyMessage}
         </p>
       </div>
@@ -53,7 +45,7 @@ export function ChatMessageList({
   return (
     <div className="space-y-4 p-4">
       {messages.map((message) => (
-        <MemoizedChatMessage
+        <ChatMessage
           key={message.id}
           message={message}
           isCurrentUser={message.sender_id === currentUserId}

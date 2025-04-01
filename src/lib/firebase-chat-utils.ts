@@ -1,14 +1,14 @@
-
 import { ref, push, set, onValue, off, get, query, orderByChild, update } from "firebase/database";
-import { database } from "@/integrations/firebase/config";
+import { ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
+import { database, storage } from "@/integrations/firebase/config";
 import { v4 as uuidv4 } from "uuid";
 import { toast } from "sonner";
 import { 
   fetchClientMessages as fetchSupabaseClientMessages,
   sendMessage as sendSupabaseMessage,
+  uploadChatFile as uploadSupabaseChatFile,
   markMessageAsRead as markSupabaseMessageAsRead
 } from "@/lib/chat-utils";
-import { supabase } from "@/integrations/supabase/client";
 
 export interface ChatMessage {
   id: string;
@@ -27,8 +27,6 @@ export type MessageHandler = (message: ChatMessage) => void;
 
 // Track if Firebase is available
 let isFirebaseAvailable = false;
-// Cache for chat messages to prevent redundant processing
-const messageCache = new Map<string, Set<string>>();
 
 /**
  * Tests the Firebase connection
@@ -99,24 +97,8 @@ export async function testFirebaseConnection(): Promise<boolean> {
   }
 }
 
-// Debounce the connection test to avoid excessive checks
-let connectionTestPromise: Promise<boolean> | null = null;
-const testFirebaseConnectionDebounced = (): Promise<boolean> => {
-  if (!connectionTestPromise) {
-    connectionTestPromise = testFirebaseConnection().finally(() => {
-      // Clear the promise after 30 seconds to allow retesting
-      setTimeout(() => {
-        connectionTestPromise = null;
-      }, 30000);
-    });
-  }
-  return connectionTestPromise;
-};
-
 // Test Firebase connection when module is loaded
-testFirebaseConnectionDebounced().then(isAvailable => {
-  console.log("Firebase availability on load:", isAvailable);
-});
+testFirebaseConnection();
 
 /**
  * Subscribes to chat messages for a specific client
@@ -125,11 +107,6 @@ export function subscribeToChatMessages(
   clientId: string,
   onNewMessage: MessageHandler
 ): () => void {
-  // Initialize cache for this client if it doesn't exist
-  if (!messageCache.has(clientId)) {
-    messageCache.set(clientId, new Set<string>());
-  }
-  
   try {
     if (!isFirebaseAvailable) {
       console.log("Firebase not available, using Supabase for chat subscription");
@@ -143,14 +120,9 @@ export function subscribeToChatMessages(
             filter: `client_id=eq.${clientId}`
           }, 
           async (payload) => {
-            // Use cache to prevent duplicate processing
-            const msgCache = messageCache.get(clientId);
+            console.log("New message received via Supabase realtime:", payload);
             const newMessage = payload.new as ChatMessage;
-            
-            if (msgCache && !msgCache.has(newMessage.id)) {
-              msgCache.add(newMessage.id);
-              onNewMessage(newMessage);
-            }
+            onNewMessage(newMessage);
           })
         .subscribe();
       
@@ -161,42 +133,29 @@ export function subscribeToChatMessages(
     
     console.log("Setting up Firebase messages subscription for client:", clientId);
     const messagesRef = ref(database, `messages/${clientId}`);
-    const msgCache = messageCache.get(clientId)!;
-
-    const unsubscribe = onValue(messagesRef, (snapshot) => {
-      if (!snapshot.exists()) return;
-      
-      const messages: Record<string, any> = snapshot.val();
-      
-      // Process messages in batches to reduce CPU usage
-      const messageBatch: ChatMessage[] = [];
-      
-      Object.keys(messages).forEach(key => {
-        if (!msgCache.has(key)) {
-          msgCache.add(key);
-          messageBatch.push({
-            id: key,
-            ...messages[key]
-          });
-        }
-      });
-      
-      // Process messages in smaller batches to avoid UI freezing
-      if (messageBatch.length > 0) {
-        const processBatch = (startIdx: number, batchSize: number) => {
-          const endIdx = Math.min(startIdx + batchSize, messageBatch.length);
-          for (let i = startIdx; i < endIdx; i++) {
-            onNewMessage(messageBatch[i]);
-          }
-          
-          if (endIdx < messageBatch.length) {
-            setTimeout(() => processBatch(endIdx, batchSize), 50);
-          }
-        };
-        
-        processBatch(0, 5); // Process 5 messages at a time
+    const messageQuery = query(messagesRef, orderByChild('created_at'));
+    
+    const handleNewMessage = (snapshot: any) => {
+      console.log("Firebase message snapshot received");
+      const data = snapshot.val();
+      if (!data) {
+        console.log("No data in Firebase message snapshot");
+        return;
       }
-    }, (error) => {
+      
+      // Process all messages as they come in
+      Object.keys(data).forEach(key => {
+        const message = data[key];
+        console.log("Processing Firebase message:", key);
+        onNewMessage({
+          id: key,
+          ...message,
+        });
+      });
+    };
+    
+    console.log("Attaching Firebase onValue listener");
+    onValue(messageQuery, handleNewMessage, (error) => {
       console.error("Firebase onValue error:", error);
       isFirebaseAvailable = false;
       toast.error("Chat connection lost, trying alternative connection...");
@@ -205,7 +164,7 @@ export function subscribeToChatMessages(
     // Return unsubscribe function
     return () => {
       console.log("Detaching Firebase message listener");
-      unsubscribe();
+      off(messagesRef);
     };
   } catch (error) {
     console.error("Error in subscribeToChatMessages:", error);
@@ -222,13 +181,9 @@ export function subscribeToChatMessages(
           filter: `client_id=eq.${clientId}`
         }, 
         async (payload) => {
-          const msgCache = messageCache.get(clientId);
+          console.log("New message received via Supabase realtime:", payload);
           const newMessage = payload.new as ChatMessage;
-          
-          if (msgCache && !msgCache.has(newMessage.id)) {
-            msgCache.add(newMessage.id);
-            onNewMessage(newMessage);
-          }
+          onNewMessage(newMessage);
         })
       .subscribe();
     
@@ -244,27 +199,14 @@ export function subscribeToChatMessages(
 export async function fetchClientMessages(clientId: string): Promise<ChatMessage[]> {
   console.log("Fetching messages for client:", clientId);
   try {
-    // Initialize cache for this client if it doesn't exist
-    if (!messageCache.has(clientId)) {
-      messageCache.set(clientId, new Set<string>());
-    }
-    
-    // Check if Firebase is available
-    const firebaseReady = await testFirebaseConnectionDebounced();
-    
-    if (!firebaseReady) {
+    if (!isFirebaseAvailable) {
       console.log("Firebase not available, using Supabase for fetching messages");
-      const messages = await fetchSupabaseClientMessages(clientId);
-      
-      // Update cache with message IDs
-      const msgCache = messageCache.get(clientId)!;
-      messages.forEach(msg => msgCache.add(msg.id));
-      
-      return messages;
+      return await fetchSupabaseClientMessages(clientId);
     }
     
     console.log("Fetching Firebase messages for client:", clientId);
     const messagesRef = ref(database, `messages/${clientId}`);
+    console.log("Firebase messages ref path:", `messages/${clientId}`);
     
     const snapshot = await get(messagesRef);
     
@@ -275,10 +217,6 @@ export async function fetchClientMessages(clientId: string): Promise<ChatMessage
     
     const data = snapshot.val();
     console.log("Firebase messages data received:", Object.keys(data).length, "messages");
-    
-    // Update cache with message IDs
-    const msgCache = messageCache.get(clientId)!;
-    Object.keys(data).forEach(key => msgCache.add(key));
     
     return Object.keys(data).map(key => ({
       id: key,
@@ -294,15 +232,7 @@ export async function fetchClientMessages(clientId: string): Promise<ChatMessage
     // Fallback to Supabase
     try {
       console.log("Falling back to Supabase for fetching messages");
-      const messages = await fetchSupabaseClientMessages(clientId);
-      
-      // Update cache with message IDs
-      if (messageCache.has(clientId)) {
-        const msgCache = messageCache.get(clientId)!;
-        messages.forEach(msg => msgCache.add(msg.id));
-      }
-      
-      return messages;
+      return await fetchSupabaseClientMessages(clientId);
     } catch (fallbackError) {
       console.error("Fallback to Supabase also failed:", fallbackError);
       throw new Error(`Failed to load messages: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -315,10 +245,7 @@ export async function fetchClientMessages(clientId: string): Promise<ChatMessage
  */
 export async function markMessageAsRead(clientId: string, messageId: string): Promise<void> {
   try {
-    // Check if Firebase is available (use cached result if available)
-    const firebaseReady = isFirebaseAvailable || await testFirebaseConnectionDebounced();
-    
-    if (!firebaseReady) {
+    if (!isFirebaseAvailable) {
       console.log("Firebase not available, using Supabase for marking message as read");
       await markSupabaseMessageAsRead(clientId, messageId);
       return;
@@ -350,41 +277,32 @@ export async function sendMessage({
   senderName,
   message,
   isFromClient,
-  attachmentUrl,
-  attachmentType
+  attachmentUrl = null,
+  attachmentType = null
 }: {
   clientId: string;
   senderId: string;
   senderName: string;
   message: string;
   isFromClient: boolean;
-  attachmentUrl?: string;
-  attachmentType?: string;
+  attachmentUrl?: string | null;
+  attachmentType?: string | null;
 }): Promise<ChatMessage | null> {
   try {
-    // Check if Firebase is available
-    const firebaseReady = isFirebaseAvailable || await testFirebaseConnectionDebounced();
-    
-    if (!firebaseReady) {
+    if (!isFirebaseAvailable) {
       console.log("Firebase not available, using Supabase for sending message");
       const result = await sendSupabaseMessage({
         clientId, 
         senderId, 
         senderName,
         message, 
-        isFromClient,
-        attachmentUrl,
+        isFromClient, 
+        attachmentUrl, 
         attachmentType
       });
       
-      // Send email notification in background
-      sendMessageNotification(clientId, senderId, senderName, message, isFromClient)
-        .catch(error => console.error("Failed to send notification:", error));
-      
-      // Update cache with message ID
-      if (messageCache.has(clientId) && result) {
-        messageCache.get(clientId)!.add(result.id);
-      }
+      // Send email notification
+      await sendMessageNotification(clientId, senderId, senderName, message, isFromClient);
       
       return result;
     }
@@ -392,50 +310,40 @@ export async function sendMessage({
     console.log("Sending Firebase message", {
       clientId,
       senderId,
-      isFromClient
+      isFromClient,
+      hasAttachment: !!attachmentUrl
     });
     
-    // Trim message
+    // Trim message but keep it if it's only an attachment
     const finalMessage = message ? message.trim() : '';
     
     // If no message and no attachment, don't send anything
     if (!finalMessage && !attachmentUrl) {
-      console.log("Empty message without attachment - not sending");
       return null;
     }
     
     const now = new Date().toISOString();
     const id = uuidv4();
     
-    const messageData: Omit<ChatMessage, 'id'> = {
+    const messageData = {
       client_id: clientId,
       sender_id: senderId,
       sender_name: senderName,
       is_from_client: isFromClient,
       message: finalMessage,
+      attachment_url: attachmentUrl,
+      attachment_type: attachmentType,
       is_read: false,
       created_at: now
     };
-    
-    // Add attachment if present
-    if (attachmentUrl && attachmentType) {
-      messageData.attachment_url = attachmentUrl;
-      messageData.attachment_type = attachmentType;
-    }
     
     const messagesRef = ref(database, `messages/${clientId}/${id}`);
     await set(messagesRef, messageData);
     
     console.log("Firebase message sent successfully:", id);
     
-    // Update cache with message ID
-    if (messageCache.has(clientId)) {
-      messageCache.get(clientId)!.add(id);
-    }
-    
-    // Send email notification in background
-    sendMessageNotification(clientId, senderId, senderName, finalMessage, isFromClient)
-      .catch(error => console.error("Failed to send notification:", error));
+    // Send email notification
+    await sendMessageNotification(clientId, senderId, senderName, finalMessage, isFromClient);
     
     return {
       id,
@@ -453,24 +361,76 @@ export async function sendMessage({
         senderId, 
         senderName,
         message, 
-        isFromClient,
-        attachmentUrl,
+        isFromClient, 
+        attachmentUrl, 
         attachmentType
       });
       
       // Send email notification
-      sendMessageNotification(clientId, senderId, senderName, message, isFromClient)
-        .catch(error => console.error("Failed to send notification:", error));
-      
-      // Update cache with message ID
-      if (messageCache.has(clientId) && result) {
-        messageCache.get(clientId)!.add(result.id);
-      }
+      await sendMessageNotification(clientId, senderId, senderName, message, isFromClient);
       
       return result;
     } catch (fallbackError) {
       console.error("Fallback to Supabase also failed:", fallbackError);
       toast.error("Failed to send message. Please try again.");
+      throw error;
+    }
+  }
+}
+
+/**
+ * Uploads a file to Firebase Storage
+ */
+export async function uploadChatFile(
+  file: File,
+  clientId: string,
+  isAdmin: boolean
+): Promise<{ url: string; type: string }> {
+  try {
+    if (!isFirebaseAvailable || !storage) {
+      console.log("Firebase Storage not available, using Supabase for file upload");
+      return await uploadSupabaseChatFile(file, clientId, isAdmin);
+    }
+    
+    console.log("Uploading file to Firebase Storage");
+    
+    // Determine file type
+    const fileType = file.type.startsWith('image/') ? 'image' : 'file';
+    
+    // Create a unique file path
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${uuidv4()}.${fileExt}`;
+    const prefix = isAdmin ? 'admin-attachments' : 'client-attachments';
+    const filePath = `${prefix}/${clientId}/${fileName}`;
+    
+    // Upload file to Firebase Storage
+    const fileRef = storageRef(storage, `chat/${filePath}`);
+    
+    console.log("Uploading to Firebase path:", `chat/${filePath}`);
+    
+    // Upload the file
+    const snapshot = await uploadBytes(fileRef, file);
+    console.log("File uploaded successfully:", snapshot.metadata.name);
+    
+    // Get the download URL
+    const downloadUrl = await getDownloadURL(fileRef);
+    console.log("Download URL obtained:", downloadUrl);
+    
+    return {
+      url: downloadUrl,
+      type: fileType
+    };
+  } catch (error) {
+    console.error("File upload failed:", error);
+    isFirebaseAvailable = false;
+    
+    // Fallback to Supabase
+    try {
+      console.log("Falling back to Supabase for file upload");
+      return await uploadSupabaseChatFile(file, clientId, isAdmin);
+    } catch (fallbackError) {
+      console.error("Fallback to Supabase also failed:", fallbackError);
+      toast.error("Failed to upload file. Please try again.");
       throw error;
     }
   }
@@ -520,3 +480,6 @@ async function sendMessageNotification(
     // Don't throw here - this is a non-essential operation
   }
 }
+
+// Import Supabase for fallback
+import { supabase } from "@/integrations/supabase/client";

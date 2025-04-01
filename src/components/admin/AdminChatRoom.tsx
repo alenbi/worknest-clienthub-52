@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,8 +12,8 @@ import {
   subscribeToChatMessages,
   fetchClientMessages, 
   sendMessage,
-  markMessageAsRead,
-  testFirebaseConnection
+  uploadChatFile,
+  markMessageAsRead
 } from "@/lib/firebase-chat-utils";
 import { ChatMessageList } from "@/components/chat/ChatMessageList";
 import { ChatInput } from "@/components/chat/ChatInput";
@@ -37,45 +36,10 @@ export function AdminChatRoom() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
   const cleanupFunctionRef = useRef<(() => void) | null>(null);
 
-  // Ensure the user is an admin
   useEffect(() => {
-    const checkAdminStatus = async () => {
-      if (!user) return;
-
-      try {
-        const { data: isAdminData, error: adminError } = await supabase.rpc('is_admin', {
-          user_id: user.id
-        });
-
-        if (adminError) {
-          console.error("Error verifying admin status:", adminError);
-          setIsAdmin(false);
-          setError("You don't have permission to access this chat.");
-          return;
-        }
-
-        console.log("Admin status:", isAdminData);
-        setIsAdmin(!!isAdminData);
-        
-        if (!isAdminData) {
-          setError("You don't have permission to access this chat.");
-        }
-      } catch (error) {
-        console.error("Error checking admin status:", error);
-        setIsAdmin(false);
-        setError("Failed to verify your permissions.");
-      }
-    };
-
-    checkAdminStatus();
-  }, [user]);
-
-  // Fetch client details
-  useEffect(() => {
-    if (!clientId || !isAdmin) return;
+    if (!clientId) return;
     
     const fetchClientDetails = async () => {
       try {
@@ -97,10 +61,6 @@ export function AdminChatRoom() {
         }
         
         setClient(data);
-        
-        // Test Firebase connection to ensure Firebase is available
-        const isFirebaseAvailable = await testFirebaseConnection();
-        console.log("Firebase available for admin chat:", isFirebaseAvailable);
       } catch (error) {
         console.error("Error fetching client details:", error);
         toast.error("Error loading client details");
@@ -109,22 +69,18 @@ export function AdminChatRoom() {
     };
 
     fetchClientDetails();
-  }, [clientId, navigate, isAdmin]);
+  }, [clientId, navigate]);
 
-  // Fetch messages and setup subscription
   useEffect(() => {
-    if (!clientId || !client || !user?.id || !isAdmin) return;
+    if (!clientId || !client || !user?.id) return;
     
     const loadMessages = async () => {
       try {
         setIsLoading(true);
         setError(null);
         
-        console.log("Loading messages for client:", clientId);
         const messages = await fetchClientMessages(clientId);
-        console.log("Fetched messages:", messages.length);
         
-        // Mark messages from client as read
         for (const msg of messages) {
           if (msg.is_from_client && !msg.is_read) {
             await markMessageAsRead(clientId, msg.id);
@@ -141,50 +97,42 @@ export function AdminChatRoom() {
       }
     };
     
-    const setupMessageSubscription = () => {
-      try {
-        console.log("Setting up message subscription for admin");
-        const unsubscribe = subscribeToChatMessages(
-          clientId,
-          (newMessage) => {
-            console.log("New message received in admin chat:", newMessage);
-            setMessages(prev => {
-              if (prev.some(msg => msg.id === newMessage.id)) {
-                return prev;
-              }
-              
-              if (newMessage.is_from_client) {
-                markMessageAsRead(clientId, newMessage.id);
-              }
-              
-              const updatedMessages = [...prev, newMessage];
-              return updatedMessages.sort((a, b) => 
-                new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-              );
-            });
-          }
-        );
-        
-        cleanupFunctionRef.current = unsubscribe;
-      } catch (error: any) {
-        console.error("Error setting up message subscription:", error);
-        toast.error("Failed to connect to chat service");
-        setError("Failed to connect to chat service: " + (error.message || "Unknown error"));
-      }
-    };
-    
     loadMessages();
-    setupMessageSubscription();
+    
+    try {
+      const unsubscribe = subscribeToChatMessages(
+        clientId,
+        (newMessage) => {
+          setMessages(prev => {
+            if (prev.some(msg => msg.id === newMessage.id)) {
+              return prev;
+            }
+            
+            if (newMessage.is_from_client) {
+              markMessageAsRead(clientId, newMessage.id);
+            }
+            
+            return [...prev, newMessage];
+          });
+        }
+      );
+      
+      cleanupFunctionRef.current = unsubscribe;
+    } catch (error: any) {
+      console.error("Error setting up message subscription:", error);
+      toast.error("Failed to connect to chat service");
+      setError("Failed to connect to chat service: " + (error.message || "Unknown error"));
+    }
     
     return () => {
       if (cleanupFunctionRef.current) {
         cleanupFunctionRef.current();
       }
     };
-  }, [clientId, client, user?.id, isAdmin]);
+  }, [clientId, client, user?.id]);
 
-  const handleSendMessage = async (messageText: string, file?: File) => {
-    if (!messageText.trim() && !file || !clientId || !user?.id) {
+  const handleSendMessage = async (messageText: string, file: File | null) => {
+    if ((!messageText.trim() && !file) || !clientId || !user?.id) {
       return;
     }
     
@@ -192,34 +140,18 @@ export function AdminChatRoom() {
       setIsSending(true);
       setError(null);
       
-      let attachmentUrl = undefined;
-      let attachmentType = undefined;
+      let attachmentUrl = null;
+      let attachmentType = null;
       
-      // If a file was uploaded, handle the upload
       if (file) {
         try {
-          const fileName = `${Date.now()}_${file.name}`;
-          const filePath = `chat_attachments/${clientId}/${fileName}`;
-          
-          const { data: uploadData, error: uploadError } = await supabase
-            .storage
-            .from('chat_attachments')
-            .upload(filePath, file);
-            
-          if (uploadError) throw uploadError;
-          
-          const { data: urlData } = await supabase
-            .storage
-            .from('chat_attachments')
-            .createSignedUrl(filePath, 60 * 60 * 24 * 7); // 7 days expiry
-            
-          if (urlData) {
-            attachmentUrl = urlData.signedUrl;
-            attachmentType = file.type;
-          }
-        } catch (uploadError) {
-          console.error("Error uploading file:", uploadError);
-          toast.error("Failed to upload file. Your message will be sent without the attachment.");
+          const uploadResult = await uploadChatFile(file, clientId, true);
+          attachmentUrl = uploadResult.url;
+          attachmentType = uploadResult.type;
+        } catch (error) {
+          console.error("File upload failed:", error);
+          toast.error("Failed to upload file. Please try again.");
+          throw error;
         }
       }
       
@@ -333,7 +265,6 @@ export function AdminChatRoom() {
       <ChatInput 
         onSendMessage={handleSendMessage}
         isLoading={isSending}
-        disabled={!!error || !isAdmin}
       />
     </Card>
   );
