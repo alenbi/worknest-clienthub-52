@@ -1,8 +1,7 @@
-
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Session, User } from '@supabase/supabase-js';
-import { Resource, Video, Offer, Client, Task, TaskStatus, TaskPriority, Update } from '@/lib/models';
+import { Resource, Video, Offer, Client, Task, TaskStatus, TaskPriority, Update, WeeklyProduct, ProductLink, WeeklyProductWithLinks } from '@/lib/models';
 import { useAuth } from '@/contexts/auth-context';
 import { toast } from 'sonner';
 import { 
@@ -22,7 +21,7 @@ import {
 import { testFirebaseConnection } from '@/lib/firebase-chat-utils';
 
 // Re-export the types so they can be imported from data-context
-export type { Resource, Video, Offer, Client, Task, Update };
+export type { Resource, Video, Offer, Client, Task, Update, WeeklyProduct, ProductLink, WeeklyProductWithLinks };
 export { TaskStatus, TaskPriority };
 
 interface DataContextType {
@@ -69,6 +68,13 @@ interface DataContextType {
   deleteUpdate: (id: string) => Promise<void>;
   toggleUpdatePublished: (id: string, isPublished: boolean) => Promise<void>;
   
+  // Weekly Products
+  weeklyProducts: WeeklyProductWithLinks[];
+  createWeeklyProduct: (product: ProductFormData) => Promise<void>;
+  updateWeeklyProduct: (id: string, product: ProductFormData) => Promise<void>;
+  deleteWeeklyProduct: (id: string) => Promise<void>;
+  toggleProductPublished: (id: string, isPublished: boolean) => Promise<void>;
+  
   // Data management
   refreshData: () => Promise<void>;
 }
@@ -81,13 +87,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isFirebaseAvailable, setIsFirebaseAvailable] = useState(false);
   
-  // Add missing state variables
   const [resources, setResources] = useState<Resource[]>([]);
   const [videos, setVideos] = useState<Video[]>([]);
   const [offers, setOffers] = useState<Offer[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [updates, setUpdates] = useState<Update[]>([]);
+  const [weeklyProducts, setWeeklyProducts] = useState<WeeklyProductWithLinks[]>([]);
   
   const user: User | null = authUser as unknown as User | null;
   
@@ -146,7 +152,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         fetchOffers(),
         fetchClients(),
         fetchTasks(),
-        fetchUpdates()
+        fetchUpdates(),
+        fetchWeeklyProducts()
       ]);
     } catch (error) {
       console.error('Error refreshing data:', error);
@@ -155,7 +162,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   };
   
-  // Resource management functions
   const fetchResources = async () => {
     try {
       if (isFirebaseAvailable) {
@@ -247,7 +253,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   };
   
-  // Video management functions
   const fetchVideos = async () => {
     try {
       if (isFirebaseAvailable) {
@@ -338,7 +343,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   };
   
-  // Offer management functions
   const fetchOffers = async () => {
     try {
       if (isFirebaseAvailable) {
@@ -431,7 +435,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   };
   
-  // Client management functions
   const fetchClients = async () => {
     try {
       const { data, error } = await supabase
@@ -515,7 +518,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   };
   
-  // Task management functions
   const fetchTasks = async () => {
     try {
       const { data, error } = await supabase
@@ -589,7 +591,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   };
   
-  // Update management functions
   const fetchUpdates = async () => {
     try {
       const { data, error } = await supabase
@@ -667,6 +668,153 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const fetchWeeklyProducts = async () => {
+    try {
+      const { data: productsData, error: productsError } = await supabase
+        .from('weekly_products')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (productsError) throw productsError;
+      
+      const { data: linksData, error: linksError } = await supabase
+        .from('product_links')
+        .select('*');
+      
+      if (linksError) throw linksError;
+      
+      const productsWithLinks = productsData.map(product => ({
+        ...product,
+        links: linksData.filter(link => link.product_id === product.id) || []
+      }));
+      
+      setWeeklyProducts(productsWithLinks);
+    } catch (error) {
+      console.error('Error fetching weekly products:', error);
+    }
+  };
+  
+  const createWeeklyProduct = async (productData: ProductFormData) => {
+    try {
+      const { data: product, error: productError } = await supabase
+        .from('weekly_products')
+        .insert({
+          title: productData.title,
+          description: productData.description,
+          is_published: productData.is_published
+        })
+        .select()
+        .single();
+      
+      if (productError) throw productError;
+      
+      if (productData.links && productData.links.length > 0) {
+        const linksToInsert = productData.links.map(link => ({
+          product_id: product.id,
+          title: link.title,
+          url: link.url
+        }));
+        
+        const { error: linksError } = await supabase
+          .from('product_links')
+          .insert(linksToInsert);
+        
+        if (linksError) throw linksError;
+      }
+      
+      await fetchWeeklyProducts();
+      toast.success("Weekly product created successfully");
+    } catch (error) {
+      console.error('Error creating weekly product:', error);
+      toast.error("Failed to create weekly product");
+      throw error;
+    }
+  };
+  
+  const updateWeeklyProduct = async (id: string, productData: ProductFormData) => {
+    try {
+      const { error: productError } = await supabase
+        .from('weekly_products')
+        .update({
+          title: productData.title,
+          description: productData.description,
+          is_published: productData.is_published
+        })
+        .eq('id', id);
+      
+      if (productError) throw productError;
+      
+      const { error: deleteError } = await supabase
+        .from('product_links')
+        .delete()
+        .eq('product_id', id);
+      
+      if (deleteError) throw deleteError;
+      
+      if (productData.links && productData.links.length > 0) {
+        const linksToInsert = productData.links.map(link => ({
+          product_id: id,
+          title: link.title,
+          url: link.url
+        }));
+        
+        const { error: linksError } = await supabase
+          .from('product_links')
+          .insert(linksToInsert);
+        
+        if (linksError) throw linksError;
+      }
+      
+      await fetchWeeklyProducts();
+      toast.success("Weekly product updated successfully");
+    } catch (error) {
+      console.error('Error updating weekly product:', error);
+      toast.error("Failed to update weekly product");
+      throw error;
+    }
+  };
+  
+  const deleteWeeklyProduct = async (id: string) => {
+    try {
+      const { error } = await supabase
+        .from('weekly_products')
+        .delete()
+        .eq('id', id);
+      
+      if (error) throw error;
+      
+      setWeeklyProducts(prevProducts => prevProducts.filter(p => p.id !== id));
+      toast.success("Weekly product deleted successfully");
+    } catch (error) {
+      console.error('Error deleting weekly product:', error);
+      toast.error("Failed to delete weekly product");
+      throw error;
+    }
+  };
+  
+  const toggleProductPublished = async (id: string, isPublished: boolean) => {
+    try {
+      const { error } = await supabase
+        .from('weekly_products')
+        .update({ is_published: isPublished })
+        .eq('id', id);
+      
+      if (error) throw error;
+      
+      setWeeklyProducts(prevProducts => 
+        prevProducts.map(product => 
+          product.id === id ? { ...product, is_published: isPublished } : product
+        )
+      );
+      
+      toast.success(isPublished ? "Product published successfully" : "Product unpublished");
+    } catch (error) {
+      console.error('Error toggling product published status:', error);
+      toast.error("Failed to update product status");
+      throw error;
+    }
+  };
+
   return (
     <DataContext.Provider
       value={{
@@ -700,6 +848,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         updateUpdate,
         deleteUpdate,
         toggleUpdatePublished,
+        weeklyProducts,
+        createWeeklyProduct,
+        updateWeeklyProduct,
+        deleteWeeklyProduct,
+        toggleProductPublished,
         refreshData
       }}
     >

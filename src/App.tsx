@@ -34,6 +34,7 @@ import ClientOffers from "./pages/client/ClientOffers";
 import ClientProfile from "./pages/client/ClientProfile";
 import ClientUpdates from "./pages/client/ClientUpdates";
 import ClientRequests from "./pages/client/ClientRequests";
+import ClientWeeklyProducts from "./pages/client/ClientWeeklyProducts";
 
 // Admin pages
 import AdminChat from "./pages/admin/AdminChat";
@@ -43,6 +44,7 @@ import AdminVideos from "./pages/admin/AdminVideos";
 import AdminOffers from "./pages/admin/AdminOffers";
 import AdminUpdates from "./pages/admin/AdminUpdates";
 import AdminRequests from "./pages/admin/AdminRequests";
+import AdminWeeklyProducts from "./pages/admin/AdminWeeklyProducts";
 
 // Create query client with better error handling and optimizations
 const queryClient = new QueryClient({
@@ -95,6 +97,7 @@ const App = () => (
                     <Route path="/admin/videos" element={<AdminVideos />} />
                     <Route path="/admin/offers" element={<AdminOffers />} />
                     <Route path="/admin/updates" element={<AdminUpdates />} />
+                    <Route path="/admin/weekly-products" element={<AdminWeeklyProducts />} />
                     <Route path="/admin/requests" element={<AdminRequests />} />
                     <Route path="/updates" element={<Navigate to="/admin/updates" replace />} />
                   </Route>
@@ -112,6 +115,7 @@ const App = () => (
                     <Route path="/client/offers" element={<ClientOffers />} />
                     <Route path="/client/profile" element={<ClientProfile />} />
                     <Route path="/client/updates" element={<ClientUpdates />} />
+                    <Route path="/client/weekly-products" element={<ClientWeeklyProducts />} />
                     <Route path="/client/requests" element={<ClientRequests />} />
                   </Route>
                 </Route>

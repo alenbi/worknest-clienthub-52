@@ -122,6 +122,38 @@ export type Database = {
         }
         Relationships: []
       }
+      product_links: {
+        Row: {
+          created_at: string
+          id: string
+          product_id: string
+          title: string
+          url: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          product_id: string
+          title: string
+          url: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          product_id?: string
+          title?: string
+          url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_links_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "weekly_products"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar: string | null
@@ -306,6 +338,30 @@ export type Database = {
           id?: string
           title?: string
           youtube_id?: string
+        }
+        Relationships: []
+      }
+      weekly_products: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_published: boolean
+          title: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_published?: boolean
+          title: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_published?: boolean
+          title?: string
         }
         Relationships: []
       }

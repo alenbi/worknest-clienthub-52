@@ -13,6 +13,7 @@ import {
   Bell,
   FileQuestion,
   X,
+  CalendarDays,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -59,6 +60,11 @@ export function ClientSidebar() {
       title: "Videos",
       icon: Video,
       path: "/client/videos",
+    },
+    {
+      title: "Weekly Products",
+      icon: CalendarDays,
+      path: "/client/weekly-products",
     },
     {
       title: "Offers",

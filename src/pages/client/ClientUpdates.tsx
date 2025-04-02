@@ -1,5 +1,5 @@
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
   Card,
   CardContent,
@@ -11,16 +11,24 @@ import { Separator } from "@/components/ui/separator";
 import { format } from "date-fns";
 import { useData } from "@/contexts/data-context";
 import { Badge } from "@/components/ui/badge";
+import { Loader2 } from "lucide-react";
 
 export default function ClientUpdates() {
-  const { updates, refreshData } = useData();
+  const { updates, refreshData, isLoading } = useData();
+  const [isRefreshing, setIsRefreshing] = useState(true);
   
   // Only show published updates to clients
   const publishedUpdates = updates.filter(update => update.is_published);
   
   useEffect(() => {
-    refreshData();
-  }, []);
+    const loadData = async () => {
+      setIsRefreshing(true);
+      await refreshData();
+      setIsRefreshing(false);
+    };
+    
+    loadData();
+  }, [refreshData]);
 
   return (
     <div className="space-y-6">
@@ -31,7 +39,14 @@ export default function ClientUpdates() {
         </p>
       </div>
 
-      {publishedUpdates.length === 0 ? (
+      {isLoading || isRefreshing ? (
+        <div className="flex justify-center py-12">
+          <div className="text-center">
+            <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
+            <p className="mt-2 text-sm text-muted-foreground">Loading updates...</p>
+          </div>
+        </div>
+      ) : publishedUpdates.length === 0 ? (
         <Card>
           <CardHeader>
             <CardTitle>No Updates</CardTitle>
