@@ -1,4 +1,3 @@
-
 export interface Resource {
   id: string;
   title: string;
@@ -91,22 +90,6 @@ export interface Request {
   client_company?: string;
 }
 
-export interface WeeklyProduct {
-  id: string;
-  title: string;
-  description?: string;
-  is_published: boolean;
-  created_at: Date | string;
-}
-
-export interface ProductLink {
-  id: string;
-  product_id: string;
-  title: string;
-  url: string;
-  created_at: Date | string;
-}
-
-export interface WeeklyProductWithLinks extends WeeklyProduct {
-  links: ProductLink[];
-}
+// Import these from the specialized models file instead of redefining them here
+import { WeeklyProduct, ProductLink, WeeklyProductWithLinks, ProductFormData } from './models/weekly-products';
+export type { WeeklyProduct, ProductLink, WeeklyProductWithLinks, ProductFormData };

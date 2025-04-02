@@ -22,15 +22,23 @@ export default function ClientWeeklyProducts() {
   // Only show published products to clients
   const publishedProducts = weeklyProducts.filter(product => product.is_published);
   
+  // Load weekly products when component mounts
   useEffect(() => {
     const loadData = async () => {
       setIsRefreshing(true);
-      await refreshData();
-      setIsRefreshing(false);
+      try {
+        await refreshData();
+      } catch (error) {
+        console.error("Error loading weekly products:", error);
+      } finally {
+        setIsRefreshing(false);
+      }
     };
     
     loadData();
   }, [refreshData]);
+
+  const isLoadingData = isLoading || isRefreshing;
 
   const openLink = (url: string) => {
     window.open(url, '_blank', 'noopener,noreferrer');
@@ -45,7 +53,7 @@ export default function ClientWeeklyProducts() {
         </p>
       </div>
 
-      {isLoading || isRefreshing ? (
+      {isLoadingData ? (
         <div className="flex justify-center py-12">
           <div className="text-center">
             <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />

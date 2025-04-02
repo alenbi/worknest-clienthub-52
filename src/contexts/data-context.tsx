@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Session, User } from '@supabase/supabase-js';
-import { Resource, Video, Offer, Client, Task, TaskStatus, TaskPriority, Update, WeeklyProduct, ProductLink, WeeklyProductWithLinks } from '@/lib/models';
+import { Resource, Video, Offer, Client, Task, TaskStatus, TaskPriority, Update } from '@/lib/models';
+import { WeeklyProduct, ProductLink, WeeklyProductWithLinks, ProductFormData } from '@/lib/models/weekly-products';
 import { useAuth } from '@/contexts/auth-context';
 import { toast } from 'sonner';
 import { 
@@ -21,7 +22,7 @@ import {
 import { testFirebaseConnection } from '@/lib/firebase-chat-utils';
 
 // Re-export the types so they can be imported from data-context
-export type { Resource, Video, Offer, Client, Task, Update, WeeklyProduct, ProductLink, WeeklyProductWithLinks };
+export type { Resource, Video, Offer, Client, Task, Update, WeeklyProduct, ProductLink, WeeklyProductWithLinks, ProductFormData };
 export { TaskStatus, TaskPriority };
 
 interface DataContextType {
@@ -683,7 +684,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       
       if (linksError) throw linksError;
       
-      const productsWithLinks = productsData.map(product => ({
+      const productsWithLinks: WeeklyProductWithLinks[] = productsData.map(product => ({
         ...product,
         links: linksData.filter(link => link.product_id === product.id) || []
       }));

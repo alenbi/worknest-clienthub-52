@@ -20,15 +20,23 @@ export default function ClientUpdates() {
   // Only show published updates to clients
   const publishedUpdates = updates.filter(update => update.is_published);
   
+  // Load updates when component mounts
   useEffect(() => {
     const loadData = async () => {
       setIsRefreshing(true);
-      await refreshData();
-      setIsRefreshing(false);
+      try {
+        await refreshData();
+      } catch (error) {
+        console.error("Error loading updates:", error);
+      } finally {
+        setIsRefreshing(false);
+      }
     };
     
     loadData();
   }, [refreshData]);
+
+  const isLoadingData = isLoading || isRefreshing;
 
   return (
     <div className="space-y-6">
@@ -39,7 +47,7 @@ export default function ClientUpdates() {
         </p>
       </div>
 
-      {isLoading || isRefreshing ? (
+      {isLoadingData ? (
         <div className="flex justify-center py-12">
           <div className="text-center">
             <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
