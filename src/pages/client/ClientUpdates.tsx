@@ -26,6 +26,8 @@ export default function ClientUpdates() {
       setIsRefreshing(true);
       try {
         await refreshData();
+        console.log("Updates loaded:", updates.length, "total updates");
+        console.log("Published updates:", publishedUpdates.length);
       } catch (error) {
         console.error("Error loading updates:", error);
       } finally {

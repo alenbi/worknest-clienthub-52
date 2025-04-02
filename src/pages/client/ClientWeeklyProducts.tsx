@@ -28,6 +28,8 @@ export default function ClientWeeklyProducts() {
       setIsRefreshing(true);
       try {
         await refreshData();
+        console.log("Weekly products loaded:", weeklyProducts.length, "total products");
+        console.log("Published products:", publishedProducts.length);
       } catch (error) {
         console.error("Error loading weekly products:", error);
       } finally {
