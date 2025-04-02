@@ -18,6 +18,7 @@ import { format } from "date-fns";
 export default function ClientWeeklyProducts() {
   const { weeklyProducts, refreshData, isLoading } = useData();
   const [isRefreshing, setIsRefreshing] = useState(true);
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
   
   // Only show published products to clients
   const publishedProducts = weeklyProducts.filter(product => product.is_published);
@@ -25,20 +26,34 @@ export default function ClientWeeklyProducts() {
   // Load weekly products when component mounts
   useEffect(() => {
     const loadData = async () => {
-      setIsRefreshing(true);
-      try {
-        await refreshData();
-        console.log("Weekly products loaded:", weeklyProducts.length, "total products");
-        console.log("Published products:", publishedProducts.length);
-      } catch (error) {
-        console.error("Error loading weekly products:", error);
-      } finally {
-        setIsRefreshing(false);
+      if (!initialLoadDone) {
+        setIsRefreshing(true);
+        console.log("Loading weekly products data...");
+        
+        try {
+          await refreshData();
+          console.log("Weekly products data loaded successfully");
+          console.log("Total products:", weeklyProducts.length);
+          console.log("Published products:", publishedProducts.length);
+          console.log("Published product IDs:", publishedProducts.map(p => p.id));
+          
+          // Check if any products are marked as published
+          const anyPublished = weeklyProducts.some(p => p.is_published === true);
+          console.log("Any products marked as published:", anyPublished);
+          
+          // Log full product data for debugging
+          console.log("Full products data:", JSON.stringify(weeklyProducts));
+        } catch (error) {
+          console.error("Error loading weekly products:", error);
+        } finally {
+          setIsRefreshing(false);
+          setInitialLoadDone(true);
+        }
       }
     };
     
     loadData();
-  }, [refreshData]); // Include refreshData to ensure proper dependency
+  }, [refreshData, weeklyProducts.length, initialLoadDone]);
   
   const isLoadingData = isLoading || isRefreshing;
 

@@ -16,6 +16,7 @@ import { Loader2 } from "lucide-react";
 export default function ClientUpdates() {
   const { updates, refreshData, isLoading } = useData();
   const [isRefreshing, setIsRefreshing] = useState(true);
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
   
   // Only show published updates to clients
   const publishedUpdates = updates.filter(update => update.is_published);
@@ -23,20 +24,34 @@ export default function ClientUpdates() {
   // Load updates when component mounts
   useEffect(() => {
     const loadData = async () => {
-      setIsRefreshing(true);
-      try {
-        await refreshData();
-        console.log("Updates loaded:", updates.length, "total updates");
-        console.log("Published updates:", publishedUpdates.length);
-      } catch (error) {
-        console.error("Error loading updates:", error);
-      } finally {
-        setIsRefreshing(false);
+      if (!initialLoadDone) {
+        setIsRefreshing(true);
+        console.log("Loading updates data...");
+        
+        try {
+          await refreshData();
+          console.log("Updates data loaded successfully");
+          console.log("Total updates:", updates.length);
+          console.log("Published updates:", publishedUpdates.length);
+          console.log("Published update IDs:", publishedUpdates.map(u => u.id));
+          
+          // Check if any updates are marked as published
+          const anyPublished = updates.some(u => u.is_published === true);
+          console.log("Any updates marked as published:", anyPublished);
+          
+          // Log full update data for debugging
+          console.log("Full updates data:", JSON.stringify(updates));
+        } catch (error) {
+          console.error("Error loading updates:", error);
+        } finally {
+          setIsRefreshing(false);
+          setInitialLoadDone(true);
+        }
       }
     };
     
     loadData();
-  }, [refreshData]); // Include refreshData to ensure proper dependency
+  }, [refreshData, updates.length, initialLoadDone]);
 
   const isLoadingData = isLoading || isRefreshing;
 
