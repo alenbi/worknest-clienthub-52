@@ -34,7 +34,7 @@ export default function ClientUpdates() {
     };
     
     loadData();
-  }, [refreshData]);
+  }, []);  // Remove refreshData from dependencies to prevent infinite loop
 
   const isLoadingData = isLoading || isRefreshing;
 
