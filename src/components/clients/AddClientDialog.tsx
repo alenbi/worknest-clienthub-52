@@ -106,36 +106,48 @@ export function AddClientDialog() {
 
   async function onSubmit(data: ClientFormValues) {
     try {
-      // First, create the auth user account
-      console.log("Creating auth user account for:", data.email);
-      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-        email: data.email,
-        password: data.password,
-        email_confirm: true, // Auto-confirm email so client can log in immediately
-      });
+      console.log("Creating client account for:", data.email);
       
-      if (authError) {
-        console.error("Error creating auth user:", authError);
-        throw new Error(authError.message || "Failed to create user account");
+      // Get the current auth user (should be the admin)
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        throw new Error("You must be logged in as an admin to add clients");
       }
       
-      if (!authData.user) {
-        throw new Error("User account creation failed");
+      // Use the create_client_user function to create the auth user
+      console.log("Using create_client_user function");
+      const { data: newUserId, error: functionError } = await supabase.rpc(
+        'create_client_user',
+        {
+          admin_user_id: user.id,
+          client_email: data.email,
+          client_password: data.password
+        }
+      );
+      
+      if (functionError) {
+        console.error("Error from create_client_user:", functionError);
+        throw new Error(functionError.message || "Failed to create client user account");
       }
       
-      console.log("Auth user created successfully:", authData.user.id);
+      if (!newUserId) {
+        throw new Error("User creation failed - no user ID returned");
+      }
       
-      // Then create the client record linked to the auth user
+      console.log("Client auth user created successfully:", newUserId);
+      
+      // Create the client record linked to the auth user
       const clientData = {
         name: data.name,
         email: data.email,
         phone: data.phone || undefined,
         company: data.company || undefined,
         domain: data.domain || undefined,
-        user_id: authData.user.id // Link client to auth user
+        user_id: newUserId // Link client to auth user
       };
       
-      const newClient = await addClient!(clientData);
+      const newClient = await addClient(clientData);
       
       if (newClient && newClient.id) {
         // Create default tasks for the new client
