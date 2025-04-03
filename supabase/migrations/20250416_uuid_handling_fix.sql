@@ -19,11 +19,11 @@ DECLARE
   result JSON;
 BEGIN
   -- Very strict validation for admin_id
-  IF admin_id IS NULL THEN
-    RAISE EXCEPTION 'Admin ID cannot be null';
+  IF admin_id IS NULL OR admin_id::TEXT = '' THEN
+    RAISE EXCEPTION 'Admin ID cannot be null or empty';
   END IF;
   
-  -- Try to convert to string and back to ensure it's a valid UUID
+  -- Convert to text and back to ensure it's a valid UUID
   BEGIN
     admin_id := admin_id::TEXT::UUID;
   EXCEPTION WHEN OTHERS THEN

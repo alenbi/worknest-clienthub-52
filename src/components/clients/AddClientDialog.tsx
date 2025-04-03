@@ -119,30 +119,23 @@ export function AddClientDialog() {
       
       if (sessionError) {
         console.error("Session error:", sessionError);
-        throw new Error("Session error: " + sessionError.message);
+        throw new Error("Authentication error: " + sessionError.message);
       }
       
-      if (!sessionData?.session?.user?.id) {
-        console.error("No valid session found");
-        throw new Error("No valid user session found");
+      if (!sessionData?.session?.user) {
+        console.error("No session user found");
+        throw new Error("You must be logged in to create clients");
       }
       
       const userId = sessionData.session.user.id;
       
-      if (!isValidUUID(userId)) {
-        console.error("Invalid UUID format:", userId);
-        throw new Error("Invalid user ID format");
+      if (!userId || !isValidUUID(userId)) {
+        console.error("Invalid user ID format:", userId);
+        toast.error("Authentication error: Invalid user ID");
+        return;
       }
       
-      console.log("Admin ID from session (validated UUID format):", userId);
-      
-      console.log("Session object:", JSON.stringify({
-        user: {
-          id: sessionData.session.user.id,
-          email: sessionData.session.user.email
-        },
-        session_id: sessionData.session.access_token ? "[token exists]" : "[no token]"
-      }));
+      console.log("Admin ID from session (UUID validated):", userId);
       
       const params = {
         admin_id: userId,
@@ -154,7 +147,7 @@ export function AddClientDialog() {
         client_domain: data.domain || null
       };
       
-      console.log("Calling RPC with admin_id:", userId);
+      console.log("Calling RPC with validated admin_id:", userId);
       
       try {
         const { data: result, error } = await supabase.rpc(
