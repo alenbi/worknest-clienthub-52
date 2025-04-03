@@ -57,7 +57,7 @@ const ClientProtectedRoute = () => {
   }
 
   // Only allow access if authenticated and has client role
-  if (!isAuthenticated || !isClient) {
+  if (!isClient) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-4">
         <Alert variant="destructive" className="max-w-md mb-4">

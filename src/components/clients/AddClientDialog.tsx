@@ -115,9 +115,9 @@ export function AddClientDialog() {
         data.name,
         data.email,
         data.password,
-        data.company,
-        data.phone,
-        data.domain
+        data.company || undefined,
+        data.phone || undefined,
+        data.domain || undefined
       );
       
       console.log("Client created successfully:", result);
