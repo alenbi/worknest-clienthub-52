@@ -117,8 +117,11 @@ export function AddClientDialog() {
       
       // Use the create_client_user function to create the auth user
       console.log("Using create_client_user function");
+      
+      // Use any type to bypass TypeScript checking for the RPC function
+      // that TypeScript doesn't know about yet
       const { data: newUserId, error: functionError } = await supabase.rpc(
-        'create_client_user',
+        'create_client_user' as any,
         {
           admin_user_id: user.id,
           client_email: data.email,
@@ -144,7 +147,8 @@ export function AddClientDialog() {
         phone: data.phone || undefined,
         company: data.company || undefined,
         domain: data.domain || undefined,
-        user_id: newUserId // Link client to auth user
+        // Explicitly cast newUserId to string to fix the type error
+        user_id: newUserId as string
       };
       
       const newClient = await addClient(clientData);
