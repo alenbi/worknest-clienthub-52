@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -110,27 +109,11 @@ export function AddClientDialog() {
       setIsSubmitting(true);
       console.log("Creating client with auth access for:", data.email);
       
-      // First, check if email already exists
-      const emailCheckResult = await supabase.rpc('check_email_exists', { 
-        email_to_check: data.email 
-      });
-      
-      if (emailCheckResult.error) {
-        console.error("Error checking email:", emailCheckResult.error);
-        throw new Error("Error verifying email availability");
-      }
-      
-      if (emailCheckResult.data === true) {
-        throw new Error("A user with this email already exists");
-      }
-      
-      // Get the current user's ID (admin)
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         throw new Error("You must be logged in to create a client");
       }
       
-      // Call the Supabase function to create a client with auth
       const { data: result, error } = await supabase.rpc('admin_create_client_with_auth', {
         admin_id: user.id,
         client_name: data.name,
@@ -148,11 +131,9 @@ export function AddClientDialog() {
       
       console.log("Client created successfully:", result);
       
-      if (result) {
-        // Parse the JSON result if needed
-        const clientData = typeof result === 'string' ? JSON.parse(result) : result;
-        
-        // Add client to local state for UI updates
+      const clientData = result;
+      
+      if (clientData) {
         await addClient({
           id: clientData.client_id,
           name: data.name,
@@ -163,14 +144,12 @@ export function AddClientDialog() {
           user_id: clientData.user_id
         });
         
-        // Create default tasks for the new client
         await createDefaultTasks(clientData.client_id, data.name);
         toast.success("Client added successfully with login credentials and default tasks");
       } else {
         toast.success("Client added successfully");
       }
       
-      // Reset the form and close the dialog
       form.reset();
       setOpen(false);
     } catch (error: any) {
