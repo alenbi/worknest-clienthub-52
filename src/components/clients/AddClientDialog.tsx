@@ -16,7 +16,6 @@ import { UserPlus, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/auth-context";
-import { v4 as uuidv4, validate as isValidUuid } from 'uuid';
 
 export function AddClientDialog() {
   const [open, setOpen] = useState(false);
@@ -47,37 +46,32 @@ export function AddClientDialog() {
       
       // Check if we have a valid admin user
       if (!user) {
-        console.error("Admin user not found");
         toast.error("Admin authentication failed: Please log in again");
         return;
       }
       
-      // Validate admin ID
-      if (!user.id) {
-        console.error("Admin ID is missing");
-        toast.error("Admin authorization failed: Missing admin ID");
-        return;
-      }
-      
-      console.log("Admin ID for client creation:", user.id);
+      console.log("Creating client for email:", email);
       
       // Generate a secure random password if not provided
       const finalPassword = password || Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10);
       
-      // First approach - create client directly with auth user using supabase.auth
-      // This uses the Supabase auth API to create a user, which guarantees a valid UUID
-      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+      // First approach - Directly use supabase auth signup (most reliable)
+      const { data: signupData, error: signupError } = await supabase.auth.admin.createUser({
         email: email,
         password: finalPassword,
         email_confirm: true,
         user_metadata: { role: 'client', name: name }
       });
       
-      if (authError) {
-        // If admin API fails (requires service role), fall back to RPC function
-        console.log("Falling back to RPC function after auth API error:", authError.message);
+      if (signupError) {
+        console.log("Auth API failed, falling back to RPC:", signupError.message);
         
-        // Use the RPC function to create both auth user and client record
+        // Fallback - Use the RPC function
+        if (!user.id) {
+          toast.error("Admin ID is missing, cannot create client");
+          return;
+        }
+        
         const { data, error } = await supabase.rpc('admin_create_client_with_auth', {
           admin_id: user.id,
           client_name: name,
@@ -89,18 +83,16 @@ export function AddClientDialog() {
         });
         
         if (error) {
-          console.error("Error creating client with auth:", error);
+          console.error("Error creating client with RPC:", error);
           throw new Error(`Failed to create client: ${error.message}`);
         }
         
         console.log("Client created successfully with RPC:", data);
-        
         toast.success(`Client ${name} added successfully`);
       } else {
-        // Auth API succeeded, now create the client record
-        console.log("Auth user created successfully:", authData.user);
+        // Auth signup succeeded, now create the client record
+        console.log("Auth user created successfully:", signupData.user);
         
-        // Now create the client record
         const { data: clientData, error: clientError } = await supabase
           .from('clients')
           .insert({
@@ -109,7 +101,7 @@ export function AddClientDialog() {
             company: company || null,
             phone: phone || null,
             domain: domain || null,
-            user_id: authData.user.id
+            user_id: signupData.user.id
           })
           .select()
           .single();
