@@ -110,6 +110,20 @@ export function AddClientDialog() {
       setIsSubmitting(true);
       console.log("Creating client with auth access for:", data.email);
       
+      // First, check if email already exists
+      const emailCheckResult = await supabase.rpc('check_email_exists', { 
+        email_to_check: data.email 
+      });
+      
+      if (emailCheckResult.error) {
+        console.error("Error checking email:", emailCheckResult.error);
+        throw new Error("Error verifying email availability");
+      }
+      
+      if (emailCheckResult.data === true) {
+        throw new Error("A user with this email already exists");
+      }
+      
       // Get the current user's ID (admin)
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
