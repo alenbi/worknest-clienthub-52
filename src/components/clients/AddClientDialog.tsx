@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -46,6 +45,7 @@ export function AddClientDialog() {
   const [open, setOpen] = useState(false);
   const { addClient, addTask } = useData();
   const [creationStage, setCreationStage] = useState("init");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<ClientFormValues>({
     resolver: zodResolver(clientFormSchema),
@@ -109,6 +109,7 @@ export function AddClientDialog() {
 
   async function onSubmit(data: ClientFormValues) {
     try {
+      setIsSubmitting(true);
       setCreationStage("starting");
       if (DEBUG_CLIENT_CREATION) console.log("Creating client account for:", data.email);
       
@@ -135,6 +136,16 @@ export function AddClientDialog() {
       
       if (existingUsers && existingUsers.length > 0) {
         throw new Error("A client with this email already exists");
+      }
+      
+      setCreationStage("checking-auth-user");
+      const { error: authCheckError } = await supabase.rpc(
+        'check_email_exists',
+        { email_to_check: data.email }
+      );
+      
+      if (authCheckError && !authCheckError.message.includes('does not exist')) {
+        console.warn("Error checking if auth user exists:", authCheckError);
       }
       
       setCreationStage("using-rpc-function");
@@ -200,42 +211,15 @@ export function AddClientDialog() {
         toast.success("Client added successfully");
       }
       
-      // Test direct login with the created user credentials
-      if (DEBUG_CLIENT_CREATION) {
-        console.log("Testing login with the new client credentials");
-        setCreationStage("testing-client-login");
-        try {
-          // Sign out admin first (only for debugging purposes)
-          if (DEBUG_CLIENT_CREATION) {
-            console.log("Note: Skipping admin sign out in test login to maintain session");
-          }
-          
-          // Try login test - don't actually sign out the admin 
-          const { data: testData, error: testError } = await supabase.auth.signInWithPassword({
-            email: data.email,
-            password: data.password
-          });
-          
-          if (testError) {
-            console.error("Test login failed:", testError);
-            setCreationStage("test-login-failed");
-          } else {
-            console.log("Test login successful:", testData.user?.email);
-            setCreationStage("test-login-successful");
-            // Don't actually sign in as the client
-          }
-        } catch (testErr) {
-          console.error("Error during test login:", testErr);
-          setCreationStage("test-login-error");
-        }
-      }
-      
+      // Reset the form and close the dialog
       setCreationStage("completed");
       form.reset();
       setOpen(false);
     } catch (error: any) {
       console.error("Error adding client:", error);
       toast.error(error.message || "Failed to add client");
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
@@ -348,11 +332,12 @@ export function AddClientDialog() {
             {DEBUG_CLIENT_CREATION && (
               <div className="text-xs text-muted-foreground">
                 <p>Creation stage: {creationStage}</p>
+                <p>Submitting: {isSubmitting ? 'Yes' : 'No'}</p>
               </div>
             )}
             <DialogFooter>
-              <Button type="submit" disabled={form.formState.isSubmitting}>
-                {form.formState.isSubmitting ? "Adding..." : "Add Client"}
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? "Adding..." : "Add Client"}
               </Button>
             </DialogFooter>
           </form>
