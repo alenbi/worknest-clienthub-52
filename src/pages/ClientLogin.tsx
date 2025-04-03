@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useClientAuth } from "@/contexts/client-auth-context";
 import { Button } from "@/components/ui/button";
@@ -177,8 +176,22 @@ const ClientLogin = () => {
     } catch (error: any) {
       console.error("Client login error:", error);
       setLoginStage("login-failed");
-      setError(error?.message || "Failed to sign in");
-      toast.error(error?.message || "Failed to sign in");
+      
+      // Provide more user-friendly error messages
+      let errorMessage = "Failed to sign in";
+      
+      if (error?.message) {
+        if (error.message.includes("Invalid login credentials")) {
+          errorMessage = "Invalid email or password";
+        } else if (error.message.includes("Email not confirmed")) {
+          errorMessage = "Your email is not confirmed. Please check your inbox for confirmation instructions.";
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
+      setError(errorMessage);
+      toast.error(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
