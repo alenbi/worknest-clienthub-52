@@ -29,6 +29,9 @@ interface AuthContextType {
   isAdmin: boolean;
 }
 
+// The only admin email allowed
+const ADMIN_EMAIL = 'support@digitalshopi.in';
+
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
@@ -42,7 +45,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   // Function to check if a user is an admin - strictly check for the specific admin email
   const checkAdminRole = (user: User): boolean => {
     console.log("Checking admin role for email:", user.email);
-    return user.email === 'support@digitalshopi.in';
+    return user.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase();
   };
 
   const updateUserWithProfile = async (currentUser: User) => {
@@ -188,7 +191,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setIsLoading(true);
       
       // Validate that this is the admin email before proceeding
-      if (email.toLowerCase() !== 'support@digitalshopi.in') {
+      if (email.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
         throw new Error("This email is not authorized for admin access");
       }
       
@@ -232,7 +235,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setIsLoading(true);
       
       // Only allow registering the admin email
-      if (email.toLowerCase() !== 'support@digitalshopi.in') {
+      if (email.toLowerCase() !== ADMIN_EMAIL.toLowerCase()) {
         throw new Error("Only the administrator account can be registered here");
       }
       

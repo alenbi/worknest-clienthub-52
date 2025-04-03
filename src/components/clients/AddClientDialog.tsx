@@ -44,12 +44,18 @@ export function AddClientDialog() {
     
     try {
       setIsSubmitting(true);
-      console.log("Creating client with auth user");
       
-      // Ensure we have a valid admin UUID
-      if (!user?.id || !isValidUuid(user.id)) {
-        console.error("Invalid admin ID:", user?.id);
-        toast.error("Admin authorization failed: Invalid admin ID");
+      // Check if we have a valid admin user
+      if (!user) {
+        console.error("Admin user not found");
+        toast.error("Admin authentication failed: Please log in again");
+        return;
+      }
+      
+      // Validate admin ID
+      if (!user.id) {
+        console.error("Admin ID is missing");
+        toast.error("Admin authorization failed: Missing admin ID");
         return;
       }
       
@@ -58,25 +64,64 @@ export function AddClientDialog() {
       // Generate a secure random password if not provided
       const finalPassword = password || Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10);
       
-      // Use the RPC function to create both auth user and client record
-      const { data, error } = await supabase.rpc('admin_create_client_with_auth', {
-        admin_id: user.id,
-        client_name: name,
-        client_email: email,
-        client_password: finalPassword,
-        client_company: company || null,
-        client_phone: phone || null,
-        client_domain: domain || null
+      // First approach - create client directly with auth user using supabase.auth
+      // This uses the Supabase auth API to create a user, which guarantees a valid UUID
+      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+        email: email,
+        password: finalPassword,
+        email_confirm: true,
+        user_metadata: { role: 'client', name: name }
       });
       
-      if (error) {
-        console.error("Error creating client with auth:", error);
-        throw new Error(`Failed to create client: ${error.message}`);
+      if (authError) {
+        // If admin API fails (requires service role), fall back to RPC function
+        console.log("Falling back to RPC function after auth API error:", authError.message);
+        
+        // Use the RPC function to create both auth user and client record
+        const { data, error } = await supabase.rpc('admin_create_client_with_auth', {
+          admin_id: user.id,
+          client_name: name,
+          client_email: email,
+          client_password: finalPassword,
+          client_company: company || null,
+          client_phone: phone || null,
+          client_domain: domain || null
+        });
+        
+        if (error) {
+          console.error("Error creating client with auth:", error);
+          throw new Error(`Failed to create client: ${error.message}`);
+        }
+        
+        console.log("Client created successfully with RPC:", data);
+        
+        toast.success(`Client ${name} added successfully`);
+      } else {
+        // Auth API succeeded, now create the client record
+        console.log("Auth user created successfully:", authData.user);
+        
+        // Now create the client record
+        const { data: clientData, error: clientError } = await supabase
+          .from('clients')
+          .insert({
+            name: name,
+            email: email,
+            company: company || null,
+            phone: phone || null,
+            domain: domain || null,
+            user_id: authData.user.id
+          })
+          .select()
+          .single();
+        
+        if (clientError) {
+          console.error("Error creating client record:", clientError);
+          toast.error(`Created auth user but failed to create client record: ${clientError.message}`);
+        } else {
+          console.log("Client record created successfully:", clientData);
+          toast.success(`Client ${name} added successfully`);
+        }
       }
-      
-      console.log("Client created successfully:", data);
-      
-      toast.success(`Client ${name} added successfully`);
       
       // Only show password notification if it was auto-generated
       if (!password) {
