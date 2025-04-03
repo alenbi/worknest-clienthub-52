@@ -109,15 +109,13 @@ export function AddClientDialog() {
   };
 
   // Function to check if an email exists in auth.users using our RPC function
-  // Using type assertion to work around TypeScript checking
   const checkEmailExists = async (email: string): Promise<boolean> => {
     try {
       // Use type assertion to bypass TypeScript checking since our function
       // is not in the Database types yet
-      const { data, error } = await (supabase.rpc as any)(
-        'check_email_exists',
-        { email_to_check: email }
-      );
+      const { data, error } = await supabase.rpc('check_email_exists', { 
+        email_to_check: email.trim().toLowerCase() 
+      });
       
       if (error) {
         console.warn("Error checking if email exists:", error);
@@ -151,7 +149,7 @@ export function AddClientDialog() {
       const { data: existingUsers, error: checkError } = await supabase
         .from('clients')
         .select('email')
-        .eq('email', data.email)
+        .eq('email', data.email.trim().toLowerCase())
         .limit(1);
         
       if (checkError) {
@@ -163,7 +161,6 @@ export function AddClientDialog() {
       }
       
       // Check if the email exists in auth.users table
-      // This is optional, we'll continue even if this check fails
       setCreationStage("checking-auth-user");
       const emailExists = await checkEmailExists(data.email);
       
@@ -176,69 +173,74 @@ export function AddClientDialog() {
       // Use the create_client_user function to create the auth user
       if (DEBUG_CLIENT_CREATION) console.log("Using create_client_user function with params:", {
         admin_user_id: user.id,
-        client_email: data.email,
+        client_email: data.email.trim().toLowerCase(),
         password_length: data.password.length
       });
       
       // Call our RPC function to create the client user
-      const { data: newUserId, error: functionError } = await supabase.rpc(
-        'create_client_user',
-        {
-          admin_user_id: user.id,
-          client_email: data.email,
-          client_password: data.password
+      try {
+        const { data: newUserId, error: functionError } = await supabase.rpc(
+          'create_client_user',
+          {
+            admin_user_id: user.id,
+            client_email: data.email.trim().toLowerCase(),
+            client_password: data.password
+          }
+        );
+        
+        if (functionError) {
+          console.error("Error from create_client_user:", functionError);
+          setCreationStage("rpc-function-error");
+          throw new Error(functionError.message || "Failed to create client user account");
         }
-      );
-      
-      if (functionError) {
-        console.error("Error from create_client_user:", functionError);
-        setCreationStage("rpc-function-error");
-        throw new Error(functionError.message || "Failed to create client user account");
+        
+        if (!newUserId) {
+          throw new Error("User creation failed - no user ID returned");
+        }
+        
+        setCreationStage("auth-user-created");
+        if (DEBUG_CLIENT_CREATION) {
+          console.log("Client auth user created successfully with ID:", newUserId);
+          console.log("Now creating client record in clients table...");
+        }
+        
+        // Create the client record linked to the auth user
+        const clientData = {
+          name: data.name,
+          email: data.email.trim().toLowerCase(),
+          phone: data.phone || undefined,
+          company: data.company || undefined,
+          domain: data.domain || undefined,
+          // Link to the auth user ID
+          user_id: newUserId
+        };
+        
+        if (DEBUG_CLIENT_CREATION) {
+          console.log("Creating client record with data:", clientData);
+        }
+        
+        setCreationStage("creating-client-record");
+        const newClient = await addClient(clientData);
+        
+        setCreationStage("client-record-created");
+        if (newClient && newClient.id) {
+          // Create default tasks for the new client
+          if (DEBUG_CLIENT_CREATION) console.log("Client created, now creating default tasks");
+          setCreationStage("creating-default-tasks");
+          await createDefaultTasks(newClient.id, newClient.name);
+          toast.success("Client added successfully with default tasks");
+        } else {
+          toast.success("Client added successfully");
+        }
+        
+        // Reset the form and close the dialog
+        setCreationStage("completed");
+        form.reset();
+        setOpen(false);
+      } catch (error) {
+        console.error("Error creating client user with RPC:", error);
+        throw new Error("Failed to create client user account. Please try again.");
       }
-      
-      if (!newUserId) {
-        throw new Error("User creation failed - no user ID returned");
-      }
-      
-      setCreationStage("auth-user-created");
-      if (DEBUG_CLIENT_CREATION) {
-        console.log("Client auth user created successfully with ID:", newUserId);
-        console.log("Now creating client record in clients table...");
-      }
-      
-      // Create the client record linked to the auth user
-      const clientData = {
-        name: data.name,
-        email: data.email,
-        phone: data.phone || undefined,
-        company: data.company || undefined,
-        domain: data.domain || undefined,
-        // Link to the auth user ID
-        user_id: newUserId
-      };
-      
-      if (DEBUG_CLIENT_CREATION) {
-        console.log("Creating client record with data:", clientData);
-      }
-      
-      setCreationStage("creating-client-record");
-      const newClient = await addClient(clientData);
-      
-      setCreationStage("client-record-created");
-      if (newClient && newClient.id) {
-        // Create default tasks for the new client
-        if (DEBUG_CLIENT_CREATION) console.log("Client created, now creating default tasks");
-        setCreationStage("creating-default-tasks");
-        await createDefaultTasks(newClient.id, newClient.name);
-        toast.success("Client added successfully with default tasks");
-      } else {
-        toast.success("Client added successfully");
-      }
-      
-      // Reset the form and close the dialog
-      setCreationStage("completed");
-      form.reset();
-      setOpen(false);
     } catch (error: any) {
       console.error("Error adding client:", error);
       toast.error(error.message || "Failed to add client");

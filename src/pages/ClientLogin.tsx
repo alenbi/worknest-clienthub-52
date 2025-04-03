@@ -123,6 +123,7 @@ const ClientLogin = () => {
           }
         } else {
           console.warn("No client record found for email:", email);
+          throw new Error("No client account found with this email. Please contact support.");
         }
       }
       
@@ -141,7 +142,6 @@ const ClientLogin = () => {
         // Try to get more info about the user to help debug
         if (DEBUG_AUTH) {
           // Check if user exists in auth.users despite login failure
-          // Use proper promise handling for the RPC call
           try {
             // Only admins can check if email exists, so this will likely fail for regular users
             const { data: userExists } = await supabase.rpc('check_email_exists', { 
@@ -202,6 +202,8 @@ const ClientLogin = () => {
           errorMessage = "Invalid email or password. Note that passwords are case-sensitive.";
         } else if (error.message.includes("Email not confirmed")) {
           errorMessage = "Your email is not confirmed. Please check your inbox for confirmation instructions.";
+        } else if (error.message.includes("No client account found")) {
+          errorMessage = "No client account found with this email. Please contact support.";
         } else {
           errorMessage = error.message;
         }
