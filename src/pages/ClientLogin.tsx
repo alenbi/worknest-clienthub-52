@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useClientAuth } from "@/contexts/client-auth-context";
 import { Button } from "@/components/ui/button";
@@ -9,6 +8,8 @@ import { Link, Navigate, useSearchParams, useNavigate } from "react-router-dom";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+
+const DEBUG_AUTH = true;
 
 const ClientLogin = () => {
   const { login, isAuthenticated, isLoading, isClient } = useClientAuth();
@@ -22,12 +23,11 @@ const ClientLogin = () => {
   const [sessionChecked, setSessionChecked] = useState(false);
   const navigate = useNavigate();
 
-  // Check for existing session on load
   useEffect(() => {
     const checkExistingSession = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        console.log("ClientLogin - Session check:", !!session);
+        if (DEBUG_AUTH) console.log("ClientLogin - Session check:", !!session, session?.user?.email);
         setSessionChecked(true);
       } catch (err) {
         console.error("Error checking session:", err);
@@ -38,7 +38,6 @@ const ClientLogin = () => {
     checkExistingSession();
   }, []);
 
-  // Check for email in URL params (when redirected from admin login)
   useEffect(() => {
     const emailParam = searchParams.get('email');
     if (emailParam) {
@@ -48,20 +47,20 @@ const ClientLogin = () => {
     }
   }, [searchParams]);
 
-  // Log auth state changes for debugging
   useEffect(() => {
-    console.log("ClientLogin auth state:", { 
-      isAuthenticated, 
-      isClient, 
-      isLoading, 
-      sessionChecked,
-      timestamp: new Date().toISOString() 
-    });
+    if (DEBUG_AUTH) {
+      console.log("ClientLogin auth state:", { 
+        isAuthenticated, 
+        isClient, 
+        isLoading, 
+        sessionChecked,
+        timestamp: new Date().toISOString() 
+      });
+    }
   }, [isAuthenticated, isClient, isLoading, sessionChecked]);
 
-  // Redirect if already authenticated as client
   if (sessionChecked && isAuthenticated && isClient && !isLoading) {
-    console.log("Already authenticated as client, redirecting to dashboard");
+    if (DEBUG_AUTH) console.log("Already authenticated as client, redirecting to dashboard");
     return <Navigate to="/client/dashboard" replace />;
   }
 
@@ -77,15 +76,15 @@ const ClientLogin = () => {
       setError("");
       setIsSubmitting(true);
       
-      // Block admin email from logging in through client portal
       if (email.toLowerCase() === 'support@digitalshopi.in') {
         throw new Error("Admin users should use the admin login");
       }
       
+      if (DEBUG_AUTH) console.log(`Attempting to login with email: ${email} and password length: ${password.length}`);
+      
       await login(email, password);
       
-      // Success notification already handled in the login function
-      // Force navigation to dashboard after successful login
+      if (DEBUG_AUTH) console.log("Login successful, forcing navigation to dashboard");
       navigate("/client/dashboard", { replace: true });
     } catch (error: any) {
       console.error("Client login error:", error);

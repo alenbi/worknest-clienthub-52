@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,6 +27,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { TaskStatus, TaskPriority } from "@/lib/models";
 import { supabase } from "@/integrations/supabase/client";
+
+const DEBUG_CLIENT_CREATION = true;
 
 const clientFormSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -106,7 +107,7 @@ export function AddClientDialog() {
 
   async function onSubmit(data: ClientFormValues) {
     try {
-      console.log("Creating client account for:", data.email);
+      if (DEBUG_CLIENT_CREATION) console.log("Creating client account for:", data.email);
       
       // Get the current auth user (should be the admin)
       const { data: { user } } = await supabase.auth.getUser();
@@ -115,8 +116,14 @@ export function AddClientDialog() {
         throw new Error("You must be logged in as an admin to add clients");
       }
       
+      if (DEBUG_CLIENT_CREATION) console.log("Admin user creating client:", user.id, user.email);
+      
       // Use the create_client_user function to create the auth user
-      console.log("Using create_client_user function");
+      if (DEBUG_CLIENT_CREATION) console.log("Using create_client_user function with params:", {
+        admin_user_id: user.id,
+        client_email: data.email,
+        password_length: data.password.length
+      });
       
       // Use any type to bypass TypeScript checking for the RPC function
       // that TypeScript doesn't know about yet
@@ -138,7 +145,7 @@ export function AddClientDialog() {
         throw new Error("User creation failed - no user ID returned");
       }
       
-      console.log("Client auth user created successfully:", newUserId);
+      if (DEBUG_CLIENT_CREATION) console.log("Client auth user created successfully:", newUserId);
       
       // Create the client record linked to the auth user
       const clientData = {
@@ -151,10 +158,13 @@ export function AddClientDialog() {
         user_id: newUserId as string
       };
       
+      if (DEBUG_CLIENT_CREATION) console.log("Creating client record with data:", clientData);
+      
       const newClient = await addClient(clientData);
       
       if (newClient && newClient.id) {
         // Create default tasks for the new client
+        if (DEBUG_CLIENT_CREATION) console.log("Client created, now creating default tasks");
         await createDefaultTasks(newClient.id, newClient.name);
         toast.success("Client added successfully with default tasks");
       } else {

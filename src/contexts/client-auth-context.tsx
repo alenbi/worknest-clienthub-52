@@ -5,6 +5,9 @@ import { Session, User } from "@supabase/supabase-js";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 
+// Enable debug logging for troubleshooting authentication issues
+const DEBUG_AUTH = true;
+
 // Extended User interface to include profile data
 interface ClientUserWithProfile {
   id: string;
@@ -44,14 +47,21 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
     if (currentUser.email === 'support@digitalshopi.in') return false;
     
     try {
+      if (DEBUG_AUTH) console.log("Checking client role for user:", currentUser.id, currentUser.email);
+      
       const { data, error } = await supabase.rpc('is_client', { user_id: currentUser.id });
       if (error) {
         console.error("Error checking client role:", error);
+        // Fallback to email check if RPC function fails
+        if (DEBUG_AUTH) console.log("Falling back to email check for client role");
         return currentUser.email !== 'support@digitalshopi.in';
       }
+      
+      if (DEBUG_AUTH) console.log("is_client function returned:", data);
       return !!data;
     } catch (error) {
       console.error("Failed to check client role:", error);
+      // Fallback to email check
       return currentUser.email !== 'support@digitalshopi.in';
     }
   };
@@ -108,18 +118,18 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
   };
 
   useEffect(() => {
-    console.log("ClientAuthProvider mounted");
+    if (DEBUG_AUTH) console.log("ClientAuthProvider mounted");
     let mounted = true;
     let authTimeout: NodeJS.Timeout;
     
     const initializeAuth = async () => {
       try {
-        console.log("Initializing client auth context...");
+        if (DEBUG_AUTH) console.log("Initializing client auth context...");
         
         // First set up the onAuthStateChange listener
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
           async (event, currentSession) => {
-            console.log("Client auth state changed:", event, "with session:", !!currentSession);
+            if (DEBUG_AUTH) console.log("Client auth state changed:", event, "with session:", !!currentSession);
             
             if (!mounted) return;
             
@@ -127,10 +137,10 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
               setSession(null);
               setUser(null);
               setIsClient(false);
-              console.log("User signed out, cleared auth state");
+              if (DEBUG_AUTH) console.log("User signed out, cleared auth state");
             } 
             else if (currentSession?.user) {
-              console.log("Session detected in auth change event");
+              if (DEBUG_AUTH) console.log("Session detected in auth change event for user:", currentSession.user.email);
               
               // Use setTimeout to prevent deadlocks
               setTimeout(async () => {
@@ -140,13 +150,13 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
                   const isUserClient = await checkClientRole(currentSession.user);
                   
                   if (isUserClient) {
-                    console.log("Client user authenticated");
+                    if (DEBUG_AUTH) console.log("Client user authenticated:", currentSession.user.email);
                     setSession(currentSession);
                     const enhancedUser = await updateUserWithClientData(currentSession.user);
                     setUser(enhancedUser);
                     setIsClient(true);
                   } else {
-                    console.log("Admin user detected, clearing client auth state");
+                    if (DEBUG_AUTH) console.log("Admin user detected, clearing client auth state");
                     setSession(null);
                     setUser(null);
                     setIsClient(false);
@@ -173,20 +183,21 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
         }
         
         const currentSession = data.session;
-        console.log("Current client session check:", !!currentSession);
+        if (DEBUG_AUTH) console.log("Current client session check:", !!currentSession);
         
         if (currentSession?.user && mounted) {
           try {
+            if (DEBUG_AUTH) console.log("Found existing session for user:", currentSession.user.email);
             const isUserClient = await checkClientRole(currentSession.user);
             
             if (isUserClient) {
-              console.log("Client user session found");
+              if (DEBUG_AUTH) console.log("Client user session found:", currentSession.user.email);
               setSession(currentSession);
               const enhancedUser = await updateUserWithClientData(currentSession.user);
               setUser(enhancedUser);
               setIsClient(true);
             } else {
-              console.log("Admin session found in client context, clearing");
+              if (DEBUG_AUTH) console.log("Admin session found in client context, clearing");
               setSession(null);
               setUser(null);
               setIsClient(false);
@@ -195,7 +206,7 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
             console.error("Error processing existing session:", error);
           }
         } else {
-          console.log("No valid client session found");
+          if (DEBUG_AUTH) console.log("No valid client session found");
         }
         
         // Add shorter timeout as a safety measure
@@ -208,7 +219,7 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
         
         if (mounted) {
           setIsLoading(false);
-          console.log("Client auth initialization complete");
+          if (DEBUG_AUTH) console.log("Client auth initialization complete");
         }
 
         return subscription;
@@ -227,7 +238,7 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
     const subscription = initializeAuth();
     
     return () => {
-      console.log("ClientAuthProvider unmounting");
+      if (DEBUG_AUTH) console.log("ClientAuthProvider unmounting");
       mounted = false;
       if (authTimeout) clearTimeout(authTimeout);
       subscription.then(sub => {
@@ -237,7 +248,7 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
   }, []);
 
   const login = async (email: string, password: string) => {
-    console.log("Client login function called with email:", email);
+    if (DEBUG_AUTH) console.log("Client login function called with email:", email);
     try {
       setIsLoading(true);
       
@@ -246,16 +257,22 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
         throw new Error("Admin users should use the admin login");
       }
       
+      // Log the credentials being used (but mask the password for security)
+      if (DEBUG_AUTH) console.log(`Attempting to sign in with email: ${email}, password length: ${password?.length || 0}`);
+      
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
       if (error) {
+        if (DEBUG_AUTH) console.error("Sign in error:", error);
         throw error;
       }
 
       if (data.session) {
+        if (DEBUG_AUTH) console.log("Sign in successful, session created for user:", data.user.email);
+        
         // Double check this is not the admin
         const isUserClient = await checkClientRole(data.user);
         
@@ -273,6 +290,7 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
         toast.success("Successfully signed in!");
         navigate("/client/dashboard");
       } else {
+        if (DEBUG_AUTH) console.error("No session returned after successful sign in");
         throw new Error("Failed to authenticate");
       }
     } catch (error: any) {
