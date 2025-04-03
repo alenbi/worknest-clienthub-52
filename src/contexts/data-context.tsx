@@ -21,7 +21,6 @@ import {
 } from '@/lib/firebase-utils';
 import { testFirebaseConnection } from '@/lib/firebase-chat-utils';
 
-// Re-export the types so they can be imported from data-context
 export type { Resource, Video, Offer, Client, Task, Update, WeeklyProduct, ProductLink, WeeklyProductWithLinks, ProductFormData };
 export { TaskStatus, TaskPriority };
 
@@ -31,52 +30,44 @@ interface DataContextType {
   isAdmin: boolean;
   isLoading: boolean;
   
-  // Resources
   resources: Resource[];
   createResource: (resource: Partial<Resource>) => Promise<void>;
   updateResource: (id: string, resource: Partial<Resource>) => Promise<void>;
   deleteResource: (id: string) => Promise<void>;
   
-  // Videos
   videos: Video[];
   createVideo: (video: Partial<Video>) => Promise<void>;
   updateVideo: (id: string, video: Partial<Video>) => Promise<void>;
   deleteVideo: (id: string) => Promise<void>;
   
-  // Offers
   offers: Offer[];
   createOffer: (offer: Partial<Offer>) => Promise<void>;
   updateOffer: (id: string, offer: Partial<Offer>) => Promise<void>;
   deleteOffer: (id: string) => Promise<void>;
   
-  // Clients
   clients: Client[];
-  addClient: (client: Partial<Client>) => Promise<void>;
+  addClient: (client: Partial<Client>) => Promise<Client>;
   updateClient: (id: string, client: Partial<Client>) => Promise<void>;
   deleteClient: (id: string) => Promise<void>;
   updateClientPassword: (clientId: string, newPassword: string) => Promise<void>;
   
-  // Tasks
   tasks: Task[];
   addTask: (task: Partial<Task>) => Promise<void>;
   updateTask: (id: string, task: Partial<Task>) => Promise<void>;
   deleteTask: (id: string) => Promise<void>;
   
-  // Updates
   updates: Update[];
   createUpdate: (update: Partial<Update>) => Promise<void>;
   updateUpdate: (id: string, update: Partial<Update>) => Promise<void>;
   deleteUpdate: (id: string) => Promise<void>;
   toggleUpdatePublished: (id: string, isPublished: boolean) => Promise<void>;
   
-  // Weekly Products
   weeklyProducts: WeeklyProductWithLinks[];
   createWeeklyProduct: (product: ProductFormData) => Promise<void>;
   updateWeeklyProduct: (id: string, product: ProductFormData) => Promise<void>;
   deleteWeeklyProduct: (id: string) => Promise<void>;
   toggleProductPublished: (id: string, isPublished: boolean) => Promise<void>;
   
-  // Data management
   refreshData: () => Promise<void>;
 }
 
@@ -456,17 +447,19 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         throw new Error('Name and email are required');
       }
       
-      const { error } = await supabase.from('clients').insert({
+      const { data, error } = await supabase.from('clients').insert({
         name: client.name,
         email: client.email,
         phone: client.phone || '',
         company: client.company || '',
         domain: client.domain || '',
         avatar: client.avatar
-      });
+      }).select().single();
       
       if (error) throw error;
+      
       await fetchClients();
+      return data;
     } catch (error) {
       console.error('Error adding client:', error);
       throw error;

@@ -26,6 +26,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { TaskStatus, TaskPriority } from "@/lib/models";
 
 const clientFormSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -40,7 +41,7 @@ type ClientFormValues = z.infer<typeof clientFormSchema>;
 
 export function AddClientDialog() {
   const [open, setOpen] = useState(false);
-  const { addClient } = useData();
+  const { addClient, addTask } = useData();
 
   const form = useForm<ClientFormValues>({
     resolver: zodResolver(clientFormSchema),
@@ -54,6 +55,54 @@ export function AddClientDialog() {
     },
   });
 
+  const createDefaultTasks = async (clientId: string, clientName: string) => {
+    const today = new Date();
+    const oneWeekLater = new Date(today);
+    oneWeekLater.setDate(today.getDate() + 7);
+    
+    const oneMonthLater = new Date(today);
+    oneMonthLater.setMonth(today.getMonth() + 1);
+    
+    const defaultTasks = [
+      {
+        title: "Initial onboarding call",
+        description: `Schedule a welcome call with ${clientName}`,
+        due_date: new Date(today.setDate(today.getDate() + 2)).toISOString(),
+        priority: TaskPriority.HIGH,
+        status: TaskStatus.TODO,
+        client_id: clientId
+      },
+      {
+        title: "Client website review",
+        description: `Complete a review of ${clientName}'s existing website`,
+        due_date: oneWeekLater.toISOString(),
+        priority: TaskPriority.MEDIUM,
+        status: TaskStatus.TODO,
+        client_id: clientId
+      },
+      {
+        title: "Develop marketing strategy",
+        description: `Create a marketing plan for ${clientName}`,
+        due_date: oneMonthLater.toISOString(),
+        priority: TaskPriority.MEDIUM,
+        status: TaskStatus.TODO,
+        client_id: clientId
+      }
+    ];
+    
+    console.log("Creating default tasks for client:", clientId);
+    
+    try {
+      for (const task of defaultTasks) {
+        await addTask(task);
+      }
+      console.log("Default tasks created successfully");
+    } catch (error) {
+      console.error("Error creating default tasks:", error);
+      toast.error("Failed to create default tasks");
+    }
+  };
+
   async function onSubmit(data: ClientFormValues) {
     try {
       // Convert form data to match Client type requirements
@@ -66,8 +115,16 @@ export function AddClientDialog() {
         password: data.password
       };
       
-      await addClient!(clientData);
-      toast.success("Client added successfully");
+      const newClient = await addClient!(clientData);
+      
+      if (newClient && newClient.id) {
+        // Create default tasks for the new client
+        await createDefaultTasks(newClient.id, newClient.name);
+        toast.success("Client added successfully with default tasks");
+      } else {
+        toast.success("Client added successfully");
+      }
+      
       form.reset();
       setOpen(false);
     } catch (error: any) {
