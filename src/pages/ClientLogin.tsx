@@ -141,14 +141,17 @@ const ClientLogin = () => {
         // Try to get more info about the user to help debug
         if (DEBUG_AUTH) {
           // Check if user exists in auth.users despite login failure
-          const { data: userExists } = await supabase.rpc('check_email_exists', { 
-            email_to_check: email.trim().toLowerCase() 
-          }).catch(err => {
+          // Use proper promise handling for the RPC call
+          try {
+            // Only admins can check if email exists, so this will likely fail for regular users
+            const { data: userExists } = await supabase.rpc('check_email_exists', { 
+              email_to_check: email.trim().toLowerCase() 
+            });
+            
+            console.log(`User exists check for ${email}: ${userExists ? 'Yes' : 'No'}`);
+          } catch (err) {
             console.log("Error checking if email exists:", err);
-            return { data: null };
-          });
-          
-          console.log(`User exists check for ${email}: ${userExists ? 'Yes' : 'No'}`);
+          }
         }
         
         throw directAuthError;
