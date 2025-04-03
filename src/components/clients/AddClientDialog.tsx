@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -107,6 +108,29 @@ export function AddClientDialog() {
     }
   };
 
+  // Function to check if an email exists in auth.users using our RPC function
+  // Using type assertion to work around TypeScript checking
+  const checkEmailExists = async (email: string): Promise<boolean> => {
+    try {
+      // Use type assertion to bypass TypeScript checking since our function
+      // is not in the Database types yet
+      const { data, error } = await (supabase.rpc as any)(
+        'check_email_exists',
+        { email_to_check: email }
+      );
+      
+      if (error) {
+        console.warn("Error checking if email exists:", error);
+        return false;
+      }
+      
+      return !!data;
+    } catch (error) {
+      console.error("Error in checkEmailExists:", error);
+      return false;
+    }
+  };
+
   async function onSubmit(data: ClientFormValues) {
     try {
       setIsSubmitting(true);
@@ -138,14 +162,14 @@ export function AddClientDialog() {
         throw new Error("A client with this email already exists");
       }
       
+      // Check if the email exists in auth.users table
+      // This is optional, we'll continue even if this check fails
       setCreationStage("checking-auth-user");
-      const { error: authCheckError } = await supabase.rpc(
-        'check_email_exists',
-        { email_to_check: data.email }
-      );
+      const emailExists = await checkEmailExists(data.email);
       
-      if (authCheckError && !authCheckError.message.includes('does not exist')) {
-        console.warn("Error checking if auth user exists:", authCheckError);
+      if (emailExists) {
+        console.warn("Email already exists in auth.users table");
+        throw new Error("An account with this email already exists");
       }
       
       setCreationStage("using-rpc-function");
