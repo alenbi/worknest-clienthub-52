@@ -10,6 +10,7 @@ import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
+// Set to true to enable detailed authentication debugging
 const DEBUG_AUTH = true;
 
 const ClientLogin = () => {
@@ -23,10 +24,12 @@ const ClientLogin = () => {
   const [isRedirected, setIsRedirected] = useState(false);
   const [sessionChecked, setSessionChecked] = useState(false);
   const navigate = useNavigate();
+  const [loginStage, setLoginStage] = useState("init");
 
   useEffect(() => {
     const checkExistingSession = async () => {
       try {
+        setLoginStage("checking-session");
         const { data: { session } } = await supabase.auth.getSession();
         if (DEBUG_AUTH) {
           console.log("ClientLogin - Session check:", !!session);
@@ -40,9 +43,11 @@ const ClientLogin = () => {
           }
         }
         setSessionChecked(true);
+        setLoginStage("session-checked");
       } catch (err) {
         console.error("Error checking session:", err);
         setSessionChecked(true);
+        setLoginStage("session-check-error");
       }
     };
     
@@ -65,10 +70,11 @@ const ClientLogin = () => {
         isClient, 
         isLoading, 
         sessionChecked,
+        loginStage,
         timestamp: new Date().toISOString() 
       });
     }
-  }, [isAuthenticated, isClient, isLoading, sessionChecked]);
+  }, [isAuthenticated, isClient, isLoading, sessionChecked, loginStage]);
 
   if (sessionChecked && isAuthenticated && isClient && !isLoading) {
     if (DEBUG_AUTH) console.log("Already authenticated as client, redirecting to dashboard");
@@ -86,6 +92,7 @@ const ClientLogin = () => {
     try {
       setError("");
       setIsSubmitting(true);
+      setLoginStage("login-started");
       
       if (email.toLowerCase() === 'support@digitalshopi.in') {
         throw new Error("Admin users should use the admin login");
@@ -97,6 +104,31 @@ const ClientLogin = () => {
         console.log(`Password provided with length: ${password.length}`);
       }
       
+      // First, try to find the client record to verify this email exists as a client
+      const { data: clientData, error: clientError } = await supabase
+        .from('clients')
+        .select('id, name, user_id, email')
+        .eq('email', email)
+        .maybeSingle();
+      
+      if (clientError) {
+        console.error("Error checking client record:", clientError);
+      }
+      
+      if (DEBUG_AUTH) {
+        if (clientData) {
+          console.log("Found client record:", clientData);
+          if (!clientData.user_id) {
+            console.warn("Client has no linked user_id yet, this may cause issues");
+          }
+        } else {
+          console.warn("No client record found for email:", email);
+          // We don't throw an error here to prevent email enumeration
+        }
+      }
+      
+      setLoginStage("attempting-direct-auth");
+      
       // Try to login directly with Supabase first to check if credentials are valid
       const { data: directAuthData, error: directAuthError } = await supabase.auth.signInWithPassword({
         email,
@@ -105,20 +137,46 @@ const ClientLogin = () => {
       
       if (directAuthError) {
         console.error("Direct Supabase auth error:", directAuthError);
+        setLoginStage("direct-auth-failed");
         throw directAuthError;
       }
       
       if (directAuthData.user) {
-        if (DEBUG_AUTH) console.log("Direct Supabase auth successful:", directAuthData.user.email);
+        if (DEBUG_AUTH) {
+          console.log("Direct Supabase auth successful:", directAuthData.user.email);
+          console.log("User metadata:", directAuthData.user.user_metadata);
+          console.log("User role:", directAuthData.user.app_metadata?.role);
+        }
+        
+        setLoginStage("direct-auth-success");
+        
+        // If the client record exists but has no user_id, update it now
+        if (clientData && !clientData.user_id) {
+          if (DEBUG_AUTH) console.log("Updating client record with user_id:", directAuthData.user.id);
+          
+          const { error: updateError } = await supabase
+            .from('clients')
+            .update({ user_id: directAuthData.user.id })
+            .eq('id', clientData.id);
+            
+          if (updateError) {
+            console.error("Error updating client user_id:", updateError);
+          }
+        }
       }
+      
+      setLoginStage("attempting-custom-login");
       
       // Now use our custom login function which handles client role verification
       await login(email, password);
+      
+      setLoginStage("login-successful");
       
       if (DEBUG_AUTH) console.log("Login successful, forcing navigation to dashboard");
       navigate("/client/dashboard", { replace: true });
     } catch (error: any) {
       console.error("Client login error:", error);
+      setLoginStage("login-failed");
       setError(error?.message || "Failed to sign in");
       toast.error(error?.message || "Failed to sign in");
     } finally {
@@ -198,6 +256,12 @@ const ClientLogin = () => {
                 </Button>
               </div>
             </div>
+            {DEBUG_AUTH && (
+              <div className="text-xs text-muted-foreground">
+                <p>Stage: {loginStage}</p>
+                <p>Auth state: {isAuthenticated ? 'Authenticated' : 'Not authenticated'} | Client: {isClient ? 'Yes' : 'No'}</p>
+              </div>
+            )}
           </CardContent>
           <CardFooter className="flex flex-col space-y-4">
             <Button 

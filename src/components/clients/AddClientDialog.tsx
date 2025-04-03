@@ -45,6 +45,7 @@ type ClientFormValues = z.infer<typeof clientFormSchema>;
 export function AddClientDialog() {
   const [open, setOpen] = useState(false);
   const { addClient, addTask } = useData();
+  const [creationStage, setCreationStage] = useState("init");
 
   const form = useForm<ClientFormValues>({
     resolver: zodResolver(clientFormSchema),
@@ -108,6 +109,7 @@ export function AddClientDialog() {
 
   async function onSubmit(data: ClientFormValues) {
     try {
+      setCreationStage("starting");
       if (DEBUG_CLIENT_CREATION) console.log("Creating client account for:", data.email);
       
       // Get the current auth user (should be the admin)
@@ -117,6 +119,7 @@ export function AddClientDialog() {
         throw new Error("You must be logged in as an admin to add clients");
       }
       
+      setCreationStage("admin-verified");
       if (DEBUG_CLIENT_CREATION) console.log("Admin user creating client:", user.id, user.email);
       
       // First check if a user with this email already exists
@@ -134,6 +137,7 @@ export function AddClientDialog() {
         throw new Error("A client with this email already exists");
       }
       
+      setCreationStage("using-rpc-function");
       // Use the create_client_user function to create the auth user
       if (DEBUG_CLIENT_CREATION) console.log("Using create_client_user function with params:", {
         admin_user_id: user.id,
@@ -153,6 +157,7 @@ export function AddClientDialog() {
       
       if (functionError) {
         console.error("Error from create_client_user:", functionError);
+        setCreationStage("rpc-function-error");
         throw new Error(functionError.message || "Failed to create client user account");
       }
       
@@ -160,6 +165,7 @@ export function AddClientDialog() {
         throw new Error("User creation failed - no user ID returned");
       }
       
+      setCreationStage("auth-user-created");
       if (DEBUG_CLIENT_CREATION) {
         console.log("Client auth user created successfully with ID:", newUserId);
         console.log("Now creating client record in clients table...");
@@ -180,11 +186,14 @@ export function AddClientDialog() {
         console.log("Creating client record with data:", clientData);
       }
       
+      setCreationStage("creating-client-record");
       const newClient = await addClient(clientData);
       
+      setCreationStage("client-record-created");
       if (newClient && newClient.id) {
         // Create default tasks for the new client
         if (DEBUG_CLIENT_CREATION) console.log("Client created, now creating default tasks");
+        setCreationStage("creating-default-tasks");
         await createDefaultTasks(newClient.id, newClient.name);
         toast.success("Client added successfully with default tasks");
       } else {
@@ -194,11 +203,14 @@ export function AddClientDialog() {
       // Test direct login with the created user credentials
       if (DEBUG_CLIENT_CREATION) {
         console.log("Testing login with the new client credentials");
+        setCreationStage("testing-client-login");
         try {
-          // Sign out admin first
-          await supabase.auth.signOut();
+          // Sign out admin first (only for debugging purposes)
+          if (DEBUG_CLIENT_CREATION) {
+            console.log("Note: Skipping admin sign out in test login to maintain session");
+          }
           
-          // Try logging in with the new client credentials
+          // Try login test - don't actually sign out the admin 
           const { data: testData, error: testError } = await supabase.auth.signInWithPassword({
             email: data.email,
             password: data.password
@@ -206,17 +218,19 @@ export function AddClientDialog() {
           
           if (testError) {
             console.error("Test login failed:", testError);
+            setCreationStage("test-login-failed");
           } else {
             console.log("Test login successful:", testData.user?.email);
-            // Sign out test user and sign back in as admin
-            await supabase.auth.signOut();
-            // Note: admin will need to sign back in manually
+            setCreationStage("test-login-successful");
+            // Don't actually sign in as the client
           }
         } catch (testErr) {
           console.error("Error during test login:", testErr);
+          setCreationStage("test-login-error");
         }
       }
       
+      setCreationStage("completed");
       form.reset();
       setOpen(false);
     } catch (error: any) {
@@ -331,6 +345,11 @@ export function AddClientDialog() {
                 </FormItem>
               )}
             />
+            {DEBUG_CLIENT_CREATION && (
+              <div className="text-xs text-muted-foreground">
+                <p>Creation stage: {creationStage}</p>
+              </div>
+            )}
             <DialogFooter>
               <Button type="submit" disabled={form.formState.isSubmitting}>
                 {form.formState.isSubmitting ? "Adding..." : "Add Client"}
