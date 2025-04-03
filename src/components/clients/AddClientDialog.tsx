@@ -128,14 +128,21 @@ export function AddClientDialog() {
       }
       
       const userId = sessionData.session.user.id;
+      console.log("Got user ID from session:", userId);
       
-      if (!userId || !isValidUUID(userId)) {
-        console.error("Invalid user ID format:", userId);
-        toast.error("Authentication error: Invalid user ID");
+      if (!userId) {
+        console.error("User ID is empty or undefined");
+        toast.error("Authentication error: Missing user ID");
         return;
       }
       
-      console.log("Admin ID from session (UUID validated):", userId);
+      if (!isValidUUID(userId)) {
+        console.error("Invalid UUID format for user ID:", userId);
+        toast.error("Authentication error: Invalid user ID format");
+        return;
+      }
+      
+      console.log("Admin ID from session (valid UUID):", userId);
       
       const params = {
         admin_id: userId,
@@ -147,7 +154,10 @@ export function AddClientDialog() {
         client_domain: data.domain || null
       };
       
-      console.log("Calling RPC with validated admin_id:", userId);
+      console.log("Calling RPC with parameters:", JSON.stringify({
+        ...params,
+        client_password: "[REDACTED]"
+      }));
       
       try {
         const { data: result, error } = await supabase.rpc(
@@ -160,23 +170,26 @@ export function AddClientDialog() {
           throw new Error(error.message || "Failed to create client");
         }
         
-        console.log("RPC success:", result);
+        console.log("RPC success, result:", result);
         
         if (!result) {
           throw new Error("No result returned from client creation");
         }
         
-        if (typeof result !== 'object') {
-          console.error("Invalid result type:", typeof result, result);
+        let clientId: string | undefined;
+        let newUserId: string | undefined;
+        
+        if (typeof result === 'object' && result !== null) {
+          clientId = (result as any).client_id;
+          newUserId = (result as any).user_id;
+          
+          if (!clientId || !newUserId) {
+            console.error("Missing IDs in result:", result);
+            throw new Error("Invalid response: missing client_id or user_id");
+          }
+        } else {
+          console.error("Unexpected result format:", result, typeof result);
           throw new Error("Invalid response format");
-        }
-        
-        const clientId = result.client_id;
-        const newUserId = result.user_id;
-        
-        if (!clientId || !newUserId) {
-          console.error("Missing IDs in result:", result);
-          throw new Error("Invalid response: missing client_id or user_id");
         }
         
         await addClient({

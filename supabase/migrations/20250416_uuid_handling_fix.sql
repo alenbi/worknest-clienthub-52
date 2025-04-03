@@ -18,14 +18,15 @@ DECLARE
   new_client_id UUID;
   result JSON;
 BEGIN
-  -- Very strict validation for admin_id
-  IF admin_id IS NULL OR admin_id::TEXT = '' THEN
-    RAISE EXCEPTION 'Admin ID cannot be null or empty';
+  -- Check for null or empty UUID before any other operation
+  IF admin_id IS NULL OR admin_id = '00000000-0000-0000-0000-000000000000' THEN
+    RAISE EXCEPTION 'Invalid admin ID: cannot be null or empty UUID';
   END IF;
   
-  -- Convert to text and back to ensure it's a valid UUID
+  -- Try to convert to validate UUID format
   BEGIN
-    admin_id := admin_id::TEXT::UUID;
+    -- This will raise an exception if the UUID is invalid
+    PERFORM admin_id::UUID;
   EXCEPTION WHEN OTHERS THEN
     RAISE EXCEPTION 'Invalid UUID format for admin_id: %', admin_id;
   END;
