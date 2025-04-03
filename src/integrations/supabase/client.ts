@@ -112,12 +112,17 @@ export async function updateRequestStatus(requestId: string, status: string) {
 
 // Improved function to check if email already exists as client
 export async function checkEmailExists(email: string): Promise<boolean> {
+  if (!email) return false;
+  
   try {
+    const standardEmail = email.trim().toLowerCase();
+    console.log("Checking if email exists:", standardEmail);
+    
     // First check in clients table
     const { data: clients, error: clientError } = await supabase
       .from('clients')
       .select('id')
-      .eq('email', email.trim().toLowerCase())
+      .eq('email', standardEmail)
       .limit(1);
       
     if (clientError) {
@@ -125,9 +130,29 @@ export async function checkEmailExists(email: string): Promise<boolean> {
     }
     
     if (clients && clients.length > 0) {
+      console.log("Email exists in clients table:", standardEmail);
       return true;
     }
     
+    // Also check in auth.users via RPC (since we can't query auth.users directly)
+    try {
+      const { data: authCheck, error: authCheckError } = await supabase
+        .rpc('check_email_exists', { email_to_check: standardEmail });
+        
+      if (authCheckError) {
+        console.error("Error checking auth email:", authCheckError);
+      }
+      
+      if (authCheck === true) {
+        console.log("Email exists in auth.users table:", standardEmail);
+        return true;
+      }
+    } catch (err) {
+      console.error("RPC check_email_exists failed:", err);
+      // Continue even if this check fails
+    }
+    
+    console.log("Email does not exist:", standardEmail);
     return false;
   } catch (error) {
     console.error("Error checking if email exists:", error);
@@ -138,6 +163,10 @@ export async function checkEmailExists(email: string): Promise<boolean> {
 // Enhanced function to create a client with an authentication user in one operation
 export async function createClientWithAuth(name: string, email: string, password: string, company?: string, phone?: string, domain?: string) {
   try {
+    if (!email || !password) {
+      throw new Error("Email and password are required");
+    }
+    
     console.log("Creating client with auth for:", email);
     
     // First, standardize the email
@@ -149,7 +178,7 @@ export async function createClientWithAuth(name: string, email: string, password
       throw new Error("A client with this email already exists");
     }
     
-    console.log("Email check passed, proceeding with client creation");
+    console.log("Email check passed, proceeding with auth user creation");
     
     // Create auth user first
     const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -157,7 +186,8 @@ export async function createClientWithAuth(name: string, email: string, password
       password,
       options: {
         data: {
-          role: 'client'
+          role: 'client',
+          name
         }
       }
     });
@@ -198,6 +228,84 @@ export async function createClientWithAuth(name: string, email: string, password
     return { client: clientData, user_id: userId };
   } catch (error) {
     console.error("Failed to create client with auth:", error);
+    throw error;
+  }
+}
+
+// Get client by email - useful for login flows
+export async function getClientByEmail(email: string) {
+  if (!email) return null;
+  
+  try {
+    const standardEmail = email.trim().toLowerCase();
+    console.log("Getting client by email:", standardEmail);
+    
+    const { data, error } = await supabase
+      .from('clients')
+      .select('*')
+      .eq('email', standardEmail)
+      .maybeSingle();
+      
+    if (error) {
+      console.error("Error getting client by email:", error);
+      throw error;
+    }
+    
+    return data;
+  } catch (error) {
+    console.error("Failed to get client by email:", error);
+    throw error;
+  }
+}
+
+// Link existing auth user to client record if needed
+export async function linkAuthUserToClient(userId: string, email: string) {
+  if (!userId || !email) return null;
+  
+  try {
+    const standardEmail = email.trim().toLowerCase();
+    console.log("Linking auth user to client:", userId, standardEmail);
+    
+    // Find client by email
+    const { data: client, error: clientError } = await supabase
+      .from('clients')
+      .select('*')
+      .eq('email', standardEmail)
+      .maybeSingle();
+      
+    if (clientError) {
+      console.error("Error finding client by email:", clientError);
+      throw clientError;
+    }
+    
+    if (!client) {
+      console.error("No client found with email:", standardEmail);
+      return null;
+    }
+    
+    // Update client with user_id if not already set
+    if (!client.user_id) {
+      console.log("Updating client with user_id:", userId);
+      
+      const { data: updatedClient, error: updateError } = await supabase
+        .from('clients')
+        .update({ user_id: userId })
+        .eq('id', client.id)
+        .select('*')
+        .single();
+        
+      if (updateError) {
+        console.error("Error updating client with user_id:", updateError);
+        throw updateError;
+      }
+      
+      console.log("Client updated successfully:", updatedClient);
+      return updatedClient;
+    }
+    
+    return client;
+  } catch (error) {
+    console.error("Failed to link auth user to client:", error);
     throw error;
   }
 }

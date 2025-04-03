@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Link, Navigate, useSearchParams, useNavigate } from "react-router-dom";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase, getClientByEmail, linkAuthUserToClient } from "@/integrations/supabase/client";
 
 // Set to true to enable detailed authentication debugging
 const DEBUG_AUTH = true;
@@ -82,75 +82,48 @@ const ClientLogin = () => {
         throw new Error("Admin users should use the admin login");
       }
       
-      // First, try to find the client record to verify this email exists as a client
-      const { data: clientData, error: clientError } = await supabase
-        .from('clients')
-        .select('id, name, user_id, email')
-        .eq('email', standardizedEmail)
-        .maybeSingle();
+      // First, check if a client record exists with this email
+      const clientRecord = await getClientByEmail(standardizedEmail);
       
-      if (clientError) {
-        console.error("Error checking client record:", clientError);
-      }
-      
-      if (!clientData) {
+      if (!clientRecord) {
         throw new Error("No client account found with this email. Please contact support.");
       }
-
+      
       if (DEBUG_AUTH) {
-        console.log("Found client record:", clientData);
+        console.log("Found client record:", clientRecord);
       }
 
       // Try to login with Supabase
-      try {
-        // Try to login directly with Supabase
-        const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-          email: standardizedEmail,
-          password
-        });
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email: standardizedEmail,
+        password
+      });
+      
+      if (authError) {
+        console.error("Supabase auth error:", authError);
         
-        if (authError) {
-          console.error("Supabase auth error:", authError);
-          
-          // Handle specific error cases
-          if (authError.message.includes("Invalid login credentials")) {
-            throw new Error("Invalid email or password. Please try again.");
-          }
-          
-          throw authError;
-        }
-        
-        if (!authData.user) {
-          throw new Error("Login failed - no user returned");
-        }
-        
-        // If the client record exists but has no user_id, update it now
-        if (clientData && !clientData.user_id) {
-          console.log("Updating client record with user_id:", authData.user.id);
-          
-          const { error: updateError } = await supabase
-            .from('clients')
-            .update({ user_id: authData.user.id })
-            .eq('id', clientData.id);
-            
-          if (updateError) {
-            console.error("Error updating client user_id:", updateError);
-          }
-        }
-        
-        // Now use our custom login function which handles client role verification
-        await login(standardizedEmail, password);
-        
-        // Force navigation to dashboard after successful login
-        navigate("/client/dashboard", { replace: true });
-      } catch (authError: any) {
-        // Re-throw auth errors with better context
+        // Handle specific error cases
         if (authError.message.includes("Invalid login credentials")) {
           throw new Error("Invalid email or password. Please try again.");
         }
         
         throw authError;
       }
+      
+      if (!authData.user) {
+        throw new Error("Login failed - no user returned");
+      }
+      
+      // Check if client record needs to be linked to auth user
+      if (!clientRecord.user_id || clientRecord.user_id !== authData.user.id) {
+        await linkAuthUserToClient(authData.user.id, standardizedEmail);
+      }
+      
+      // Now use our custom login function
+      await login(standardizedEmail, password);
+      
+      // Force navigation to dashboard after successful login
+      navigate("/client/dashboard", { replace: true });
     } catch (error: any) {
       console.error("Client login error:", error);
       
