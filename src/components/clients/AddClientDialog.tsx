@@ -55,65 +55,24 @@ export function AddClientDialog() {
       // Generate a secure random password if not provided
       const finalPassword = password || Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10);
       
-      // First approach - Directly use supabase auth signup (most reliable)
-      const { data: signupData, error: signupError } = await supabase.auth.admin.createUser({
-        email: email,
-        password: finalPassword,
-        email_confirm: true,
-        user_metadata: { role: 'client', name: name }
+      // Use our new admin_create_client_with_auth RPC function
+      const { data, error } = await supabase.rpc('admin_create_client_with_auth', {
+        admin_id: user.id,
+        client_name: name,
+        client_email: email,
+        client_password: finalPassword,
+        client_company: company || null,
+        client_phone: phone || null,
+        client_domain: domain || null
       });
       
-      if (signupError) {
-        console.log("Auth API failed, falling back to RPC:", signupError.message);
-        
-        // Fallback - Use the RPC function
-        if (!user.id) {
-          toast.error("Admin ID is missing, cannot create client");
-          return;
-        }
-        
-        const { data, error } = await supabase.rpc('admin_create_client_with_auth', {
-          admin_id: user.id,
-          client_name: name,
-          client_email: email,
-          client_password: finalPassword,
-          client_company: company || null,
-          client_phone: phone || null,
-          client_domain: domain || null
-        });
-        
-        if (error) {
-          console.error("Error creating client with RPC:", error);
-          throw new Error(`Failed to create client: ${error.message}`);
-        }
-        
-        console.log("Client created successfully with RPC:", data);
-        toast.success(`Client ${name} added successfully`);
-      } else {
-        // Auth signup succeeded, now create the client record
-        console.log("Auth user created successfully:", signupData.user);
-        
-        const { data: clientData, error: clientError } = await supabase
-          .from('clients')
-          .insert({
-            name: name,
-            email: email,
-            company: company || null,
-            phone: phone || null,
-            domain: domain || null,
-            user_id: signupData.user.id
-          })
-          .select()
-          .single();
-        
-        if (clientError) {
-          console.error("Error creating client record:", clientError);
-          toast.error(`Created auth user but failed to create client record: ${clientError.message}`);
-        } else {
-          console.log("Client record created successfully:", clientData);
-          toast.success(`Client ${name} added successfully`);
-        }
+      if (error) {
+        console.error("Error creating client:", error);
+        throw new Error(`Failed to create client: ${error.message}`);
       }
+      
+      console.log("Client created successfully:", data);
+      toast.success(`Client ${name} added successfully`);
       
       // Only show password notification if it was auto-generated
       if (!password) {
