@@ -1,5 +1,4 @@
 
-
 -- Recreate admin_create_client_with_auth function with explicit UUID generation and proper return
 CREATE OR REPLACE FUNCTION public.admin_create_client_with_auth(
   admin_id UUID,
@@ -19,6 +18,11 @@ DECLARE
   new_client_id UUID;
   result JSON;
 BEGIN
+  -- Check if admin_id is null or invalid
+  IF admin_id IS NULL THEN
+    RAISE EXCEPTION 'Admin ID cannot be null';
+  END IF;
+  
   -- Check if admin user is actually an admin
   IF NOT public.is_admin(admin_id) THEN
     RAISE EXCEPTION 'Only admin users can create client accounts';
@@ -33,60 +37,74 @@ BEGIN
   new_user_id := gen_random_uuid();
   
   -- Create the auth user with confirmed email
-  INSERT INTO auth.users (
-    id,
-    email,
-    raw_user_meta_data,
-    raw_app_meta_data,
-    encrypted_password,
-    email_confirmed_at,
-    created_at,
-    updated_at
-  )
-  VALUES (
-    new_user_id,
-    client_email,
-    jsonb_build_object('name', client_name, 'role', 'client'),
-    jsonb_build_object('role', 'client'),
-    crypt(client_password, gen_salt('bf')),
-    NOW(),
-    NOW(),
-    NOW()
-  );
-  
-  -- Verify user was created
-  IF NOT EXISTS (SELECT 1 FROM auth.users WHERE id = new_user_id) THEN
-    RAISE EXCEPTION 'Failed to create auth user';
-  END IF;
+  BEGIN
+    INSERT INTO auth.users (
+      id,
+      email,
+      raw_user_meta_data,
+      raw_app_meta_data,
+      encrypted_password,
+      email_confirmed_at,
+      created_at,
+      updated_at
+    )
+    VALUES (
+      new_user_id,
+      client_email,
+      jsonb_build_object('name', client_name, 'role', 'client'),
+      jsonb_build_object('role', 'client'),
+      crypt(client_password, gen_salt('bf')),
+      NOW(),
+      NOW(),
+      NOW()
+    );
+  EXCEPTION WHEN OTHERS THEN
+    RAISE EXCEPTION 'Failed to create auth user: %', SQLERRM;
+  END;
   
   -- Create the client record linked to the auth user
-  INSERT INTO public.clients (
-    name,
-    email,
-    company,
-    phone,
-    domain,
-    user_id
-  )
-  VALUES (
-    client_name,
-    client_email,
-    client_company,
-    client_phone,
-    client_domain,
-    new_user_id
-  )
-  RETURNING id INTO new_client_id;
+  BEGIN
+    INSERT INTO public.clients (
+      name,
+      email,
+      company,
+      phone,
+      domain,
+      user_id
+    )
+    VALUES (
+      client_name,
+      client_email,
+      client_company,
+      client_phone,
+      client_domain,
+      new_user_id
+    )
+    RETURNING id INTO new_client_id;
+    
+    IF new_client_id IS NULL THEN
+      RAISE EXCEPTION 'Failed to create client record: returned ID is null';
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    RAISE EXCEPTION 'Failed to create client record: %', SQLERRM;
+  END;
   
-  -- Return all created data as JSON - Build using direct assignment to avoid any syntax errors
-  result := json_build_object(
-    'user_id', new_user_id,
-    'client_id', new_client_id,
-    'name', client_name,
-    'email', client_email
-  );
+  -- Return all created data as JSON
+  BEGIN
+    result := json_build_object(
+      'user_id', new_user_id,
+      'client_id', new_client_id,
+      'name', client_name,
+      'email', client_email
+    );
+    
+    IF result IS NULL THEN
+      RAISE EXCEPTION 'Failed to create result JSON';
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    RAISE EXCEPTION 'Failed to build result JSON: %', SQLERRM;
+  END;
   
   RETURN result;
 END;
 $$;
-

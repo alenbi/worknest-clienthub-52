@@ -110,7 +110,7 @@ export function AddClientDialog() {
       setIsSubmitting(true);
       console.log("Creating client with auth access for:", data.email);
       
-      // Get the current user and validate it properly
+      // Get the current user with robust validation
       const { data: authData, error: authError } = await supabase.auth.getUser();
       
       if (authError) {
@@ -119,31 +119,22 @@ export function AddClientDialog() {
       }
       
       if (!authData || !authData.user || !authData.user.id) {
-        console.error("No user found or user ID is missing");
-        throw new Error("You must be logged in to create a client");
+        console.error("No valid user data found:", authData);
+        throw new Error("You must be logged in with a valid admin account");
       }
       
       const adminId = authData.user.id;
       
-      // Validate UUID format
-      if (!adminId || adminId.trim() === "") {
-        console.error("Admin ID is empty or invalid");
-        throw new Error("Invalid admin ID");
+      // Extra validation to ensure UUID is valid
+      if (!adminId || typeof adminId !== 'string' || adminId.trim() === '') {
+        console.error("Invalid admin ID:", adminId);
+        throw new Error("Invalid admin ID format");
       }
       
-      console.log("Admin ID:", adminId);
-      console.log("Submitting data to admin_create_client_with_auth:", {
-        admin_id: adminId,
-        client_name: data.name,
-        client_email: data.email,
-        client_password: data.password,
-        client_company: data.company || null,
-        client_phone: data.phone || null,
-        client_domain: data.domain || null
-      });
+      console.log("Admin ID (validated):", adminId);
       
-      // Make the RPC call with validated admin ID
-      const { data: result, error } = await supabase.rpc('admin_create_client_with_auth', {
+      // Create a function parameters object to ensure all properties are properly passed
+      const params = {
         admin_id: adminId,
         client_name: data.name,
         client_email: data.email,
@@ -151,30 +142,42 @@ export function AddClientDialog() {
         client_company: data.company || null,
         client_phone: data.phone || null,
         client_domain: data.domain || null
-      });
+      };
+      
+      console.log("Calling RPC with parameters:", params);
+      
+      // Make the RPC call with validated parameters
+      const { data: result, error } = await supabase.rpc('admin_create_client_with_auth', params);
       
       if (error) {
         console.error("Error creating client with auth:", error);
         throw new Error(error.message || "Failed to create client");
       }
       
+      console.log("Raw RPC result:", result);
+      
       if (!result) {
         throw new Error("No result returned from client creation");
       }
       
-      console.log("Client created successfully, raw result:", result);
+      // Validate the result structure with detailed logging
+      if (typeof result !== 'object') {
+        console.error("Result is not an object:", result);
+        throw new Error("Invalid response format: not an object");
+      }
       
-      // Extract the values properly from the result
       const clientId = result.client_id;
       const userId = result.user_id;
       
+      console.log("Extracted clientId:", clientId, "type:", typeof clientId);
+      console.log("Extracted userId:", userId, "type:", typeof userId);
+      
       if (!clientId || !userId) {
-        console.error("Invalid result structure:", result);
-        throw new Error("Invalid response format from server");
+        console.error("Missing IDs in result:", result);
+        throw new Error("Invalid response: missing client_id or user_id");
       }
       
-      console.log("Extracted IDs - clientId:", clientId, "userId:", userId);
-      
+      // Add client to the context
       try {
         await addClient({
           id: clientId,
@@ -188,9 +191,9 @@ export function AddClientDialog() {
         
         await createDefaultTasks(clientId, data.name);
         toast.success("Client added successfully with login credentials and default tasks");
-      } catch (addError) {
+      } catch (addError: any) {
         console.error("Error after client creation:", addError);
-        toast.error("Client was created but there was an error setting up additional data");
+        toast.error("Client was created but there was an error setting up additional data: " + (addError.message || "Unknown error"));
       }
       
       form.reset();
