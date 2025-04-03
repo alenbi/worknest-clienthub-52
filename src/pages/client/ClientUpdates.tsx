@@ -11,7 +11,9 @@ import { Separator } from "@/components/ui/separator";
 import { format } from "date-fns";
 import { useData } from "@/contexts/data-context";
 import { Badge } from "@/components/ui/badge";
-import { Loader2 } from "lucide-react";
+import { Loader2, RefreshCw } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 
 export default function ClientUpdates() {
   const { updates, refreshData, isLoading } = useData();
@@ -20,6 +22,23 @@ export default function ClientUpdates() {
   
   // Only show published updates to clients
   const publishedUpdates = updates.filter(update => update.is_published);
+  
+  // Manually refresh data
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    toast.info("Refreshing updates...");
+    
+    try {
+      await refreshData();
+      toast.success("Updates refreshed successfully");
+      console.log("Updates refreshed: Found", publishedUpdates.length, "published updates");
+    } catch (error) {
+      console.error("Error refreshing updates:", error);
+      toast.error("Failed to refresh updates");
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
   
   // Load updates when component mounts
   useEffect(() => {
@@ -57,11 +76,22 @@ export default function ClientUpdates() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Updates</h1>
-        <p className="text-muted-foreground">
-          Stay informed with the latest news and updates
-        </p>
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Updates</h1>
+          <p className="text-muted-foreground">
+            Stay informed with the latest news and updates
+          </p>
+        </div>
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={handleRefresh} 
+          disabled={isLoadingData}
+        >
+          <RefreshCw className={`h-4 w-4 mr-2 ${isLoadingData ? 'animate-spin' : ''}`} />
+          Refresh
+        </Button>
       </div>
 
       {isLoadingData ? (

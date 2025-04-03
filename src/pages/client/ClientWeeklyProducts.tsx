@@ -12,8 +12,9 @@ import { Separator } from "@/components/ui/separator";
 import { useData } from "@/contexts/data-context";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { FileText, Link as LinkIcon, ExternalLink, Loader2 } from "lucide-react";
+import { FileText, Link as LinkIcon, ExternalLink, Loader2, RefreshCw } from "lucide-react";
 import { format } from "date-fns";
+import { toast } from "sonner";
 
 export default function ClientWeeklyProducts() {
   const { weeklyProducts, refreshData, isLoading } = useData();
@@ -22,6 +23,23 @@ export default function ClientWeeklyProducts() {
   
   // Only show published products to clients
   const publishedProducts = weeklyProducts.filter(product => product.is_published);
+  
+  // Manually refresh data
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    toast.info("Refreshing products...");
+    
+    try {
+      await refreshData();
+      toast.success("Products refreshed successfully");
+      console.log("Products refreshed: Found", publishedProducts.length, "published products");
+    } catch (error) {
+      console.error("Error refreshing products:", error);
+      toast.error("Failed to refresh products");
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
   
   // Load weekly products when component mounts
   useEffect(() => {
@@ -63,11 +81,22 @@ export default function ClientWeeklyProducts() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Weekly Products</h1>
-        <p className="text-muted-foreground">
-          Discover new products and resources for your project
-        </p>
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Weekly Products</h1>
+          <p className="text-muted-foreground">
+            Discover new products and resources for your project
+          </p>
+        </div>
+        <Button 
+          variant="outline" 
+          size="sm" 
+          onClick={handleRefresh} 
+          disabled={isLoadingData}
+        >
+          <RefreshCw className={`h-4 w-4 mr-2 ${isLoadingData ? 'animate-spin' : ''}`} />
+          Refresh
+        </Button>
       </div>
 
       {isLoadingData ? (
