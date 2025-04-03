@@ -144,6 +144,15 @@ export function AddClientDialog() {
       
       console.log("Admin ID from session (valid UUID):", userId);
       
+      const userEmail = sessionData.session.user.email;
+      console.log("Admin email from session:", userEmail);
+      
+      if (userEmail !== 'support@digitalshopi.in') {
+        console.error("User is not authorized admin:", userEmail);
+        toast.error("Only the administrator account can create clients");
+        return;
+      }
+      
       const params = {
         admin_id: userId,
         client_name: data.name,

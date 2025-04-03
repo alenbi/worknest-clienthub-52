@@ -1,11 +1,9 @@
-
 import { createContext, useContext, useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Session, User } from "@supabase/supabase-js";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 
-// Extended User interface to include profile data and role
 interface UserWithProfile {
   id: string;
   email?: string | null;
@@ -40,12 +38,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [isAdmin, setIsAdmin] = useState(false);
   const navigate = useNavigate();
 
-  // Function to check if user is admin
   const checkAdminRole = (user: User): boolean => {
     return user.email === 'support@digitalshopi.in';
   };
 
-  // Function to update the user with profile data
   const updateUserWithProfile = async (currentUser: User) => {
     if (!currentUser) return null;
 
@@ -57,7 +53,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       return null;
     }
     
-    // Fetch profile data from the database
     try {
       const { data: profile } = await supabase
         .from("profiles")
@@ -94,12 +89,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setIsLoading(true);
         console.log("Initializing admin auth context...");
         
-        // Check for existing session first
         const { data: { session: currentSession } } = await supabase.auth.getSession();
         console.log("Current session check:", currentSession ? "Session exists" : "No session");
         
         if (currentSession?.user) {
-          // Check if user is admin
           const isUserAdmin = checkAdminRole(currentSession.user);
           
           if (isUserAdmin) {
@@ -108,25 +101,21 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             setUser(enhancedUser);
             setIsAdmin(true);
           } else {
-            // Not admin - clear auth state in this context
             setSession(null);
             setUser(null);
             setIsAdmin(false);
           }
         } else {
-          // No session
           setSession(null);
           setUser(null);
           setIsAdmin(false);
         }
         
-        // Set up auth state listener after initial check
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
           async (event, currentSession) => {
             console.log("Admin auth state changed:", event);
             
             if (currentSession?.user) {
-              // Check if user is admin
               const isUserAdmin = checkAdminRole(currentSession.user);
               
               if (isUserAdmin) {
@@ -135,13 +124,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                 setUser(enhancedUser);
                 setIsAdmin(true);
               } else {
-                // Not admin - clear auth state in this context
                 setSession(null);
                 setUser(null);
                 setIsAdmin(false);
               }
             } else {
-              // No session
               setSession(null);
               setUser(null);
               setIsAdmin(false);
@@ -149,7 +136,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           }
         );
         
-        // Ensure we always complete loading regardless of what happens
         setIsLoading(false);
         setAuthInitialized(true);
         console.log("Admin auth initialization complete");
@@ -162,22 +148,21 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setUser(null);
         setSession(null);
         setIsAdmin(false);
-        setIsLoading(false); // Make sure to set this to false even on error
+        setIsLoading(false);
         setAuthInitialized(true);
       }
     };
 
     initializeAuth();
     
-    // Add timeout safety net to prevent infinite loading
     const timeoutId = setTimeout(() => {
       if (isLoading) {
         console.warn("Auth initialization timed out, forcing completion");
         setIsLoading(false);
         setAuthInitialized(true);
       }
-    }, 5000); // 5 second timeout
-    
+    }, 5000);
+
     return () => clearTimeout(timeoutId);
   }, [navigate]);
 
@@ -186,7 +171,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     try {
       setIsLoading(true);
       
-      // Verify that this is the admin email
       if (email.toLowerCase() !== 'support@digitalshopi.in') {
         throw new Error("This email is not authorized for admin access");
       }
@@ -201,11 +185,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       }
 
       if (data.session) {
-        // Verify user is admin after login
         const isUserAdmin = checkAdminRole(data.user);
         
         if (!isUserAdmin) {
-          // Force logout if not admin
           await supabase.auth.signOut();
           throw new Error("This account does not have administrator privileges");
         }
@@ -230,7 +212,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const register = async (email: string, password: string, name: string) => {
     try {
       setIsLoading(true);
-      // Only allow registration if it's the admin email
+      
       if (email.toLowerCase() !== 'support@digitalshopi.in') {
         throw new Error("Only the administrator account can be registered here");
       }
@@ -263,7 +245,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
       
-      // Clean up state
       setUser(null);
       setSession(null);
       setIsAdmin(false);
