@@ -370,6 +370,25 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_create_client_with_auth: {
+        Args: {
+          admin_id: string
+          client_name: string
+          client_email: string
+          client_password: string
+          client_company?: string
+          client_phone?: string
+          client_domain?: string
+        }
+        Returns: Json
+      }
+      can_delete_client: {
+        Args: {
+          client_id_param: string
+          admin_id_param: string
+        }
+        Returns: boolean
+      }
       check_email_exists: {
         Args: {
           email_to_check: string

@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { TaskStatus, TaskPriority } from "@/lib/models";
-import { createClientWithAuth } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/supabase/client";
 
 const clientFormSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -108,28 +108,50 @@ export function AddClientDialog() {
   async function onSubmit(data: ClientFormValues) {
     try {
       setIsSubmitting(true);
-      console.log("Creating client account with auth for:", data.email);
+      console.log("Creating client with auth access for:", data.email);
       
-      // Use the enhanced createClientWithAuth function
-      const result = await createClientWithAuth(
-        data.name,
-        data.email,
-        data.password,
-        data.company || undefined,
-        data.phone || undefined,
-        data.domain || undefined
-      );
+      // Get the current user's ID (admin)
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error("You must be logged in to create a client");
+      }
+      
+      // Call the Supabase function to create a client with auth
+      const { data: result, error } = await supabase.rpc('admin_create_client_with_auth', {
+        admin_id: user.id,
+        client_name: data.name,
+        client_email: data.email,
+        client_password: data.password,
+        client_company: data.company || null,
+        client_phone: data.phone || null,
+        client_domain: data.domain || null
+      });
+      
+      if (error) {
+        console.error("Error creating client with auth:", error);
+        throw new Error(error.message || "Failed to create client");
+      }
       
       console.log("Client created successfully:", result);
       
-      if (result?.client) {
-        // Add to local state
-        addClient(result.client);
+      if (result) {
+        // Parse the JSON result if needed
+        const clientData = typeof result === 'string' ? JSON.parse(result) : result;
+        
+        // Add client to local state for UI updates
+        await addClient({
+          id: clientData.client_id,
+          name: data.name,
+          email: data.email,
+          phone: data.phone,
+          company: data.company,
+          domain: data.domain,
+          user_id: clientData.user_id
+        });
         
         // Create default tasks for the new client
-        console.log("Creating default tasks for new client");
-        await createDefaultTasks(result.client.id, result.client.name);
-        toast.success("Client added successfully with default tasks and login credentials");
+        await createDefaultTasks(clientData.client_id, data.name);
+        toast.success("Client added successfully with login credentials and default tasks");
       } else {
         toast.success("Client added successfully");
       }
