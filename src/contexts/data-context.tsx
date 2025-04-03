@@ -74,7 +74,10 @@ interface DataContextType {
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
-  const { session, user: authUser } = useAuth();
+  const auth = useAuth();
+  const session = auth?.session;
+  const authUser = auth?.user;
+  
   const [isAdmin, setIsAdmin] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isFirebaseAvailable, setIsFirebaseAvailable] = useState(false);
@@ -91,9 +94,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   
   useEffect(() => {
     const checkFirebaseConnection = async () => {
-      const isConnected = await testFirebaseConnection();
-      console.log("Firebase connection status:", isConnected);
-      setIsFirebaseAvailable(isConnected);
+      try {
+        const isConnected = await testFirebaseConnection();
+        console.log("Firebase connection status:", isConnected);
+        setIsFirebaseAvailable(isConnected);
+      } catch (error) {
+        console.error("Error checking Firebase connection:", error);
+        setIsFirebaseAvailable(false);
+      }
     };
     
     checkFirebaseConnection();

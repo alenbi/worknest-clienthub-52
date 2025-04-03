@@ -65,13 +65,14 @@ queryClient.getQueryCache().subscribe((event) => {
   }
 });
 
+// Fixed the issue with provider nesting order to prevent circular dependency
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider defaultTheme="light" storageKey="digitalshopi-theme">
       <AuthProvider>
-        <ClientAuthProvider>
-          <DataProvider>
-            <TooltipProvider>
+        <TooltipProvider>
+          <ClientAuthProvider>
+            <DataProvider>
               <Toaster />
               <Sonner />
               <Routes>
@@ -129,9 +130,9 @@ const App = () => (
                 
                 <Route path="*" element={<NotFound />} />
               </Routes>
-            </TooltipProvider>
-          </DataProvider>
-        </ClientAuthProvider>
+            </DataProvider>
+          </ClientAuthProvider>
+        </TooltipProvider>
       </AuthProvider>
     </ThemeProvider>
   </QueryClientProvider>
