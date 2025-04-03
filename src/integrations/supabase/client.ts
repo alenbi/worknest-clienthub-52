@@ -232,7 +232,7 @@ export async function createClientWithAuth(name: string, email: string, password
   }
 }
 
-// Get client by email - modified to not use RPC
+// Get client by email - use direct query instead of RPC
 export async function getClientByEmail(email: string) {
   if (!email) return null;
   
