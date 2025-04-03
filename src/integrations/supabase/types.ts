@@ -370,6 +370,12 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      check_email_exists: {
+        Args: {
+          email_to_check: string
+        }
+        Returns: boolean
+      }
       create_client_user: {
         Args: {
           admin_user_id: string

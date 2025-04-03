@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useClientAuth } from "@/contexts/client-auth-context";
 import { Button } from "@/components/ui/button";
@@ -107,7 +108,7 @@ const ClientLogin = () => {
       const { data: clientData, error: clientError } = await supabase
         .from('clients')
         .select('id, name, user_id, email')
-        .eq('email', email)
+        .eq('email', email.trim().toLowerCase())
         .maybeSingle();
       
       if (clientError) {
@@ -122,21 +123,34 @@ const ClientLogin = () => {
           }
         } else {
           console.warn("No client record found for email:", email);
-          // We don't throw an error here to prevent email enumeration
         }
       }
       
       setLoginStage("attempting-direct-auth");
       
-      // Try to login directly with Supabase first to check if credentials are valid
+      // Try to login directly with Supabase
       const { data: directAuthData, error: directAuthError } = await supabase.auth.signInWithPassword({
-        email,
+        email: email.trim().toLowerCase(),
         password
       });
       
       if (directAuthError) {
         console.error("Direct Supabase auth error:", directAuthError);
         setLoginStage("direct-auth-failed");
+        
+        // Try to get more info about the user to help debug
+        if (DEBUG_AUTH) {
+          // Check if user exists in auth.users despite login failure
+          const { data: userExists } = await supabase.rpc('check_email_exists', { 
+            email_to_check: email.trim().toLowerCase() 
+          }).catch(err => {
+            console.log("Error checking if email exists:", err);
+            return { data: null };
+          });
+          
+          console.log(`User exists check for ${email}: ${userExists ? 'Yes' : 'No'}`);
+        }
+        
         throw directAuthError;
       }
       
@@ -167,7 +181,7 @@ const ClientLogin = () => {
       setLoginStage("attempting-custom-login");
       
       // Now use our custom login function which handles client role verification
-      await login(email, password);
+      await login(email.trim().toLowerCase(), password);
       
       setLoginStage("login-successful");
       
@@ -182,7 +196,7 @@ const ClientLogin = () => {
       
       if (error?.message) {
         if (error.message.includes("Invalid login credentials")) {
-          errorMessage = "Invalid email or password";
+          errorMessage = "Invalid email or password. Note that passwords are case-sensitive.";
         } else if (error.message.includes("Email not confirmed")) {
           errorMessage = "Your email is not confirmed. Please check your inbox for confirmation instructions.";
         } else {

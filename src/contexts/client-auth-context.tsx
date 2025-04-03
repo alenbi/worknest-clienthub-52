@@ -65,6 +65,39 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
         return true;
       }
       
+      // Try finding by email if user_id not found
+      if (currentUser.email) {
+        const { data: clientByEmail, error: emailError } = await supabase
+          .from('clients')
+          .select('id, name, user_id')
+          .eq('email', currentUser.email.toLowerCase())
+          .limit(1);
+          
+        if (emailError) {
+          console.error("Error checking client by email:", emailError);
+        }
+        
+        if (clientByEmail && clientByEmail.length > 0) {
+          if (DEBUG_AUTH) console.log("Found client by email:", clientByEmail[0]);
+          
+          // Update the client record with the user_id if it's missing
+          if (!clientByEmail[0].user_id) {
+            const { error: updateError } = await supabase
+              .from('clients')
+              .update({ user_id: currentUser.id })
+              .eq('id', clientByEmail[0].id);
+              
+            if (updateError) {
+              console.error("Error updating client user_id:", updateError);
+            } else {
+              console.log("Updated client record with user_id:", currentUser.id);
+            }
+          }
+          
+          return true;
+        }
+      }
+      
       // If no client record, fall back to RPC check
       if (DEBUG_AUTH) console.log("No client record found, falling back to is_client RPC");
       const { data, error } = await supabase.rpc('is_client', { user_id: currentUser.id });
@@ -97,22 +130,30 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
         return null;
       }
 
-      // Fetch client data from the database
-      const { data: clientData, error } = await supabase
+      // Fetch client data from the database - first try by user_id
+      let { data: clientData, error } = await supabase
         .from("clients")
         .select("name, company")
         .eq("user_id", currentUser.id)
         .maybeSingle();
       
+      // If no result, try by email
+      if (!clientData && currentUser.email) {
+        const { data: clientByEmail, error: emailError } = await supabase
+          .from("clients")
+          .select("name, company")
+          .eq("email", currentUser.email.toLowerCase())
+          .maybeSingle();
+          
+        if (emailError) {
+          console.error("Error fetching client data by email:", emailError);
+        } else {
+          clientData = clientByEmail;
+        }
+      }
+      
       if (error) {
         console.error("Error fetching client data:", error);
-        return {
-          id: currentUser.id,
-          email: currentUser.email,
-          user_metadata: currentUser.user_metadata,
-          created_at: currentUser.created_at,
-          role: 'client'
-        };
       }
       
       if (DEBUG_AUTH && clientData) {
@@ -298,7 +339,7 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
       const { data: clientData, error: clientError } = await supabase
         .from('clients')
         .select('id, name, user_id')
-        .eq('email', email)
+        .eq('email', email.toLowerCase())
         .maybeSingle();
       
       if (clientError) {
@@ -314,7 +355,7 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
       }
       
       const { data, error } = await supabase.auth.signInWithPassword({
-        email,
+        email: email.toLowerCase().trim(),
         password,
       });
 
