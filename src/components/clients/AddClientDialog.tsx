@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -105,35 +104,46 @@ export function AddClientDialog() {
     }
   };
 
+  const isValidUUID = (uuid: string): boolean => {
+    const uuidRegex = 
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    return uuidRegex.test(uuid);
+  };
+
   async function onSubmit(data: ClientFormValues) {
     try {
       setIsSubmitting(true);
       console.log("Creating client with auth access for:", data.email);
       
-      // First get the current user session and validate it
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
       
       if (sessionError) {
-        console.error("Error getting auth session:", sessionError);
-        throw new Error("Authentication error: " + sessionError.message);
+        console.error("Session error:", sessionError);
+        throw new Error("Session error: " + sessionError.message);
       }
       
-      if (!sessionData?.session) {
+      if (!sessionData?.session?.user?.id) {
         console.error("No valid session found");
-        throw new Error("You must be logged in to create a client");
+        throw new Error("No valid user session found");
       }
       
-      const userId = sessionData.session.user?.id;
+      const userId = sessionData.session.user.id;
       
-      // Critical validation - ensure we have a valid UUID before proceeding
-      if (!userId || typeof userId !== 'string' || userId.trim() === '') {
-        console.error("Invalid user ID in session:", userId);
-        throw new Error("Authentication error: Invalid user ID");
+      if (!isValidUUID(userId)) {
+        console.error("Invalid UUID format:", userId);
+        throw new Error("Invalid user ID format");
       }
       
-      console.log("Admin ID from session:", userId);
+      console.log("Admin ID from session (validated UUID format):", userId);
       
-      // Create parameters object
+      console.log("Session object:", JSON.stringify({
+        user: {
+          id: sessionData.session.user.id,
+          email: sessionData.session.user.email
+        },
+        session_id: sessionData.session.access_token ? "[token exists]" : "[no token]"
+      }));
+      
       const params = {
         admin_id: userId,
         client_name: data.name,
@@ -144,58 +154,58 @@ export function AddClientDialog() {
         client_domain: data.domain || null
       };
       
-      console.log("Calling admin_create_client_with_auth with parameters:", {
-        ...params,
-        client_password: "********" // Don't log the actual password
-      });
+      console.log("Calling RPC with admin_id:", userId);
       
-      // Call the RPC function with proper error handling
-      const { data: result, error } = await supabase.rpc(
-        'admin_create_client_with_auth',
-        params
-      );
-      
-      if (error) {
-        console.error("Error from RPC:", error);
-        throw new Error(error.message || "Failed to create client");
+      try {
+        const { data: result, error } = await supabase.rpc(
+          'admin_create_client_with_auth',
+          params
+        );
+        
+        if (error) {
+          console.error("RPC error:", error);
+          throw new Error(error.message || "Failed to create client");
+        }
+        
+        console.log("RPC success:", result);
+        
+        if (!result) {
+          throw new Error("No result returned from client creation");
+        }
+        
+        if (typeof result !== 'object') {
+          console.error("Invalid result type:", typeof result, result);
+          throw new Error("Invalid response format");
+        }
+        
+        const clientId = result.client_id;
+        const newUserId = result.user_id;
+        
+        if (!clientId || !newUserId) {
+          console.error("Missing IDs in result:", result);
+          throw new Error("Invalid response: missing client_id or user_id");
+        }
+        
+        await addClient({
+          id: clientId,
+          name: data.name,
+          email: data.email,
+          phone: data.phone,
+          company: data.company,
+          domain: data.domain,
+          user_id: newUserId
+        });
+        
+        await createDefaultTasks(clientId, data.name);
+        toast.success("Client added successfully with login credentials and default tasks");
+        
+        form.reset();
+        setOpen(false);
+      } catch (rpcError) {
+        console.error("Detailed RPC error:", rpcError);
+        toast.error("Failed to create client: " + (rpcError as Error).message);
       }
       
-      console.log("RPC result:", result);
-      
-      if (!result) {
-        throw new Error("No result returned from client creation");
-      }
-      
-      // Validate the result structure
-      if (typeof result !== 'object') {
-        console.error("Invalid result type:", typeof result, result);
-        throw new Error("Invalid response format");
-      }
-      
-      const clientId = result.client_id;
-      const newUserId = result.user_id;
-      
-      if (!clientId || !newUserId) {
-        console.error("Missing IDs in result:", result);
-        throw new Error("Invalid response: missing client_id or user_id");
-      }
-      
-      // Add client to the context
-      await addClient({
-        id: clientId,
-        name: data.name,
-        email: data.email,
-        phone: data.phone,
-        company: data.company,
-        domain: data.domain,
-        user_id: newUserId
-      });
-      
-      await createDefaultTasks(clientId, data.name);
-      toast.success("Client added successfully with login credentials and default tasks");
-      
-      form.reset();
-      setOpen(false);
     } catch (error: any) {
       console.error("Error adding client:", error);
       toast.error(error.message || "Failed to add client");
