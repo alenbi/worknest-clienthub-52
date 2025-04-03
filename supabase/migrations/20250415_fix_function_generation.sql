@@ -1,4 +1,5 @@
 
+
 -- Recreate admin_create_client_with_auth function with explicit UUID generation and proper return
 CREATE OR REPLACE FUNCTION public.admin_create_client_with_auth(
   admin_id UUID,
@@ -88,3 +89,4 @@ BEGIN
   RETURN result;
 END;
 $$;
+

@@ -110,14 +110,30 @@ export function AddClientDialog() {
       setIsSubmitting(true);
       console.log("Creating client with auth access for:", data.email);
       
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      // Get the current user and validate it properly
+      const { data: authData, error: authError } = await supabase.auth.getUser();
+      
+      if (authError) {
+        console.error("Error getting current user:", authError);
+        throw new Error("Authentication error: " + authError.message);
+      }
+      
+      if (!authData || !authData.user || !authData.user.id) {
+        console.error("No user found or user ID is missing");
         throw new Error("You must be logged in to create a client");
       }
       
-      console.log("Admin ID:", user.id);
+      const adminId = authData.user.id;
+      
+      // Validate UUID format
+      if (!adminId || adminId.trim() === "") {
+        console.error("Admin ID is empty or invalid");
+        throw new Error("Invalid admin ID");
+      }
+      
+      console.log("Admin ID:", adminId);
       console.log("Submitting data to admin_create_client_with_auth:", {
-        admin_id: user.id,
+        admin_id: adminId,
         client_name: data.name,
         client_email: data.email,
         client_password: data.password,
@@ -126,9 +142,9 @@ export function AddClientDialog() {
         client_domain: data.domain || null
       });
       
-      // Make sure we're catching any errors properly
+      // Make the RPC call with validated admin ID
       const { data: result, error } = await supabase.rpc('admin_create_client_with_auth', {
-        admin_id: user.id,
+        admin_id: adminId,
         client_name: data.name,
         client_email: data.email,
         client_password: data.password,
