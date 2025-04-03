@@ -1,466 +1,233 @@
 
-import { createContext, useContext, useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import { Session, User } from "@supabase/supabase-js";
-import { toast } from "sonner";
-import { useNavigate } from "react-router-dom";
-
-// Debug mode - set to true for detailed logs in development
-const DEBUG_AUTH = true;
-
-// Extended User interface to include profile data
-interface ClientUserWithProfile {
-  id: string;
-  email?: string | null;
-  user_metadata: {
-    [key: string]: any;
-  };
-  created_at: string;
-  name?: string;
-  company?: string;
-  role?: string;
-}
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { User, Session } from '@supabase/supabase-js';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 interface ClientAuthContextType {
-  isAuthenticated: boolean;
-  isLoading: boolean;
-  user: ClientUserWithProfile | null;
+  user: User | null;
   session: Session | null;
+  isLoading: boolean;
+  isAuthenticated: boolean;
+  isClient: boolean;
+  clientId: string | null;
+  clientName: string | null;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  updateProfile?: (data: { name?: string; company?: string }) => Promise<void>;
-  isClient: boolean;
+  refreshClientData: () => Promise<void>;
 }
 
 const ClientAuthContext = createContext<ClientAuthContextType | undefined>(undefined);
 
-export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) => {
-  const [user, setUser] = useState<ClientUserWithProfile | null>(null);
+export function ClientAuthProvider({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isClient, setIsClient] = useState(false);
+  const [clientId, setClientId] = useState<string | null>(null);
+  const [clientName, setClientName] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  // Function to check if user is a client
-  const checkClientRole = async (currentUser: User): Promise<boolean> => {
-    if (!currentUser) return false;
-    if (currentUser.email === 'support@digitalshopi.in') return false;
-    
-    try {
-      if (DEBUG_AUTH) console.log("Checking client role for user ID:", currentUser.id);
-      
-      // Check if there's a client record for this user
-      const { data: clientData, error: clientError } = await supabase
-        .from('clients')
-        .select('id, name')
-        .eq('user_id', currentUser.id)
-        .limit(1);
-      
-      if (clientError) {
-        console.error("Error checking client record:", clientError);
-      }
-      
-      if (clientData && clientData.length > 0) {
-        if (DEBUG_AUTH) console.log("Found client record by user_id:", clientData[0]);
-        return true;
-      }
-      
-      // Try finding by email if user_id not found
-      if (currentUser.email) {
-        if (DEBUG_AUTH) console.log("Checking client by email:", currentUser.email);
-        
-        const { data: clientByEmail, error: emailError } = await supabase
-          .from('clients')
-          .select('id, name, user_id')
-          .eq('email', currentUser.email.toLowerCase())
-          .limit(1);
-          
-        if (emailError) {
-          console.error("Error checking client by email:", emailError);
-        }
-        
-        if (clientByEmail && clientByEmail.length > 0) {
-          if (DEBUG_AUTH) console.log("Found client record by email:", clientByEmail[0]);
-          
-          // Update the client record with the user_id if it's missing
-          if (!clientByEmail[0].user_id) {
-            if (DEBUG_AUTH) console.log("Updating client with user_id:", currentUser.id);
-            
-            const { error: updateError } = await supabase
-              .from('clients')
-              .update({ user_id: currentUser.id })
-              .eq('id', clientByEmail[0].id);
-              
-            if (updateError) {
-              console.error("Error updating client user_id:", updateError);
-            } else {
-              console.log("Updated client record with user_id:", currentUser.id);
-            }
-          }
-          
-          return true;
-        }
-      }
-      
-      // Fallback to email check (exclude admin email)
-      return currentUser.email !== 'support@digitalshopi.in';
-    } catch (error) {
-      console.error("Failed to check client role:", error);
-      // Fallback to email check
-      return currentUser.email !== 'support@digitalshopi.in';
-    }
-  };
+  console.log("Initializing client auth context...");
 
-  // Function to update the user with client data
-  const updateUserWithClientData = async (currentUser: User): Promise<ClientUserWithProfile | null> => {
-    if (!currentUser) return null;
-    
-    try {
-      const isUserClient = await checkClientRole(currentUser);
-      
-      if (!isUserClient) {
-        return null;
-      }
-
-      // Fetch client data from the database - first try by user_id
-      let { data: clientData, error } = await supabase
-        .from("clients")
-        .select("name, company")
-        .eq("user_id", currentUser.id)
-        .maybeSingle();
-      
-      // If no result, try by email
-      if (!clientData && currentUser.email) {
-        const { data: clientByEmail, error: emailError } = await supabase
-          .from("clients")
-          .select("name, company")
-          .eq("email", currentUser.email.toLowerCase())
-          .maybeSingle();
-          
-        if (emailError) {
-          console.error("Error fetching client data by email:", emailError);
-        } else {
-          clientData = clientByEmail;
-        }
-      }
-      
-      if (error) {
-        console.error("Error fetching client data:", error);
-      }
-      
-      return {
-        id: currentUser.id,
-        email: currentUser.email,
-        user_metadata: currentUser.user_metadata,
-        created_at: currentUser.created_at,
-        name: clientData?.name || "",
-        company: clientData?.company || "",
-        role: 'client'
-      };
-    } catch (error) {
-      console.error("Error in updateUserWithClientData:", error);
-      return {
-        id: currentUser.id,
-        email: currentUser.email,
-        user_metadata: currentUser.user_metadata,
-        created_at: currentUser.created_at,
-        role: 'client'
-      };
-    }
-  };
-
+  // Set up auth state change listener
   useEffect(() => {
-    let mounted = true;
-    let authTimeout: NodeJS.Timeout;
+    console.log("Setting up auth state change listener");
     
-    const initializeAuth = async () => {
-      try {
-        if (DEBUG_AUTH) console.log("Initializing client auth context...");
+    // First set up auth state change listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, newSession) => {
+        console.log("Client auth state changed:", event, newSession ? "session exists" : "no session");
         
-        // First set up the onAuthStateChange listener
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(
-          (event, currentSession) => {
-            if (DEBUG_AUTH) console.log("Client auth state changed:", event);
-            
-            if (!mounted) return;
-            
-            if (event === 'SIGNED_OUT') {
-              setSession(null);
-              setUser(null);
-              setIsClient(false);
-            } 
-            else if (currentSession?.user) {
-              // Use setTimeout to prevent deadlocks
-              setTimeout(async () => {
-                if (!mounted) return;
-                
-                try {
-                  const isUserClient = await checkClientRole(currentSession.user);
-                  
-                  if (isUserClient) {
-                    setSession(currentSession);
-                    const enhancedUser = await updateUserWithClientData(currentSession.user);
-                    setUser(enhancedUser);
-                    setIsClient(true);
-                  } else {
-                    setSession(null);
-                    setUser(null);
-                    setIsClient(false);
-                  }
-                } catch (error) {
-                  console.error("Error processing auth state change:", error);
-                } finally {
-                  if (mounted) setIsLoading(false);
-                }
-              }, 0);
-            } else {
-              if (mounted) setIsLoading(false);
-            }
-          }
-        );
+        setSession(newSession);
+        setUser(newSession?.user ?? null);
         
-        // Then check for existing session
-        const { data, error } = await supabase.auth.getSession();
-        
-        if (error) {
-          console.error("Error getting session:", error);
-          if (mounted) setIsLoading(false);
-          return subscription;
-        }
-        
-        const currentSession = data.session;
-        
-        if (currentSession?.user && mounted) {
-          try {
-            const isUserClient = await checkClientRole(currentSession.user);
-            
-            if (isUserClient) {
-              setSession(currentSession);
-              const enhancedUser = await updateUserWithClientData(currentSession.user);
-              setUser(enhancedUser);
-              setIsClient(true);
-            } else {
-              setSession(null);
-              setUser(null);
-              setIsClient(false);
-            }
-          } catch (error) {
-            console.error("Error processing existing session:", error);
-          }
-        }
-        
-        // Add shorter timeout as a safety measure
-        authTimeout = setTimeout(() => {
-          if (mounted && isLoading) {
-            if (DEBUG_AUTH) console.log("Auth initialization timed out, forcing completion");
-            setIsLoading(false);
-          }
-        }, 2000);
-        
-        if (mounted) {
-          setIsLoading(false);
-        }
-
-        return subscription;
-      } catch (error) {
-        console.error("Error initializing client auth:", error);
-        if (mounted) {
-          setUser(null);
-          setSession(null);
+        if (event === 'SIGNED_OUT') {
           setIsClient(false);
-          setIsLoading(false);
+          setClientId(null);
+          setClientName(null);
         }
-        return null;
+        
+        // If event is SIGNED_IN, we'll fetch the client data after a small delay
+        // to avoid potential race conditions
+        if (event === 'SIGNED_IN' && newSession?.user) {
+          setTimeout(() => {
+            refreshClientData();
+          }, 0);
+        }
       }
-    };
+    );
 
-    const subscription = initializeAuth();
-    
+    // Then check for existing session
+    supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
+      console.log("Current session check:", currentSession ? "Session exists" : "No session");
+      
+      setSession(currentSession);
+      setUser(currentSession?.user ?? null);
+      
+      if (currentSession?.user) {
+        refreshClientData();
+      } else {
+        setIsLoading(false);
+      }
+    });
+
+    // Clean up subscription on unmount
     return () => {
-      mounted = false;
-      if (authTimeout) clearTimeout(authTimeout);
-      subscription.then(sub => {
-        if (sub) sub.unsubscribe();
-      });
+      subscription.unsubscribe();
     };
   }, []);
 
-  const login = async (email: string, password: string) => {
+  // Verify client status and fetch client data
+  const refreshClientData = async () => {
     try {
-      setIsLoading(true);
+      console.log("Refreshing client data...");
       
-      // Standardize email format
-      const standardizedEmail = email.trim().toLowerCase();
-      
-      // Block admin email from logging in through client portal
-      if (standardizedEmail === 'support@digitalshopi.in') {
-        throw new Error("Admin users should use the admin login");
+      if (!user) {
+        console.log("No user logged in, skipping client data refresh");
+        setIsLoading(false);
+        return;
       }
       
-      // First check if this user has a client record
-      const { data: clientData, error: clientError } = await supabase
-        .from('clients')
-        .select('id, name, user_id')
-        .eq('email', standardizedEmail)
-        .maybeSingle();
+      const standardEmail = user.email?.trim().toLowerCase();
+      console.log("Checking client status for:", standardEmail);
       
-      if (clientError) {
-        console.error("Error checking client record:", clientError);
-      }
+      // Use RPC to get client by email
+      const { data, error } = await supabase
+        .rpc('get_client_by_email', { email_param: standardEmail });
       
-      if (!clientData) {
-        throw new Error("No client account found with this email. Please contact support.");
-      }
-      
-      if (DEBUG_AUTH) console.log("Found client record before login:", clientData);
-      
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: standardizedEmail,
-        password,
-      });
-
       if (error) {
-        throw error;
+        console.error("Error fetching client:", error);
+        setIsClient(false);
+        setClientId(null);
+        setClientName(null);
+        setIsLoading(false);
+        return;
       }
-
-      if (data.session) {
-        // Double check this is not the admin
-        const isUserClient = await checkClientRole(data.user);
+      
+      console.log("Client data result:", data);
+      
+      if (data && data.length > 0) {
+        const clientRecord = data[0];
+        setIsClient(true);
+        setClientId(clientRecord.id);
+        setClientName(clientRecord.name);
         
-        if (!isUserClient) {
-          // Force logout if admin tried to login as client
-          await supabase.auth.signOut();
-          throw new Error("Admin users should use the admin login");
-        }
-        
-        // If the client record exists but has no user_id, update it now
-        if (clientData && !clientData.user_id) {
-          if (DEBUG_AUTH) console.log("Updating client user_id after login:", data.user.id);
-          
+        // If client record exists but user_id is not set, update it
+        if (!clientRecord.user_id) {
+          console.log("Client record found but user_id is not set, updating...");
           const { error: updateError } = await supabase
             .from('clients')
-            .update({ user_id: data.user.id })
-            .eq('id', clientData.id);
+            .update({ user_id: user.id })
+            .eq('id', clientRecord.id);
             
           if (updateError) {
             console.error("Error updating client user_id:", updateError);
+          } else {
+            console.log("Updated client record with user_id");
           }
         }
-        
-        setSession(data.session);
-        const enhancedUser = await updateUserWithClientData(data.user);
-        setUser(enhancedUser);
-        setIsClient(true);
-        
-        toast.success("Successfully signed in!");
-        navigate("/client/dashboard");
       } else {
-        throw new Error("Failed to authenticate");
+        console.log("No client record found for email:", standardEmail);
+        setIsClient(false);
+        setClientId(null);
+        setClientName(null);
       }
-    } catch (error: any) {
-      setUser(null);
-      setSession(null);
+    } catch (error) {
+      console.error("Error refreshing client data:", error);
       setIsClient(false);
-      throw error;
+      setClientId(null);
+      setClientName(null);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const logout = async () => {
+  // Login function
+  const login = async (email: string, password: string) => {
     try {
-      setIsLoading(true);
-      const { error } = await supabase.auth.signOut();
-      
-      if (error) throw error;
-      
-      // Clean up state
-      setUser(null);
-      setSession(null);
-      setIsClient(false);
-      
-      console.log("Client logged out successfully");
-      navigate("/client/login");
-    } catch (error: any) {
-      console.error("Logout error:", error);
-      toast.error(error.message || "Failed to sign out");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Function to update client profile
-  const updateProfile = async (data: { name?: string; company?: string }) => {
-    try {
+      console.log("Client login attempt for:", email);
       setIsLoading(true);
       
-      if (!user) throw new Error("Not authenticated");
+      const standardEmail = email.trim().toLowerCase();
       
-      // Find client record
-      const { data: clientData, error: fetchError } = await supabase
-        .from("clients")
-        .select("id")
-        .eq("user_id", user.id)
-        .maybeSingle();
-      
-      if (fetchError) throw fetchError;
-      
-      if (!clientData) {
-        throw new Error("Client record not found");
+      // First, check if the email exists in the clients table
+      const { data: clientData, error: clientError } = await supabase
+        .rpc('get_client_by_email', { email_param: standardEmail });
+        
+      if (clientError) {
+        console.error("Error checking if client exists:", clientError);
+        throw new Error("Error checking client account, please try again");
       }
       
-      // Update client record
-      const { error } = await supabase
-        .from("clients")
-        .update({
-          name: data.name,
-          company: data.company,
-        })
-        .eq("id", clientData.id);
+      if (!clientData || clientData.length === 0) {
+        console.error("No client account found with email:", standardEmail);
+        throw new Error("No client account found with this email. Please contact support.");
+      }
       
-      if (error) throw error;
+      console.log("Client record found:", clientData);
       
-      // Update local user state
-      setUser(prev => {
-        if (!prev) return null;
-        return {
-          ...prev,
-          name: data.name || prev.name,
-          company: data.company || prev.company,
-        };
+      // Now attempt login with Supabase Auth
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: standardEmail,
+        password
       });
       
-      toast.success("Profile updated successfully");
+      if (signInError) {
+        if (signInError.message.includes("Invalid login credentials")) {
+          throw new Error("Incorrect password. Please try again.");
+        }
+        throw signInError;
+      }
+      
+      // At this point, login is successful
+      console.log("Client login successful");
+      
+      // RefreshClientData will be called automatically by the onAuthStateChange listener
+      navigate('/client/dashboard');
     } catch (error: any) {
-      toast.error(error.message || "Failed to update profile");
-      throw error;
-    } finally {
+      console.error("Client login error:", error);
       setIsLoading(false);
+      throw error;
     }
+  };
+
+  // Logout function
+  const logout = async () => {
+    try {
+      await supabase.auth.signOut();
+      navigate('/client/login');
+    } catch (error) {
+      console.error("Logout error:", error);
+      toast.error("Failed to sign out");
+    }
+  };
+
+  const value = {
+    user,
+    session,
+    isLoading,
+    isAuthenticated: !!user,
+    isClient,
+    clientId,
+    clientName,
+    login,
+    logout,
+    refreshClientData
   };
 
   return (
-    <ClientAuthContext.Provider
-      value={{
-        isAuthenticated: !!user && isClient,
-        isLoading,
-        user,
-        session,
-        login,
-        logout,
-        updateProfile,
-        isClient,
-      }}
-    >
+    <ClientAuthContext.Provider value={value}>
       {children}
     </ClientAuthContext.Provider>
   );
-};
+}
 
-export const useClientAuth = () => {
+export function useClientAuth() {
   const context = useContext(ClientAuthContext);
   if (context === undefined) {
-    throw new Error("useClientAuth must be used within a ClientAuthProvider");
+    throw new Error('useClientAuth must be used within a ClientAuthProvider');
   }
   return context;
-};
+}
