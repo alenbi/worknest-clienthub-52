@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -114,6 +115,7 @@ export function AddClientDialog() {
         throw new Error("You must be logged in to create a client");
       }
       
+      // Make sure we're catching any errors properly
       const { data: result, error } = await supabase.rpc('admin_create_client_with_auth', {
         admin_id: user.id,
         client_name: data.name,
@@ -129,25 +131,28 @@ export function AddClientDialog() {
         throw new Error(error.message || "Failed to create client");
       }
       
+      if (!result) {
+        throw new Error("No result returned from client creation");
+      }
+      
       console.log("Client created successfully:", result);
       
-      const clientData = result;
-      
-      if (clientData) {
+      try {
         await addClient({
-          id: clientData.client_id,
+          id: result.client_id,
           name: data.name,
           email: data.email,
           phone: data.phone,
           company: data.company,
           domain: data.domain,
-          user_id: clientData.user_id
+          user_id: result.user_id
         });
         
-        await createDefaultTasks(clientData.client_id, data.name);
+        await createDefaultTasks(result.client_id, data.name);
         toast.success("Client added successfully with login credentials and default tasks");
-      } else {
-        toast.success("Client added successfully");
+      } catch (addError) {
+        console.error("Error after client creation:", addError);
+        toast.error("Client was created but there was an error setting up additional data");
       }
       
       form.reset();
