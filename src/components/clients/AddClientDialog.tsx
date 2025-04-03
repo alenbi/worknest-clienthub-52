@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { TaskStatus, TaskPriority } from "@/lib/models";
+import { supabase } from "@/integrations/supabase/client";
 
 const clientFormSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -34,7 +35,7 @@ const clientFormSchema = z.object({
   phone: z.string().optional(),
   company: z.string().optional(),
   domain: z.string().optional(),
-  password: z.string().min(6, "Password must be at least 6 characters").optional(),
+  password: z.string().min(6, "Password must be at least 6 characters"),
 });
 
 type ClientFormValues = z.infer<typeof clientFormSchema>;
@@ -105,14 +106,33 @@ export function AddClientDialog() {
 
   async function onSubmit(data: ClientFormValues) {
     try {
-      // Convert form data to match Client type requirements
+      // First, create the auth user account
+      console.log("Creating auth user account for:", data.email);
+      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+        email: data.email,
+        password: data.password,
+        email_confirm: true, // Auto-confirm email so client can log in immediately
+      });
+      
+      if (authError) {
+        console.error("Error creating auth user:", authError);
+        throw new Error(authError.message || "Failed to create user account");
+      }
+      
+      if (!authData.user) {
+        throw new Error("User account creation failed");
+      }
+      
+      console.log("Auth user created successfully:", authData.user.id);
+      
+      // Then create the client record linked to the auth user
       const clientData = {
         name: data.name,
         email: data.email,
         phone: data.phone || undefined,
         company: data.company || undefined,
         domain: data.domain || undefined,
-        password: data.password
+        user_id: authData.user.id // Link client to auth user
       };
       
       const newClient = await addClient!(clientData);
@@ -128,6 +148,7 @@ export function AddClientDialog() {
       form.reset();
       setOpen(false);
     } catch (error: any) {
+      console.error("Error adding client:", error);
       toast.error(error.message || "Failed to add client");
     }
   }
@@ -228,10 +249,11 @@ export function AddClientDialog() {
                       type="password"
                       placeholder="Create a password"
                       {...field}
+                      required
                     />
                   </FormControl>
                   <FormDescription>
-                    Optional. Used for client portal access.
+                    Required for client portal access.
                   </FormDescription>
                   <FormMessage />
                 </FormItem>

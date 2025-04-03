@@ -9,7 +9,13 @@ const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiO
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";
 
-export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+    storage: localStorage
+  }
+});
 
 // Utility functions for common database operations
 export async function fetchRequestsWithClientInfo() {
@@ -100,6 +106,33 @@ export async function updateRequestStatus(requestId: string, status: string) {
     return data;
   } catch (error) {
     console.error("Failed to update request status:", error);
+    throw error;
+  }
+}
+
+// Function to manually create a new client auth user
+// This would normally be done by auth admin APIs but Supabase JS client 
+// doesn't directly support admin APIs in browser context
+export async function createClientAuthUser(email: string, password: string) {
+  try {
+    console.log("Creating client auth user with email:", email);
+    
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: {
+          role: 'client' // Add client role metadata
+        }
+      }
+    });
+    
+    if (error) throw error;
+    
+    console.log("Client auth user created:", data.user?.id);
+    return data;
+  } catch (error) {
+    console.error("Failed to create client auth user:", error);
     throw error;
   }
 }
