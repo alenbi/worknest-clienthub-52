@@ -9,19 +9,19 @@ import { ArrowRight, User, Building2 } from "lucide-react";
 
 const Index = () => {
   const navigate = useNavigate();
-  const { isAuthenticated, isAdmin } = useAuth();
+  const { session, isAdmin } = useAuth();
   const { isAuthenticated: isClientAuthenticated, isClient } = useClientAuth();
 
   // Automatically redirect based on authentication status
   useEffect(() => {
-    if (isAuthenticated && isAdmin) {
+    if (session && isAdmin) {
       console.log("User is authenticated as admin, redirecting to admin dashboard");
       navigate('/dashboard', { replace: true });
     } else if (isClientAuthenticated && isClient) {
       console.log("User is authenticated as client, redirecting to client dashboard");
       navigate('/client/dashboard', { replace: true });
     }
-  }, [isAuthenticated, isClientAuthenticated, isAdmin, isClient, navigate]);
+  }, [session, isClientAuthenticated, isAdmin, isClient, navigate]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">

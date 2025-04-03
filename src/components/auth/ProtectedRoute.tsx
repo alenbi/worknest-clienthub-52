@@ -7,7 +7,8 @@ import { AlertCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 
 const ProtectedRoute = () => {
-  const { isAuthenticated, isLoading, isAdmin } = useAuth();
+  // Changed from isAuthenticated to session check
+  const { session, isLoading, isAdmin } = useAuth();
   const [isTimeoutExpired, setIsTimeoutExpired] = useState(false);
 
   // Add a safety timeout in case authentication hangs
@@ -35,7 +36,7 @@ const ProtectedRoute = () => {
   }
 
   // Only allow access if authenticated and has admin role
-  if (!isAuthenticated || !isAdmin) {
+  if (!session || !isAdmin) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-4">
         <Alert variant="destructive" className="max-w-md mb-4">

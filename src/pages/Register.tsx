@@ -9,7 +9,7 @@ import { Link, Navigate } from "react-router-dom";
 import { Eye, EyeOff, Loader2 } from "lucide-react";
 
 const Register = () => {
-  const { register, isAuthenticated, isLoading } = useAuth();
+  const { register, session, isLoading } = useAuth();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -20,7 +20,7 @@ const Register = () => {
   const [success, setSuccess] = useState(false);
 
   // Redirect if already authenticated
-  if (isAuthenticated) {
+  if (session) {
     return <Navigate to="/" />;
   }
 

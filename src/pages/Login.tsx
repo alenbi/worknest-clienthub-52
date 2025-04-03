@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { useAuth } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
@@ -9,7 +10,8 @@ import { Eye, EyeOff, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 const Login = () => {
-  const { login, isAuthenticated, isLoading, isAdmin } = useAuth();
+  // Changed from isAuthenticated to session check
+  const { login, session, isLoading, isAdmin } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -18,7 +20,7 @@ const Login = () => {
   const navigate = useNavigate();
 
   // Redirect if already authenticated as admin
-  if (isAuthenticated && isAdmin && !isLoading) {
+  if (session && isAdmin && !isLoading) {
     return <Navigate to="/dashboard" />;
   }
 
