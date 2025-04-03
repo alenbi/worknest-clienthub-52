@@ -1,5 +1,5 @@
+
 import { useState } from "react";
-import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -9,349 +9,200 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Plus, Loader2 } from "lucide-react";
-import { useData } from "@/contexts/data-context";
-import { toast } from "sonner";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
-import { z } from "zod";
-import {
-  Form,
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { TaskStatus, TaskPriority } from "@/lib/models";
+import { Label } from "@/components/ui/label";
+import { UserPlus, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-
-const clientFormSchema = z.object({
-  name: z.string().min(1, "Name is required"),
-  email: z.string().email("Invalid email address"),
-  phone: z.string().optional(),
-  company: z.string().optional(),
-  domain: z.string().optional(),
-  password: z.string().min(6, "Password must be at least 6 characters"),
-});
-
-type ClientFormValues = z.infer<typeof clientFormSchema>;
+import { toast } from "sonner";
+import { useAuth } from "@/contexts/auth-context";
+import { v4 as uuidv4, validate as isValidUuid } from 'uuid';
 
 export function AddClientDialog() {
   const [open, setOpen] = useState(false);
-  const { addClient, addTask } = useData();
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [company, setCompany] = useState("");
+  const [phone, setPhone] = useState("");
+  const [domain, setDomain] = useState("");
+  const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const { user } = useAuth();
 
-  const form = useForm<ClientFormValues>({
-    resolver: zodResolver(clientFormSchema),
-    defaultValues: {
-      name: "",
-      email: "",
-      phone: "",
-      company: "",
-      domain: "",
-      password: "",
-    },
-  });
-
-  const createDefaultTasks = async (clientId: string, clientName: string) => {
-    const today = new Date();
-    const oneWeekLater = new Date();
-    oneWeekLater.setDate(today.getDate() + 7);
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     
-    const oneMonthLater = new Date();
-    oneMonthLater.setMonth(today.getMonth() + 1);
-    
-    const defaultTasks = [
-      {
-        title: "Initial onboarding call",
-        description: `Schedule a welcome call with ${clientName}`,
-        due_date: new Date(today.setDate(today.getDate() + 2)).toISOString(),
-        priority: TaskPriority.HIGH,
-        status: TaskStatus.TODO,
-        client_id: clientId
-      },
-      {
-        title: "Client website review",
-        description: `Complete a review of ${clientName}'s existing website`,
-        due_date: oneWeekLater.toISOString(),
-        priority: TaskPriority.MEDIUM,
-        status: TaskStatus.TODO,
-        client_id: clientId
-      },
-      {
-        title: "Develop marketing strategy",
-        description: `Create a marketing plan for ${clientName}`,
-        due_date: oneMonthLater.toISOString(),
-        priority: TaskPriority.MEDIUM,
-        status: TaskStatus.TODO,
-        client_id: clientId
-      }
-    ];
-    
-    console.log("Creating default tasks for client:", clientId);
-    
-    try {
-      for (const task of defaultTasks) {
-        await addTask(task);
-      }
-      console.log("Default tasks created successfully");
-    } catch (error) {
-      console.error("Error creating default tasks:", error);
-      toast.error("Failed to create default tasks");
+    if (!name || !email) {
+      toast.error("Name and email are required");
+      return;
     }
-  };
-
-  const isValidUUID = (uuid: string): boolean => {
-    const uuidRegex = 
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-    return uuidRegex.test(uuid);
-  };
-
-  async function onSubmit(data: ClientFormValues) {
+    
+    if (password && password.length < 6) {
+      toast.error("Password must be at least 6 characters");
+      return;
+    }
+    
     try {
       setIsSubmitting(true);
-      console.log("Creating client with auth access for:", data.email);
+      console.log("Creating client with auth user");
       
-      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
-      
-      if (sessionError) {
-        console.error("Session error:", sessionError);
-        throw new Error("Authentication error: " + sessionError.message);
-      }
-      
-      if (!sessionData?.session?.user) {
-        console.error("No session user found");
-        throw new Error("You must be logged in to create clients");
-      }
-      
-      const userId = sessionData.session.user.id;
-      console.log("Got user ID from session:", userId);
-      
-      if (!userId) {
-        console.error("User ID is empty or undefined");
-        toast.error("Authentication error: Missing user ID");
+      // Ensure we have a valid admin UUID
+      if (!user?.id || !isValidUuid(user.id)) {
+        console.error("Invalid admin ID:", user?.id);
+        toast.error("Admin authorization failed: Invalid admin ID");
         return;
       }
       
-      if (!isValidUUID(userId)) {
-        console.error("Invalid UUID format for user ID:", userId);
-        toast.error("Authentication error: Invalid user ID format");
-        return;
+      console.log("Admin ID for client creation:", user.id);
+      
+      // Generate a secure random password if not provided
+      const finalPassword = password || Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10);
+      
+      // Use the RPC function to create both auth user and client record
+      const { data, error } = await supabase.rpc('admin_create_client_with_auth', {
+        admin_id: user.id,
+        client_name: name,
+        client_email: email,
+        client_password: finalPassword,
+        client_company: company || null,
+        client_phone: phone || null,
+        client_domain: domain || null
+      });
+      
+      if (error) {
+        console.error("Error creating client with auth:", error);
+        throw new Error(`Failed to create client: ${error.message}`);
       }
       
-      console.log("Admin ID from session (valid UUID):", userId);
+      console.log("Client created successfully:", data);
       
-      const userEmail = sessionData.session.user.email;
-      console.log("Admin email from session:", userEmail);
+      toast.success(`Client ${name} added successfully`);
       
-      if (userEmail !== 'support@digitalshopi.in') {
-        console.error("User is not authorized admin:", userEmail);
-        toast.error("Only the administrator account can create clients");
-        return;
-      }
-      
-      const params = {
-        admin_id: userId,
-        client_name: data.name,
-        client_email: data.email,
-        client_password: data.password,
-        client_company: data.company || null,
-        client_phone: data.phone || null,
-        client_domain: data.domain || null
-      };
-      
-      console.log("Calling RPC with parameters:", JSON.stringify({
-        ...params,
-        client_password: "[REDACTED]"
-      }));
-      
-      try {
-        const { data: result, error } = await supabase.rpc(
-          'admin_create_client_with_auth',
-          params
-        );
-        
-        if (error) {
-          console.error("RPC error:", error);
-          throw new Error(error.message || "Failed to create client");
-        }
-        
-        console.log("RPC success, result:", result);
-        
-        if (!result) {
-          throw new Error("No result returned from client creation");
-        }
-        
-        let clientId: string | undefined;
-        let newUserId: string | undefined;
-        
-        if (typeof result === 'object' && result !== null) {
-          clientId = (result as any).client_id;
-          newUserId = (result as any).user_id;
-          
-          if (!clientId || !newUserId) {
-            console.error("Missing IDs in result:", result);
-            throw new Error("Invalid response: missing client_id or user_id");
-          }
-        } else {
-          console.error("Unexpected result format:", result, typeof result);
-          throw new Error("Invalid response format");
-        }
-        
-        await addClient({
-          id: clientId,
-          name: data.name,
-          email: data.email,
-          phone: data.phone,
-          company: data.company,
-          domain: data.domain,
-          user_id: newUserId
+      // Only show password notification if it was auto-generated
+      if (!password) {
+        toast.info(`Auto-generated password: ${finalPassword}`, {
+          description: "Make sure to save this password before closing",
+          duration: 10000,
         });
-        
-        await createDefaultTasks(clientId, data.name);
-        toast.success("Client added successfully with login credentials and default tasks");
-        
-        form.reset();
-        setOpen(false);
-      } catch (rpcError) {
-        console.error("Detailed RPC error:", rpcError);
-        toast.error("Failed to create client: " + (rpcError as Error).message);
       }
       
+      // Reset the form
+      setName("");
+      setEmail("");
+      setCompany("");
+      setPhone("");
+      setDomain("");
+      setPassword("");
+      setOpen(false);
+      
+      // Force reload to refresh client list
+      window.location.reload();
     } catch (error: any) {
-      console.error("Error adding client:", error);
+      console.error("Add client error:", error);
       toast.error(error.message || "Failed to add client");
     } finally {
       setIsSubmitting(false);
     }
-  }
+  };
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Client
+          <UserPlus className="mr-2 h-4 w-4" /> Add Client
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle>Add New Client</DialogTitle>
           <DialogDescription>
-            Add a new client to your agency. Fill out the client's information and create their login credentials.
+            Add a new client to your dashboard. This will create both a client record and
+            a user account for portal access.
           </DialogDescription>
         </DialogHeader>
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <FormField
-              control={form.control}
-              name="name"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Name</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Client name" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="name">Name *</Label>
+            <Input
+              id="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Full name"
+              required
             />
-            <FormField
-              control={form.control}
-              name="email"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Email</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Email address" {...field} />
-                  </FormControl>
-                  <FormDescription>
-                    This email will be used for client portal login
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="email">Email *</Label>
+            <Input
+              id="email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Email address"
+              required
             />
-            <FormField
-              control={form.control}
-              name="phone"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Phone</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Phone number" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="company">Company</Label>
+            <Input
+              id="company"
+              value={company}
+              onChange={(e) => setCompany(e.target.value)}
+              placeholder="Company name"
             />
-            <FormField
-              control={form.control}
-              name="company"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Company</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Company name" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="phone">Phone</Label>
+            <Input
+              id="phone"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="Phone number"
             />
-            <FormField
-              control={form.control}
-              name="domain"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Domain</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Website domain" {...field} />
-                  </FormControl>
-                  <FormDescription>
-                    Domain used for the client portal, e.g. "example.com"
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="domain">Domain</Label>
+            <Input
+              id="domain"
+              value={domain}
+              onChange={(e) => setDomain(e.target.value)}
+              placeholder="Website domain"
             />
-            <FormField
-              control={form.control}
-              name="password"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Password</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="password"
-                      placeholder="Create a password"
-                      {...field}
-                      required
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    Password for client portal access. Must be at least 6 characters.
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="password">Password (Optional)</Label>
+            <Input
+              id="password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Leave blank to auto-generate"
             />
-            <DialogFooter>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Adding...
-                  </>
-                ) : (
-                  "Add Client"
-                )}
-              </Button>
-            </DialogFooter>
-          </form>
-        </Form>
+            <p className="text-xs text-muted-foreground">
+              If left blank, a password will be auto-generated
+            </p>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setOpen(false)}
+              disabled={isSubmitting}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Adding...
+                </>
+              ) : (
+                "Add Client"
+              )}
+            </Button>
+          </DialogFooter>
+        </form>
       </DialogContent>
     </Dialog>
   );
