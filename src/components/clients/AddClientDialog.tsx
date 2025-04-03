@@ -10,7 +10,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Plus } from "lucide-react";
+import { Plus, Loader2 } from "lucide-react";
 import { useData } from "@/contexts/data-context";
 import { toast } from "sonner";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -27,9 +27,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { TaskStatus, TaskPriority } from "@/lib/models";
-import { supabase } from "@/integrations/supabase/client";
-
-const DEBUG_CLIENT_CREATION = true;
+import { supabase, createClientWithAuth } from "@/integrations/supabase/client";
 
 const clientFormSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -45,7 +43,6 @@ type ClientFormValues = z.infer<typeof clientFormSchema>;
 export function AddClientDialog() {
   const [open, setOpen] = useState(false);
   const { addClient, addTask } = useData();
-  const [creationStage, setCreationStage] = useState("init");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const form = useForm<ClientFormValues>({
@@ -108,139 +105,35 @@ export function AddClientDialog() {
     }
   };
 
-  // Function to check if an email exists in auth.users using our RPC function
-  const checkEmailExists = async (email: string): Promise<boolean> => {
-    try {
-      // Use type assertion to bypass TypeScript checking since our function
-      // is not in the Database types yet
-      const { data, error } = await supabase.rpc('check_email_exists', { 
-        email_to_check: email.trim().toLowerCase() 
-      });
-      
-      if (error) {
-        console.warn("Error checking if email exists:", error);
-        return false;
-      }
-      
-      return !!data;
-    } catch (error) {
-      console.error("Error in checkEmailExists:", error);
-      return false;
-    }
-  };
-
   async function onSubmit(data: ClientFormValues) {
     try {
       setIsSubmitting(true);
-      setCreationStage("starting");
-      if (DEBUG_CLIENT_CREATION) console.log("Creating client account for:", data.email);
+      console.log("Creating client account with auth for:", data.email);
       
-      // Get the current auth user (should be the admin)
-      const { data: { user } } = await supabase.auth.getUser();
+      // Use the enhanced createClientWithAuth function to create both auth user and client record
+      const result = await createClientWithAuth(
+        data.name,
+        data.email,
+        data.password,
+        data.company,
+        data.phone,
+        data.domain
+      );
       
-      if (!user) {
-        throw new Error("You must be logged in as an admin to add clients");
+      console.log("Client created successfully:", result);
+      
+      if (result && result.client && result.client.id) {
+        // Create default tasks for the new client
+        console.log("Creating default tasks for new client");
+        await createDefaultTasks(result.client.id, result.client.name);
+        toast.success("Client added successfully with default tasks and login credentials");
+      } else {
+        toast.success("Client added successfully");
       }
       
-      setCreationStage("admin-verified");
-      if (DEBUG_CLIENT_CREATION) console.log("Admin user creating client:", user.id, user.email);
-      
-      // First check if a user with this email already exists
-      const { data: existingUsers, error: checkError } = await supabase
-        .from('clients')
-        .select('email')
-        .eq('email', data.email.trim().toLowerCase())
-        .limit(1);
-        
-      if (checkError) {
-        console.error("Error checking for existing client:", checkError);
-      }
-      
-      if (existingUsers && existingUsers.length > 0) {
-        throw new Error("A client with this email already exists");
-      }
-      
-      // Check if the email exists in auth.users table
-      setCreationStage("checking-auth-user");
-      const emailExists = await checkEmailExists(data.email);
-      
-      if (emailExists) {
-        console.warn("Email already exists in auth.users table");
-        throw new Error("An account with this email already exists");
-      }
-      
-      setCreationStage("using-rpc-function");
-      // Use the create_client_user function to create the auth user
-      if (DEBUG_CLIENT_CREATION) console.log("Using create_client_user function with params:", {
-        admin_user_id: user.id,
-        client_email: data.email.trim().toLowerCase(),
-        password_length: data.password.length
-      });
-      
-      // Call our RPC function to create the client user
-      try {
-        const { data: newUserId, error: functionError } = await supabase.rpc(
-          'create_client_user',
-          {
-            admin_user_id: user.id,
-            client_email: data.email.trim().toLowerCase(),
-            client_password: data.password
-          }
-        );
-        
-        if (functionError) {
-          console.error("Error from create_client_user:", functionError);
-          setCreationStage("rpc-function-error");
-          throw new Error(functionError.message || "Failed to create client user account");
-        }
-        
-        if (!newUserId) {
-          throw new Error("User creation failed - no user ID returned");
-        }
-        
-        setCreationStage("auth-user-created");
-        if (DEBUG_CLIENT_CREATION) {
-          console.log("Client auth user created successfully with ID:", newUserId);
-          console.log("Now creating client record in clients table...");
-        }
-        
-        // Create the client record linked to the auth user
-        const clientData = {
-          name: data.name,
-          email: data.email.trim().toLowerCase(),
-          phone: data.phone || undefined,
-          company: data.company || undefined,
-          domain: data.domain || undefined,
-          // Link to the auth user ID
-          user_id: newUserId
-        };
-        
-        if (DEBUG_CLIENT_CREATION) {
-          console.log("Creating client record with data:", clientData);
-        }
-        
-        setCreationStage("creating-client-record");
-        const newClient = await addClient(clientData);
-        
-        setCreationStage("client-record-created");
-        if (newClient && newClient.id) {
-          // Create default tasks for the new client
-          if (DEBUG_CLIENT_CREATION) console.log("Client created, now creating default tasks");
-          setCreationStage("creating-default-tasks");
-          await createDefaultTasks(newClient.id, newClient.name);
-          toast.success("Client added successfully with default tasks");
-        } else {
-          toast.success("Client added successfully");
-        }
-        
-        // Reset the form and close the dialog
-        setCreationStage("completed");
-        form.reset();
-        setOpen(false);
-      } catch (error) {
-        console.error("Error creating client user with RPC:", error);
-        throw new Error("Failed to create client user account. Please try again.");
-      }
+      // Reset the form and close the dialog
+      form.reset();
+      setOpen(false);
     } catch (error: any) {
       console.error("Error adding client:", error);
       toast.error(error.message || "Failed to add client");
@@ -261,7 +154,7 @@ export function AddClientDialog() {
         <DialogHeader>
           <DialogTitle>Add New Client</DialogTitle>
           <DialogDescription>
-            Add a new client to your agency. Fill out the client's information.
+            Add a new client to your agency. Fill out the client's information and create their login credentials.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -288,6 +181,9 @@ export function AddClientDialog() {
                   <FormControl>
                     <Input placeholder="Email address" {...field} />
                   </FormControl>
+                  <FormDescription>
+                    This email will be used for client portal login
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -349,21 +245,22 @@ export function AddClientDialog() {
                     />
                   </FormControl>
                   <FormDescription>
-                    Required for client portal access.
+                    Password for client portal access. Must be at least 6 characters.
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
-            {DEBUG_CLIENT_CREATION && (
-              <div className="text-xs text-muted-foreground">
-                <p>Creation stage: {creationStage}</p>
-                <p>Submitting: {isSubmitting ? 'Yes' : 'No'}</p>
-              </div>
-            )}
             <DialogFooter>
               <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Adding..." : "Add Client"}
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Adding...
+                  </>
+                ) : (
+                  "Add Client"
+                )}
               </Button>
             </DialogFooter>
           </form>

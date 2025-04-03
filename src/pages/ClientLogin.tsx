@@ -11,7 +11,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
 // Set to true to enable detailed authentication debugging
-const DEBUG_AUTH = true;
+const DEBUG_AUTH = false;
 
 const ClientLogin = () => {
   const { login, isAuthenticated, isLoading, isClient } = useClientAuth();
@@ -24,30 +24,25 @@ const ClientLogin = () => {
   const [isRedirected, setIsRedirected] = useState(false);
   const [sessionChecked, setSessionChecked] = useState(false);
   const navigate = useNavigate();
-  const [loginStage, setLoginStage] = useState("init");
 
   useEffect(() => {
     const checkExistingSession = async () => {
       try {
-        setLoginStage("checking-session");
         const { data: { session } } = await supabase.auth.getSession();
-        if (DEBUG_AUTH) {
+        if (DEBUG_AUTH && session) {
           console.log("ClientLogin - Session check:", !!session);
           if (session) {
             console.log("Session user data:", {
               email: session.user?.email,
               id: session.user?.id,
-              metadata: session.user?.user_metadata,
-              appMetadata: session.user?.app_metadata
+              metadata: session.user?.user_metadata
             });
           }
         }
         setSessionChecked(true);
-        setLoginStage("session-checked");
       } catch (err) {
         console.error("Error checking session:", err);
         setSessionChecked(true);
-        setLoginStage("session-check-error");
       }
     };
     
@@ -62,19 +57,6 @@ const ClientLogin = () => {
       setIsSubmitting(false);
     }
   }, [searchParams]);
-
-  useEffect(() => {
-    if (DEBUG_AUTH) {
-      console.log("ClientLogin auth state:", { 
-        isAuthenticated, 
-        isClient, 
-        isLoading, 
-        sessionChecked,
-        loginStage,
-        timestamp: new Date().toISOString() 
-      });
-    }
-  }, [isAuthenticated, isClient, isLoading, sessionChecked, loginStage]);
 
   if (sessionChecked && isAuthenticated && isClient && !isLoading) {
     if (DEBUG_AUTH) console.log("Already authenticated as client, redirecting to dashboard");
@@ -92,16 +74,9 @@ const ClientLogin = () => {
     try {
       setError("");
       setIsSubmitting(true);
-      setLoginStage("login-started");
       
       if (email.toLowerCase() === 'support@digitalshopi.in') {
         throw new Error("Admin users should use the admin login");
-      }
-      
-      if (DEBUG_AUTH) {
-        console.log(`Attempting to login with email: ${email}`);
-        // Only log password length for debugging, never the actual password
-        console.log(`Password provided with length: ${password.length}`);
       }
       
       // First, try to find the client record to verify this email exists as a client
@@ -116,87 +91,71 @@ const ClientLogin = () => {
       }
       
       if (!clientData) {
-        if (DEBUG_AUTH) {
-          console.warn("No client record found for email:", email);
-        }
         throw new Error("No client account found with this email. Please contact support.");
       }
 
       if (DEBUG_AUTH) {
         console.log("Found client record:", clientData);
-        if (!clientData.user_id) {
-          console.warn("Client has no linked user_id yet, checking if auth user exists");
-        }
       }
 
-      // Try to login directly with Supabase
+      // Try to login with Supabase
       try {
-        setLoginStage("attempting-direct-auth");
-        
         // Try to login directly with Supabase
-        const { data: directAuthData, error: directAuthError } = await supabase.auth.signInWithPassword({
+        const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
           email: email.trim().toLowerCase(),
           password
         });
         
-        if (directAuthError) {
-          if (DEBUG_AUTH) {
-            console.error("Direct Supabase auth error:", directAuthError);
+        if (authError) {
+          console.error("Supabase auth error:", authError);
+          
+          // If the client record exists but login fails, it might be password or auth user issue
+          if (authError.message.includes("Invalid login credentials") && clientData) {
+            if (!clientData.user_id) {
+              throw new Error("This client account needs to be set up for login access. Please contact support.");
+            } else {
+              throw new Error("Invalid email or password. Please try again.");
+            }
           }
           
-          // If the error is "Invalid login credentials" but we have a client record,
-          // it likely means the auth user doesn't exist or the password is incorrect
-          if (directAuthError.message.includes("Invalid login credentials") && clientData && !clientData.user_id) {
-            throw new Error("This client account exists but doesn't have login credentials set up yet. Please contact support.");
-          }
-          
-          throw directAuthError;
+          throw authError;
         }
         
-        if (directAuthData.user) {
-          if (DEBUG_AUTH) {
-            console.log("Direct Supabase auth successful:", directAuthData.user.email);
-            console.log("User metadata:", directAuthData.user.user_metadata);
-            console.log("User role:", directAuthData.user.app_metadata?.role);
-          }
+        if (!authData.user) {
+          throw new Error("Login failed - no user returned");
+        }
+        
+        // If the client record exists but has no user_id, update it now
+        if (clientData && !clientData.user_id) {
+          console.log("Updating client record with user_id:", authData.user.id);
           
-          setLoginStage("direct-auth-success");
-          
-          // If the client record exists but has no user_id, update it now
-          if (clientData && !clientData.user_id) {
-            if (DEBUG_AUTH) console.log("Updating client record with user_id:", directAuthData.user.id);
+          const { error: updateError } = await supabase
+            .from('clients')
+            .update({ user_id: authData.user.id })
+            .eq('id', clientData.id);
             
-            const { error: updateError } = await supabase
-              .from('clients')
-              .update({ user_id: directAuthData.user.id })
-              .eq('id', clientData.id);
-              
-            if (updateError) {
-              console.error("Error updating client user_id:", updateError);
-            }
+          if (updateError) {
+            console.error("Error updating client user_id:", updateError);
           }
         }
       } catch (authError: any) {
-        // If the user hasn't been created yet, show a more helpful error
-        if (authError.message.includes("Invalid login credentials") && clientData && !clientData.user_id) {
-          throw new Error("This client account exists but doesn't have login credentials set up yet. Please contact support.");
+        // Re-throw auth errors with better context
+        if (authError.message.includes("Invalid login credentials") && clientData) {
+          if (!clientData.user_id) {
+            throw new Error("This client account needs to be set up for login access. Please contact support.");
+          }
         }
         
         throw authError;
       }
       
-      setLoginStage("attempting-custom-login");
-      
       // Now use our custom login function which handles client role verification
       await login(email.trim().toLowerCase(), password);
       
-      setLoginStage("login-successful");
-      
-      if (DEBUG_AUTH) console.log("Login successful, forcing navigation to dashboard");
+      // Force navigation to dashboard after successful login
       navigate("/client/dashboard", { replace: true });
     } catch (error: any) {
       console.error("Client login error:", error);
-      setLoginStage("login-failed");
       
       // Provide more user-friendly error messages
       let errorMessage = "Failed to sign in";
@@ -208,8 +167,8 @@ const ClientLogin = () => {
           errorMessage = "Your email is not confirmed. Please check your inbox for confirmation instructions.";
         } else if (error.message.includes("No client account found")) {
           errorMessage = "No client account found with this email. Please contact support.";
-        } else if (error.message.includes("doesn't have login credentials")) {
-          errorMessage = "This client account exists but doesn't have login credentials set up yet. Please contact support.";
+        } else if (error.message.includes("needs to be set up for login")) {
+          errorMessage = "This client account needs to be set up for login access. Please contact support.";
         } else {
           errorMessage = error.message;
         }
@@ -294,12 +253,6 @@ const ClientLogin = () => {
                 </Button>
               </div>
             </div>
-            {DEBUG_AUTH && (
-              <div className="text-xs text-muted-foreground">
-                <p>Stage: {loginStage}</p>
-                <p>Auth state: {isAuthenticated ? 'Authenticated' : 'Not authenticated'} | Client: {isClient ? 'Yes' : 'No'}</p>
-              </div>
-            )}
           </CardContent>
           <CardFooter className="flex flex-col space-y-4">
             <Button 
