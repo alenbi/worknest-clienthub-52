@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useClientAuth } from "@/contexts/client-auth-context";
 import { Button } from "@/components/ui/button";
@@ -27,7 +28,17 @@ const ClientLogin = () => {
     const checkExistingSession = async () => {
       try {
         const { data: { session } } = await supabase.auth.getSession();
-        if (DEBUG_AUTH) console.log("ClientLogin - Session check:", !!session, session?.user?.email);
+        if (DEBUG_AUTH) {
+          console.log("ClientLogin - Session check:", !!session);
+          if (session) {
+            console.log("Session user data:", {
+              email: session.user?.email,
+              id: session.user?.id,
+              metadata: session.user?.user_metadata,
+              appMetadata: session.user?.app_metadata
+            });
+          }
+        }
         setSessionChecked(true);
       } catch (err) {
         console.error("Error checking session:", err);
@@ -80,8 +91,28 @@ const ClientLogin = () => {
         throw new Error("Admin users should use the admin login");
       }
       
-      if (DEBUG_AUTH) console.log(`Attempting to login with email: ${email} and password length: ${password.length}`);
+      if (DEBUG_AUTH) {
+        console.log(`Attempting to login with email: ${email}`);
+        // Only log password length for debugging, never the actual password
+        console.log(`Password provided with length: ${password.length}`);
+      }
       
+      // Try to login directly with Supabase first to check if credentials are valid
+      const { data: directAuthData, error: directAuthError } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
+      
+      if (directAuthError) {
+        console.error("Direct Supabase auth error:", directAuthError);
+        throw directAuthError;
+      }
+      
+      if (directAuthData.user) {
+        if (DEBUG_AUTH) console.log("Direct Supabase auth successful:", directAuthData.user.email);
+      }
+      
+      // Now use our custom login function which handles client role verification
       await login(email, password);
       
       if (DEBUG_AUTH) console.log("Login successful, forcing navigation to dashboard");

@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -118,6 +119,21 @@ export function AddClientDialog() {
       
       if (DEBUG_CLIENT_CREATION) console.log("Admin user creating client:", user.id, user.email);
       
+      // First check if a user with this email already exists
+      const { data: existingUsers, error: checkError } = await supabase
+        .from('clients')
+        .select('email')
+        .eq('email', data.email)
+        .limit(1);
+        
+      if (checkError) {
+        console.error("Error checking for existing client:", checkError);
+      }
+      
+      if (existingUsers && existingUsers.length > 0) {
+        throw new Error("A client with this email already exists");
+      }
+      
       // Use the create_client_user function to create the auth user
       if (DEBUG_CLIENT_CREATION) console.log("Using create_client_user function with params:", {
         admin_user_id: user.id,
@@ -125,10 +141,9 @@ export function AddClientDialog() {
         password_length: data.password.length
       });
       
-      // Use any type to bypass TypeScript checking for the RPC function
-      // that TypeScript doesn't know about yet
+      // Call our RPC function to create the client user
       const { data: newUserId, error: functionError } = await supabase.rpc(
-        'create_client_user' as any,
+        'create_client_user',
         {
           admin_user_id: user.id,
           client_email: data.email,
@@ -145,7 +160,10 @@ export function AddClientDialog() {
         throw new Error("User creation failed - no user ID returned");
       }
       
-      if (DEBUG_CLIENT_CREATION) console.log("Client auth user created successfully:", newUserId);
+      if (DEBUG_CLIENT_CREATION) {
+        console.log("Client auth user created successfully with ID:", newUserId);
+        console.log("Now creating client record in clients table...");
+      }
       
       // Create the client record linked to the auth user
       const clientData = {
@@ -154,11 +172,13 @@ export function AddClientDialog() {
         phone: data.phone || undefined,
         company: data.company || undefined,
         domain: data.domain || undefined,
-        // Explicitly cast newUserId to string to fix the type error
-        user_id: newUserId as string
+        // Link to the auth user ID
+        user_id: newUserId
       };
       
-      if (DEBUG_CLIENT_CREATION) console.log("Creating client record with data:", clientData);
+      if (DEBUG_CLIENT_CREATION) {
+        console.log("Creating client record with data:", clientData);
+      }
       
       const newClient = await addClient(clientData);
       
@@ -169,6 +189,32 @@ export function AddClientDialog() {
         toast.success("Client added successfully with default tasks");
       } else {
         toast.success("Client added successfully");
+      }
+      
+      // Test direct login with the created user credentials
+      if (DEBUG_CLIENT_CREATION) {
+        console.log("Testing login with the new client credentials");
+        try {
+          // Sign out admin first
+          await supabase.auth.signOut();
+          
+          // Try logging in with the new client credentials
+          const { data: testData, error: testError } = await supabase.auth.signInWithPassword({
+            email: data.email,
+            password: data.password
+          });
+          
+          if (testError) {
+            console.error("Test login failed:", testError);
+          } else {
+            console.log("Test login successful:", testData.user?.email);
+            // Sign out test user and sign back in as admin
+            await supabase.auth.signOut();
+            // Note: admin will need to sign back in manually
+          }
+        } catch (testErr) {
+          console.error("Error during test login:", testErr);
+        }
       }
       
       form.reset();
