@@ -179,7 +179,7 @@ export async function updateRequestStatus(requestId: string, status: string): Pr
     
     const { error } = await supabase
       .from('requests')
-      .update({ status, updated_at: new Date() })
+      .update({ status, updated_at: new Date().toISOString() })
       .eq('id', requestId);
     
     if (error) {
