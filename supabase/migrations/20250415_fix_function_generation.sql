@@ -18,11 +18,11 @@ DECLARE
   new_client_id UUID;
   result JSON;
 BEGIN
-  -- Check if admin_id is null or invalid
-  IF admin_id IS NULL OR admin_id::TEXT = '' THEN
-    RAISE EXCEPTION 'Admin ID cannot be null or empty';
+  -- Validate admin_id first to prevent empty UUID error
+  IF admin_id IS NULL OR admin_id = '00000000-0000-0000-0000-000000000000' THEN
+    RAISE EXCEPTION 'Invalid admin ID: cannot be null or empty UUID';
   END IF;
-  
+
   -- Check if admin user is actually an admin
   IF NOT public.is_admin(admin_id) THEN
     RAISE EXCEPTION 'Only admin users can create client accounts';

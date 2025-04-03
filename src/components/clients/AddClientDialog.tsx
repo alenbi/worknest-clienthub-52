@@ -123,25 +123,19 @@ export function AddClientDialog() {
         throw new Error("You must be logged in to create a client");
       }
       
-      const session = sessionData.session;
+      const userId = sessionData.session.user?.id;
       
-      if (!session.user || !session.user.id) {
-        console.error("Invalid user in session:", session);
-        throw new Error("Invalid authentication state - missing user ID");
+      // Critical validation - ensure we have a valid UUID before proceeding
+      if (!userId || typeof userId !== 'string' || userId.trim() === '') {
+        console.error("Invalid user ID in session:", userId);
+        throw new Error("Authentication error: Invalid user ID");
       }
       
-      const adminId = session.user.id;
-      console.log("Admin ID from session:", adminId);
+      console.log("Admin ID from session:", userId);
       
-      // Validate UUID format to prevent empty string issue
-      if (!adminId || typeof adminId !== 'string' || adminId.trim() === '') {
-        console.error("Invalid admin ID format:", adminId);
-        throw new Error("Invalid admin ID format - cannot proceed");
-      }
-      
-      // Create parameters object with proper type checking
+      // Create parameters object
       const params = {
-        admin_id: adminId,
+        admin_id: userId,
         client_name: data.name,
         client_email: data.email,
         client_password: data.password,
@@ -150,7 +144,10 @@ export function AddClientDialog() {
         client_domain: data.domain || null
       };
       
-      console.log("Calling admin_create_client_with_auth with parameters:", params);
+      console.log("Calling admin_create_client_with_auth with parameters:", {
+        ...params,
+        client_password: "********" // Don't log the actual password
+      });
       
       // Call the RPC function with proper error handling
       const { data: result, error } = await supabase.rpc(
@@ -176,9 +173,9 @@ export function AddClientDialog() {
       }
       
       const clientId = result.client_id;
-      const userId = result.user_id;
+      const newUserId = result.user_id;
       
-      if (!clientId || !userId) {
+      if (!clientId || !newUserId) {
         console.error("Missing IDs in result:", result);
         throw new Error("Invalid response: missing client_id or user_id");
       }
@@ -191,7 +188,7 @@ export function AddClientDialog() {
         phone: data.phone,
         company: data.company,
         domain: data.domain,
-        user_id: userId
+        user_id: newUserId
       });
       
       await createDefaultTasks(clientId, data.name);
