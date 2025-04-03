@@ -1,12 +1,13 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User, Session } from '@supabase/supabase-js';
+import { Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { ClientUser } from '@/lib/types';
 
 interface ClientAuthContextType {
-  user: User | null;
+  user: ClientUser | null;
   session: Session | null;
   isLoading: boolean;
   isAuthenticated: boolean;
@@ -21,7 +22,7 @@ interface ClientAuthContextType {
 const ClientAuthContext = createContext<ClientAuthContextType | undefined>(undefined);
 
 export function ClientAuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<ClientUser | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isClient, setIsClient] = useState(false);
@@ -41,7 +42,13 @@ export function ClientAuthProvider({ children }: { children: React.ReactNode }) 
         console.log("Client auth state changed:", event, newSession ? "session exists" : "no session");
         
         setSession(newSession);
-        setUser(newSession?.user ?? null);
+        if (newSession?.user) {
+          // Cast to ClientUser type
+          const clientUser = newSession.user as ClientUser;
+          setUser(clientUser);
+        } else {
+          setUser(null);
+        }
         
         if (event === 'SIGNED_OUT') {
           setIsClient(false);
@@ -64,9 +71,10 @@ export function ClientAuthProvider({ children }: { children: React.ReactNode }) 
       console.log("Current session check:", currentSession ? "Session exists" : "No session");
       
       setSession(currentSession);
-      setUser(currentSession?.user ?? null);
-      
       if (currentSession?.user) {
+        // Cast to ClientUser type
+        const clientUser = currentSession.user as ClientUser;
+        setUser(clientUser);
         refreshClientData();
       } else {
         setIsLoading(false);
@@ -93,9 +101,12 @@ export function ClientAuthProvider({ children }: { children: React.ReactNode }) 
       const standardEmail = user.email?.trim().toLowerCase();
       console.log("Checking client status for:", standardEmail);
       
-      // Use RPC to get client by email
+      // Query the clients table directly instead of using the RPC function
       const { data, error } = await supabase
-        .rpc('get_client_by_email', { email_param: standardEmail });
+        .from('clients')
+        .select('*')
+        .eq('email', standardEmail)
+        .maybeSingle();
       
       if (error) {
         console.error("Error fetching client:", error);
@@ -108,19 +119,24 @@ export function ClientAuthProvider({ children }: { children: React.ReactNode }) 
       
       console.log("Client data result:", data);
       
-      if (data && data.length > 0) {
-        const clientRecord = data[0];
+      if (data) {
+        // Create an extended user object with client properties
+        const clientUser = user as ClientUser;
+        clientUser.name = data.name;
+        clientUser.company = data.company;
+        setUser(clientUser);
+        
         setIsClient(true);
-        setClientId(clientRecord.id);
-        setClientName(clientRecord.name);
+        setClientId(data.id);
+        setClientName(data.name);
         
         // If client record exists but user_id is not set, update it
-        if (!clientRecord.user_id) {
+        if (!data.user_id) {
           console.log("Client record found but user_id is not set, updating...");
           const { error: updateError } = await supabase
             .from('clients')
             .update({ user_id: user.id })
-            .eq('id', clientRecord.id);
+            .eq('id', data.id);
             
           if (updateError) {
             console.error("Error updating client user_id:", updateError);
@@ -154,14 +170,17 @@ export function ClientAuthProvider({ children }: { children: React.ReactNode }) 
       
       // First, check if the email exists in the clients table
       const { data: clientData, error: clientError } = await supabase
-        .rpc('get_client_by_email', { email_param: standardEmail });
+        .from('clients')
+        .select('*')
+        .eq('email', standardEmail)
+        .maybeSingle();
         
       if (clientError) {
         console.error("Error checking if client exists:", clientError);
         throw new Error("Error checking client account, please try again");
       }
       
-      if (!clientData || clientData.length === 0) {
+      if (!clientData) {
         console.error("No client account found with email:", standardEmail);
         throw new Error("No client account found with this email. Please contact support.");
       }

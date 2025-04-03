@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useClientAuth } from "@/contexts/client-auth-context";
 import { Button } from "@/components/ui/button";
@@ -43,15 +42,19 @@ const ClientLogin = () => {
       const standardEmail = email.trim().toLowerCase();
       console.log("Checking if client exists:", standardEmail);
       
+      // Query clients table directly instead of using RPC
       const { data, error } = await supabase
-        .rpc('get_client_by_email', { email_param: standardEmail });
+        .from('clients')
+        .select('id')
+        .eq('email', standardEmail)
+        .maybeSingle();
       
       if (error) {
         console.error("Error checking client:", error);
         return false;
       }
       
-      const clientExists = data && data.length > 0;
+      const clientExists = !!data;
       console.log("Client exists:", clientExists, data);
       
       return clientExists;
