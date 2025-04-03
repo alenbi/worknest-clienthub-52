@@ -18,7 +18,6 @@ const ClientLogin = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
-  const [verifyingEmail, setVerifyingEmail] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -38,12 +37,11 @@ const ClientLogin = () => {
 
   // Function to check if an email exists in the clients table
   const checkClientEmailExists = async (email: string) => {
-    setVerifyingEmail(true);
     try {
       const standardEmail = email.trim().toLowerCase();
       console.log("Checking if client exists:", standardEmail);
       
-      // Query clients table directly instead of using RPC
+      // Query clients table directly
       const { data, error } = await supabase
         .from('clients')
         .select('id')
@@ -62,8 +60,6 @@ const ClientLogin = () => {
     } catch (err) {
       console.error("Error checking client email:", err);
       return false;
-    } finally {
-      setVerifyingEmail(false);
     }
   };
 
@@ -122,7 +118,7 @@ const ClientLogin = () => {
                 placeholder="your-email@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                disabled={isSubmitting || verifyingEmail}
+                disabled={isSubmitting}
                 required
               />
             </div>
@@ -170,12 +166,12 @@ const ClientLogin = () => {
             <Button 
               type="submit" 
               className="w-full" 
-              disabled={isSubmitting || verifyingEmail || authLoading}
+              disabled={isSubmitting || authLoading}
             >
-              {isSubmitting || verifyingEmail ? (
+              {isSubmitting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {verifyingEmail ? "Checking..." : "Signing in..."}
+                  Signing in...
                 </>
               ) : (
                 "Sign in"

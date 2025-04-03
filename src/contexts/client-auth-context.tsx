@@ -101,7 +101,7 @@ export function ClientAuthProvider({ children }: { children: React.ReactNode }) 
       const standardEmail = user.email?.trim().toLowerCase();
       console.log("Checking client status for:", standardEmail);
       
-      // Query the clients table directly instead of using the RPC function
+      // Query the clients table directly 
       const { data, error } = await supabase
         .from('clients')
         .select('*')
@@ -120,10 +120,11 @@ export function ClientAuthProvider({ children }: { children: React.ReactNode }) 
       console.log("Client data result:", data);
       
       if (data) {
-        // Create an extended user object with client properties
+        // Update user object with client properties
         const clientUser = user as ClientUser;
         clientUser.name = data.name;
         clientUser.company = data.company;
+        clientUser.client_id = data.id;
         setUser(clientUser);
         
         setIsClient(true);

@@ -6,4 +6,5 @@ export interface ClientUser extends SupabaseUser {
   name?: string;
   company?: string;
   email?: string;
+  client_id?: string;
 }

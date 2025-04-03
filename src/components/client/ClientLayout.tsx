@@ -37,7 +37,7 @@ const ClientLayout = () => {
       return;
     }
     
-    // If still loading, set a timeout to redirect after 1.5 seconds (reduced from 2s)
+    // If still loading, set a timeout to redirect after 1.5 seconds
     if (isLoading) {
       const timer = window.setTimeout(() => {
         if (!isAuthenticated) {

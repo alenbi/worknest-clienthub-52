@@ -12,18 +12,18 @@ const ClientProtectedRoute = () => {
 
   // Add a safety timeout in case authentication hangs
   useEffect(() => {
-    // Set a shorter timeout for better UX
+    // Set a timeout for better UX
     const timer = setTimeout(() => {
       if (isLoading) {
-        console.warn("Client authentication check timed out after 1s, redirecting to login");
+        console.warn("Client authentication check timed out after 2s, redirecting to login");
         setIsTimeoutExpired(true);
       }
-    }, 1000); // 1 second timeout (further reduced)
+    }, 2000); // 2 second timeout
     
     return () => clearTimeout(timer);
   }, [isLoading]);
 
-  // Add more detailed debug logging
+  // Add detailed debug logging
   useEffect(() => {
     console.log("ClientProtectedRoute state:", { 
       isAuthenticated, 
