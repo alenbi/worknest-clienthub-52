@@ -41,22 +41,19 @@ const ClientLogin = () => {
       const standardEmail = email.trim().toLowerCase();
       console.log("Checking if client exists:", standardEmail);
       
-      // Query clients table directly
-      const { data, error } = await supabase
-        .from('clients')
-        .select('id')
-        .eq('email', standardEmail)
-        .maybeSingle();
+      // Use our new database function to check if client exists
+      const { data, error } = await supabase.rpc(
+        'get_client_by_email', 
+        { email_param: standardEmail }
+      );
       
       if (error) {
         console.error("Error checking client:", error);
         return false;
       }
       
-      const clientExists = !!data;
-      console.log("Client exists:", clientExists, data);
-      
-      return clientExists;
+      console.log("Client check result:", data);
+      return !!data && data.length > 0;
     } catch (err) {
       console.error("Error checking client email:", err);
       return false;
@@ -84,8 +81,30 @@ const ClientLogin = () => {
         return;
       }
       
-      await login(email, password);
+      console.log("Client found, attempting login");
+      
+      // Attempt login with supabase auth
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
+      
+      if (error) {
+        console.error("Auth error:", error);
+        if (error.message.includes("Invalid login credentials")) {
+          throw new Error("Invalid email or password. Please try again.");
+        }
+        throw error;
+      }
+      
+      if (!data.user || !data.session) {
+        throw new Error("Login failed - no user returned");
+      }
+      
+      console.log("Login successful, redirecting to dashboard");
+      navigate("/client/dashboard", { replace: true });
       toast.success("Signed in successfully");
+      
     } catch (error: any) {
       console.error("Login error:", error);
       setError(error?.message || "Failed to sign in");

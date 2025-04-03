@@ -15,10 +15,10 @@ const ClientProtectedRoute = () => {
     // Set a timeout for better UX
     const timer = setTimeout(() => {
       if (isLoading) {
-        console.warn("Client authentication check timed out after 2s, redirecting to login");
+        console.warn("Client authentication check timed out after 3s, redirecting to login");
         setIsTimeoutExpired(true);
       }
-    }, 2000); // 2 second timeout
+    }, 3000); // 3 second timeout
     
     return () => clearTimeout(timer);
   }, [isLoading]);

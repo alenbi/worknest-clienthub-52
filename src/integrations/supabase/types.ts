@@ -403,6 +403,20 @@ export type Database = {
           client_company: string
         }[]
       }
+      get_client_by_email: {
+        Args: {
+          email_param: string
+        }
+        Returns: {
+          id: string
+          name: string
+          email: string
+          company: string
+          phone: string
+          domain: string
+          user_id: string
+        }[]
+      }
       get_client_id_from_user: {
         Args: {
           user_id: string
@@ -432,6 +446,14 @@ export type Database = {
       is_client: {
         Args: {
           user_id: string
+        }
+        Returns: boolean
+      }
+      link_client_to_auth_user: {
+        Args: {
+          admin_id: string
+          client_email: string
+          auth_user_id: string
         }
         Returns: boolean
       }

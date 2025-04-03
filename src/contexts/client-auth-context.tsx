@@ -43,25 +43,19 @@ export function ClientAuthProvider({ children }: { children: React.ReactNode }) 
         
         setSession(newSession);
         if (newSession?.user) {
-          // Cast to ClientUser type
-          const clientUser = newSession.user as ClientUser;
-          setUser(clientUser);
+          setUser(newSession.user as ClientUser);
+          
+          // On sign in, fetch client data
+          if (event === 'SIGNED_IN') {
+            setTimeout(() => {
+              refreshClientData();
+            }, 0);
+          }
         } else {
           setUser(null);
-        }
-        
-        if (event === 'SIGNED_OUT') {
           setIsClient(false);
           setClientId(null);
           setClientName(null);
-        }
-        
-        // If event is SIGNED_IN, we'll fetch the client data after a small delay
-        // to avoid potential race conditions
-        if (event === 'SIGNED_IN' && newSession?.user) {
-          setTimeout(() => {
-            refreshClientData();
-          }, 0);
         }
       }
     );
@@ -72,9 +66,7 @@ export function ClientAuthProvider({ children }: { children: React.ReactNode }) 
       
       setSession(currentSession);
       if (currentSession?.user) {
-        // Cast to ClientUser type
-        const clientUser = currentSession.user as ClientUser;
-        setUser(clientUser);
+        setUser(currentSession.user as ClientUser);
         refreshClientData();
       } else {
         setIsLoading(false);
@@ -101,12 +93,11 @@ export function ClientAuthProvider({ children }: { children: React.ReactNode }) 
       const standardEmail = user.email?.trim().toLowerCase();
       console.log("Checking client status for:", standardEmail);
       
-      // Query the clients table directly 
-      const { data, error } = await supabase
-        .from('clients')
-        .select('*')
-        .eq('email', standardEmail)
-        .maybeSingle();
+      // Use the RPC function to get client data by email
+      const { data, error } = await supabase.rpc(
+        'get_client_by_email',
+        { email_param: standardEmail }
+      );
       
       if (error) {
         console.error("Error fetching client:", error);
@@ -119,25 +110,27 @@ export function ClientAuthProvider({ children }: { children: React.ReactNode }) 
       
       console.log("Client data result:", data);
       
-      if (data) {
+      if (data && data.length > 0) {
+        const clientData = data[0];
+        
         // Update user object with client properties
-        const clientUser = user as ClientUser;
-        clientUser.name = data.name;
-        clientUser.company = data.company;
-        clientUser.client_id = data.id;
+        const clientUser = { ...user } as ClientUser;
+        clientUser.name = clientData.name;
+        clientUser.company = clientData.company;
+        clientUser.client_id = clientData.id;
         setUser(clientUser);
         
         setIsClient(true);
-        setClientId(data.id);
-        setClientName(data.name);
+        setClientId(clientData.id);
+        setClientName(clientData.name);
         
         // If client record exists but user_id is not set, update it
-        if (!data.user_id) {
+        if (!clientData.user_id) {
           console.log("Client record found but user_id is not set, updating...");
           const { error: updateError } = await supabase
             .from('clients')
             .update({ user_id: user.id })
-            .eq('id', data.id);
+            .eq('id', clientData.id);
             
           if (updateError) {
             console.error("Error updating client user_id:", updateError);
@@ -167,45 +160,16 @@ export function ClientAuthProvider({ children }: { children: React.ReactNode }) 
       console.log("Client login attempt for:", email);
       setIsLoading(true);
       
-      const standardEmail = email.trim().toLowerCase();
-      
-      // First, check if the email exists in the clients table
-      const { data: clientData, error: clientError } = await supabase
-        .from('clients')
-        .select('*')
-        .eq('email', standardEmail)
-        .maybeSingle();
-        
-      if (clientError) {
-        console.error("Error checking if client exists:", clientError);
-        throw new Error("Error checking client account, please try again");
-      }
-      
-      if (!clientData) {
-        console.error("No client account found with email:", standardEmail);
-        throw new Error("No client account found with this email. Please contact support.");
-      }
-      
-      console.log("Client record found:", clientData);
-      
-      // Now attempt login with Supabase Auth
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: standardEmail,
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
         password
       });
       
-      if (signInError) {
-        if (signInError.message.includes("Invalid login credentials")) {
-          throw new Error("Incorrect password. Please try again.");
-        }
-        throw signInError;
-      }
+      if (error) throw error;
       
-      // At this point, login is successful
-      console.log("Client login successful");
+      // Login is successful at this point, refreshClientData will be called by auth state change
+      console.log("Login successful");
       
-      // RefreshClientData will be called automatically by the onAuthStateChange listener
-      navigate('/client/dashboard');
     } catch (error: any) {
       console.error("Client login error:", error);
       setIsLoading(false);

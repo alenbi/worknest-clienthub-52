@@ -231,28 +231,78 @@ export async function createClientWithAuth(name: string, email: string, password
   }
 }
 
-// Get client by email - direct query implementation
+// Get client by email - using the new RPC function
 export async function getClientByEmail(email: string) {
   if (!email) return null;
   
   try {
     const standardEmail = email.trim().toLowerCase();
-    console.log("Getting client by email:", standardEmail);
+    console.log("Getting client by email using RPC:", standardEmail);
     
     const { data, error } = await supabase
-      .from('clients')
-      .select('*')
-      .eq('email', standardEmail)
-      .maybeSingle();
+      .rpc('get_client_by_email', { email_param: standardEmail });
       
     if (error) {
       console.error("Error getting client by email:", error);
       throw error;
     }
     
-    return data;
+    if (data && data.length > 0) {
+      return data[0];
+    }
+    
+    return null;
   } catch (error) {
     console.error("Failed to get client by email:", error);
+    throw error;
+  }
+}
+
+// Check if email exists in client table using the new RPC function
+export async function checkClientExists(email: string): Promise<boolean> {
+  try {
+    if (!email) return false;
+    
+    const standardEmail = email.trim().toLowerCase();
+    const { data, error } = await supabase
+      .rpc('get_client_by_email', { email_param: standardEmail });
+    
+    if (error) {
+      console.error("Error checking if client exists:", error);
+      return false;
+    }
+    
+    return data && data.length > 0;
+  } catch (error) {
+    console.error("Failed to check if client exists:", error);
+    return false;
+  }
+}
+
+// Function for admin to manually link client to auth user
+export async function linkClientToAuthUser(clientEmail: string, userId: string) {
+  try {
+    if (!clientEmail || !userId) {
+      throw new Error("Email and user ID are required");
+    }
+    
+    console.log("Linking client to auth user:", clientEmail, userId);
+    
+    const { data, error } = await supabase
+      .rpc('link_client_to_auth_user', { 
+        admin_id: (await supabase.auth.getUser()).data.user?.id,
+        client_email: clientEmail,
+        auth_user_id: userId
+      });
+      
+    if (error) {
+      console.error("Error linking client to auth user:", error);
+      throw error;
+    }
+    
+    return data;
+  } catch (error) {
+    console.error("Failed to link client to auth user:", error);
     throw error;
   }
 }
