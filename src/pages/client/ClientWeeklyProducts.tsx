@@ -15,14 +15,57 @@ import { Button } from "@/components/ui/button";
 import { FileText, Link as LinkIcon, ExternalLink, Loader2, RefreshCw } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function ClientWeeklyProducts() {
   const { weeklyProducts, refreshData, isLoading } = useData();
   const [isRefreshing, setIsRefreshing] = useState(true);
   const [initialLoadDone, setInitialLoadDone] = useState(false);
+  const [directProducts, setDirectProducts] = useState<any[]>([]);
   
-  // Only show published products to clients
-  const publishedProducts = weeklyProducts.filter(product => product.is_published);
+  // Directly fetch published products from Supabase
+  const fetchPublishedProducts = async () => {
+    console.log("Directly fetching published products...");
+    
+    try {
+      // Fetch published products
+      const { data: productsData, error: productsError } = await supabase
+        .from('weekly_products')
+        .select('*')
+        .eq('is_published', true)
+        .order('created_at', { ascending: false });
+      
+      if (productsError) {
+        console.error("Error fetching published products:", productsError);
+        throw productsError;
+      }
+      
+      console.log("Directly fetched published products:", productsData);
+      
+      // Fetch all links at once
+      const { data: linksData, error: linksError } = await supabase
+        .from('product_links')
+        .select('*');
+      
+      if (linksError) {
+        console.error("Error fetching product links:", linksError);
+        throw linksError;
+      }
+      
+      // Combine products with their links
+      const productsWithLinks = productsData.map(product => ({
+        ...product,
+        links: linksData.filter(link => link.product_id === product.id) || []
+      }));
+      
+      console.log("Products with links:", productsWithLinks);
+      setDirectProducts(productsWithLinks || []);
+      return productsWithLinks || [];
+    } catch (error) {
+      console.error("Failed to fetch published products:", error);
+      return [];
+    }
+  };
   
   // Manually refresh data
   const handleRefresh = async () => {
@@ -30,9 +73,13 @@ export default function ClientWeeklyProducts() {
     toast.info("Refreshing products...");
     
     try {
+      // First try the context's refresh function
       await refreshData();
+      
+      // Then directly fetch from Supabase as a backup
+      await fetchPublishedProducts();
+      
       toast.success("Products refreshed successfully");
-      console.log("Products refreshed: Found", publishedProducts.length, "published products");
     } catch (error) {
       console.error("Error refreshing products:", error);
       toast.error("Failed to refresh products");
@@ -49,18 +96,14 @@ export default function ClientWeeklyProducts() {
         console.log("Loading weekly products data...");
         
         try {
+          // Try context refresh
           await refreshData();
-          console.log("Weekly products data loaded successfully");
-          console.log("Total products:", weeklyProducts.length);
-          console.log("Published products:", publishedProducts.length);
-          console.log("Published product IDs:", publishedProducts.map(p => p.id));
+          console.log("Context weekly products:", weeklyProducts);
           
-          // Check if any products are marked as published
-          const anyPublished = weeklyProducts.some(p => p.is_published === true);
-          console.log("Any products marked as published:", anyPublished);
+          // Direct fetch from Supabase
+          const publishedData = await fetchPublishedProducts();
+          console.log("Direct fetch published products:", publishedData);
           
-          // Log full product data for debugging
-          console.log("Full products data:", JSON.stringify(weeklyProducts));
         } catch (error) {
           console.error("Error loading weekly products:", error);
         } finally {
@@ -71,7 +114,20 @@ export default function ClientWeeklyProducts() {
     };
     
     loadData();
-  }, [refreshData, weeklyProducts.length, initialLoadDone]);
+  }, [refreshData, initialLoadDone]);
+
+  // Only show published products to clients
+  const publishedProducts = weeklyProducts.filter(product => product.is_published);
+  console.log("Published products from context:", publishedProducts);
+  console.log("Direct published products:", directProducts);
+
+  // Combine both sources and remove duplicates
+  const combinedProducts = [...publishedProducts];
+  directProducts.forEach(directProduct => {
+    if (!publishedProducts.some(product => product.id === directProduct.id)) {
+      combinedProducts.push(directProduct);
+    }
+  });
   
   const isLoadingData = isLoading || isRefreshing;
 
@@ -106,7 +162,7 @@ export default function ClientWeeklyProducts() {
             <p className="mt-2 text-sm text-muted-foreground">Loading products...</p>
           </div>
         </div>
-      ) : publishedProducts.length === 0 ? (
+      ) : combinedProducts.length === 0 ? (
         <Card>
           <CardHeader>
             <CardTitle>No Products Available</CardTitle>
@@ -116,7 +172,7 @@ export default function ClientWeeklyProducts() {
           </CardHeader>
         </Card>
       ) : (
-        publishedProducts.map((product) => (
+        combinedProducts.map((product) => (
           <Card key={product.id} className="overflow-hidden">
             <CardHeader>
               <div className="flex items-center justify-between">

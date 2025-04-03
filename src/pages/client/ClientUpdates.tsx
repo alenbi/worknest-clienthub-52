@@ -14,14 +14,38 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function ClientUpdates() {
   const { updates, refreshData, isLoading } = useData();
   const [isRefreshing, setIsRefreshing] = useState(true);
   const [initialLoadDone, setInitialLoadDone] = useState(false);
+  const [directUpdates, setDirectUpdates] = useState<any[]>([]);
   
-  // Only show published updates to clients
-  const publishedUpdates = updates.filter(update => update.is_published);
+  // Directly fetch published updates from Supabase
+  const fetchPublishedUpdates = async () => {
+    console.log("Directly fetching published updates...");
+    
+    try {
+      const { data, error } = await supabase
+        .from('updates')
+        .select('*')
+        .eq('is_published', true)
+        .order('created_at', { ascending: false });
+      
+      if (error) {
+        console.error("Error fetching published updates:", error);
+        throw error;
+      }
+      
+      console.log("Directly fetched published updates:", data);
+      setDirectUpdates(data || []);
+      return data || [];
+    } catch (error) {
+      console.error("Failed to fetch published updates:", error);
+      return [];
+    }
+  };
   
   // Manually refresh data
   const handleRefresh = async () => {
@@ -29,9 +53,13 @@ export default function ClientUpdates() {
     toast.info("Refreshing updates...");
     
     try {
+      // First try the context's refresh function
       await refreshData();
+      
+      // Then directly fetch from Supabase as a backup
+      await fetchPublishedUpdates();
+      
       toast.success("Updates refreshed successfully");
-      console.log("Updates refreshed: Found", publishedUpdates.length, "published updates");
     } catch (error) {
       console.error("Error refreshing updates:", error);
       toast.error("Failed to refresh updates");
@@ -48,18 +76,14 @@ export default function ClientUpdates() {
         console.log("Loading updates data...");
         
         try {
+          // Try context refresh
           await refreshData();
-          console.log("Updates data loaded successfully");
-          console.log("Total updates:", updates.length);
-          console.log("Published updates:", publishedUpdates.length);
-          console.log("Published update IDs:", publishedUpdates.map(u => u.id));
+          console.log("Context updates:", updates);
           
-          // Check if any updates are marked as published
-          const anyPublished = updates.some(u => u.is_published === true);
-          console.log("Any updates marked as published:", anyPublished);
+          // Direct fetch from Supabase
+          const publishedData = await fetchPublishedUpdates();
+          console.log("Direct fetch published updates:", publishedData);
           
-          // Log full update data for debugging
-          console.log("Full updates data:", JSON.stringify(updates));
         } catch (error) {
           console.error("Error loading updates:", error);
         } finally {
@@ -70,7 +94,20 @@ export default function ClientUpdates() {
     };
     
     loadData();
-  }, [refreshData, updates.length, initialLoadDone]);
+  }, [refreshData, initialLoadDone]);
+
+  // Only show published updates to clients
+  const publishedUpdates = updates.filter(update => update.is_published);
+  console.log("Published updates from context:", publishedUpdates);
+  console.log("Direct published updates:", directUpdates);
+
+  // Combine both sources and remove duplicates
+  const combinedUpdates = [...publishedUpdates];
+  directUpdates.forEach(directUpdate => {
+    if (!publishedUpdates.some(update => update.id === directUpdate.id)) {
+      combinedUpdates.push(directUpdate);
+    }
+  });
 
   const isLoadingData = isLoading || isRefreshing;
 
@@ -101,7 +138,7 @@ export default function ClientUpdates() {
             <p className="mt-2 text-sm text-muted-foreground">Loading updates...</p>
           </div>
         </div>
-      ) : publishedUpdates.length === 0 ? (
+      ) : combinedUpdates.length === 0 ? (
         <Card>
           <CardHeader>
             <CardTitle>No Updates</CardTitle>
@@ -111,7 +148,7 @@ export default function ClientUpdates() {
           </CardHeader>
         </Card>
       ) : (
-        publishedUpdates.map((update) => (
+        combinedUpdates.map((update) => (
           <Card key={update.id} className="overflow-hidden">
             {update.image_url && (
               <div className="aspect-video overflow-hidden">
