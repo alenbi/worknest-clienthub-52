@@ -19,8 +19,8 @@ DECLARE
   result JSON;
 BEGIN
   -- Check if admin_id is null or invalid
-  IF admin_id IS NULL THEN
-    RAISE EXCEPTION 'Admin ID cannot be null';
+  IF admin_id IS NULL OR admin_id::TEXT = '' THEN
+    RAISE EXCEPTION 'Admin ID cannot be null or empty';
   END IF;
   
   -- Check if admin user is actually an admin
@@ -91,12 +91,12 @@ BEGIN
   
   -- Return all created data as JSON
   BEGIN
-    result := json_build_object(
+    SELECT json_build_object(
       'user_id', new_user_id,
       'client_id', new_client_id,
       'name', client_name,
       'email', client_email
-    );
+    ) INTO result;
     
     IF result IS NULL THEN
       RAISE EXCEPTION 'Failed to create result JSON';
