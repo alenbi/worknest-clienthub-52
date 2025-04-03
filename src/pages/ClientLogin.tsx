@@ -115,70 +115,74 @@ const ClientLogin = () => {
         console.error("Error checking client record:", clientError);
       }
       
-      if (DEBUG_AUTH) {
-        if (clientData) {
-          console.log("Found client record:", clientData);
-          if (!clientData.user_id) {
-            console.warn("Client has no linked user_id yet, this may cause issues");
-          }
-        } else {
+      if (!clientData) {
+        if (DEBUG_AUTH) {
           console.warn("No client record found for email:", email);
-          throw new Error("No client account found with this email. Please contact support.");
+        }
+        throw new Error("No client account found with this email. Please contact support.");
+      }
+
+      if (DEBUG_AUTH) {
+        console.log("Found client record:", clientData);
+        if (!clientData.user_id) {
+          console.warn("Client has no linked user_id yet, checking if auth user exists");
         }
       }
-      
-      setLoginStage("attempting-direct-auth");
-      
+
       // Try to login directly with Supabase
-      const { data: directAuthData, error: directAuthError } = await supabase.auth.signInWithPassword({
-        email: email.trim().toLowerCase(),
-        password
-      });
-      
-      if (directAuthError) {
-        console.error("Direct Supabase auth error:", directAuthError);
-        setLoginStage("direct-auth-failed");
+      try {
+        setLoginStage("attempting-direct-auth");
         
-        // Try to get more info about the user to help debug
-        if (DEBUG_AUTH) {
-          // Check if user exists in auth.users despite login failure
-          try {
-            // Only admins can check if email exists, so this will likely fail for regular users
-            const { data: userExists } = await supabase.rpc('check_email_exists', { 
-              email_to_check: email.trim().toLowerCase() 
-            });
-            
-            console.log(`User exists check for ${email}: ${userExists ? 'Yes' : 'No'}`);
-          } catch (err) {
-            console.log("Error checking if email exists:", err);
+        // Try to login directly with Supabase
+        const { data: directAuthData, error: directAuthError } = await supabase.auth.signInWithPassword({
+          email: email.trim().toLowerCase(),
+          password
+        });
+        
+        if (directAuthError) {
+          if (DEBUG_AUTH) {
+            console.error("Direct Supabase auth error:", directAuthError);
           }
-        }
-        
-        throw directAuthError;
-      }
-      
-      if (directAuthData.user) {
-        if (DEBUG_AUTH) {
-          console.log("Direct Supabase auth successful:", directAuthData.user.email);
-          console.log("User metadata:", directAuthData.user.user_metadata);
-          console.log("User role:", directAuthData.user.app_metadata?.role);
-        }
-        
-        setLoginStage("direct-auth-success");
-        
-        // If the client record exists but has no user_id, update it now
-        if (clientData && !clientData.user_id) {
-          if (DEBUG_AUTH) console.log("Updating client record with user_id:", directAuthData.user.id);
           
-          const { error: updateError } = await supabase
-            .from('clients')
-            .update({ user_id: directAuthData.user.id })
-            .eq('id', clientData.id);
+          // If the error is "Invalid login credentials" but we have a client record,
+          // it likely means the auth user doesn't exist or the password is incorrect
+          if (directAuthError.message.includes("Invalid login credentials") && clientData && !clientData.user_id) {
+            throw new Error("This client account exists but doesn't have login credentials set up yet. Please contact support.");
+          }
+          
+          throw directAuthError;
+        }
+        
+        if (directAuthData.user) {
+          if (DEBUG_AUTH) {
+            console.log("Direct Supabase auth successful:", directAuthData.user.email);
+            console.log("User metadata:", directAuthData.user.user_metadata);
+            console.log("User role:", directAuthData.user.app_metadata?.role);
+          }
+          
+          setLoginStage("direct-auth-success");
+          
+          // If the client record exists but has no user_id, update it now
+          if (clientData && !clientData.user_id) {
+            if (DEBUG_AUTH) console.log("Updating client record with user_id:", directAuthData.user.id);
             
-          if (updateError) {
-            console.error("Error updating client user_id:", updateError);
+            const { error: updateError } = await supabase
+              .from('clients')
+              .update({ user_id: directAuthData.user.id })
+              .eq('id', clientData.id);
+              
+            if (updateError) {
+              console.error("Error updating client user_id:", updateError);
+            }
           }
         }
+      } catch (authError: any) {
+        // If the user hasn't been created yet, show a more helpful error
+        if (authError.message.includes("Invalid login credentials") && clientData && !clientData.user_id) {
+          throw new Error("This client account exists but doesn't have login credentials set up yet. Please contact support.");
+        }
+        
+        throw authError;
       }
       
       setLoginStage("attempting-custom-login");
@@ -204,6 +208,8 @@ const ClientLogin = () => {
           errorMessage = "Your email is not confirmed. Please check your inbox for confirmation instructions.";
         } else if (error.message.includes("No client account found")) {
           errorMessage = "No client account found with this email. Please contact support.";
+        } else if (error.message.includes("doesn't have login credentials")) {
+          errorMessage = "This client account exists but doesn't have login credentials set up yet. Please contact support.";
         } else {
           errorMessage = error.message;
         }

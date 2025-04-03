@@ -136,3 +136,94 @@ export async function createClientAuthUser(email: string, password: string) {
     throw error;
   }
 }
+
+// Create a client with an authentication user in one operation
+export async function createClientWithAuth(name: string, email: string, password: string, company?: string) {
+  try {
+    // First, check if we have admin rights (for using create_client_user RPC)
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (user) {
+      // Try to use the RPC function to create client user
+      try {
+        console.log("Creating client auth user with email via RPC:", email);
+        
+        const { data: userId, error: rpcError } = await supabase.rpc('create_client_user', {
+          admin_user_id: user.id,
+          client_email: email.toLowerCase().trim(),
+          client_password: password
+        });
+        
+        if (rpcError) {
+          console.error("Error creating client user via RPC:", rpcError);
+          throw rpcError;
+        }
+        
+        // Create the client record with the user_id
+        const { data: clientData, error: clientError } = await supabase
+          .from('clients')
+          .insert({
+            name,
+            email: email.toLowerCase().trim(),
+            company,
+            user_id: userId
+          })
+          .select('*')
+          .single();
+          
+        if (clientError) {
+          console.error("Error creating client record:", clientError);
+          throw clientError;
+        }
+        
+        return { client: clientData, user_id: userId };
+      } catch (rpcError) {
+        console.error("RPC method failed, falling back to signUp:", rpcError);
+        // Fall back to the signUp method
+      }
+    }
+    
+    // Fallback: Create auth user first (if the above RPC method failed or we don't have an admin user)
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email: email.toLowerCase().trim(),
+      password,
+      options: {
+        data: {
+          role: 'client',
+          name
+        }
+      }
+    });
+    
+    if (authError) {
+      console.error("Error creating auth user:", authError);
+      throw authError;
+    }
+    
+    if (!authData.user) {
+      throw new Error("Auth user creation failed");
+    }
+    
+    // Create the client record
+    const { data: clientData, error: clientError } = await supabase
+      .from('clients')
+      .insert({
+        name,
+        email: email.toLowerCase().trim(),
+        company,
+        user_id: authData.user.id
+      })
+      .select('*')
+      .single();
+      
+    if (clientError) {
+      console.error("Error creating client record:", clientError);
+      throw clientError;
+    }
+    
+    return { client: clientData, user_id: authData.user.id };
+  } catch (error) {
+    console.error("Failed to create client with auth:", error);
+    throw error;
+  }
+}
