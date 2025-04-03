@@ -11,7 +11,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
 // Set to true to enable detailed authentication debugging
-const DEBUG_AUTH = false;
+const DEBUG_AUTH = true;
 
 const ClientLogin = () => {
   const { login, isAuthenticated, isLoading, isClient } = useClientAuth();
@@ -75,7 +75,10 @@ const ClientLogin = () => {
       setError("");
       setIsSubmitting(true);
       
-      if (email.toLowerCase() === 'support@digitalshopi.in') {
+      // Standardize email format
+      const standardizedEmail = email.trim().toLowerCase();
+      
+      if (standardizedEmail === 'support@digitalshopi.in') {
         throw new Error("Admin users should use the admin login");
       }
       
@@ -83,7 +86,7 @@ const ClientLogin = () => {
       const { data: clientData, error: clientError } = await supabase
         .from('clients')
         .select('id, name, user_id, email')
-        .eq('email', email.trim().toLowerCase())
+        .eq('email', standardizedEmail)
         .maybeSingle();
       
       if (clientError) {
@@ -102,20 +105,16 @@ const ClientLogin = () => {
       try {
         // Try to login directly with Supabase
         const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-          email: email.trim().toLowerCase(),
+          email: standardizedEmail,
           password
         });
         
         if (authError) {
           console.error("Supabase auth error:", authError);
           
-          // If the client record exists but login fails, it might be password or auth user issue
-          if (authError.message.includes("Invalid login credentials") && clientData) {
-            if (!clientData.user_id) {
-              throw new Error("This client account needs to be set up for login access. Please contact support.");
-            } else {
-              throw new Error("Invalid email or password. Please try again.");
-            }
+          // Handle specific error cases
+          if (authError.message.includes("Invalid login credentials")) {
+            throw new Error("Invalid email or password. Please try again.");
           }
           
           throw authError;
@@ -138,22 +137,20 @@ const ClientLogin = () => {
             console.error("Error updating client user_id:", updateError);
           }
         }
+        
+        // Now use our custom login function which handles client role verification
+        await login(standardizedEmail, password);
+        
+        // Force navigation to dashboard after successful login
+        navigate("/client/dashboard", { replace: true });
       } catch (authError: any) {
         // Re-throw auth errors with better context
-        if (authError.message.includes("Invalid login credentials") && clientData) {
-          if (!clientData.user_id) {
-            throw new Error("This client account needs to be set up for login access. Please contact support.");
-          }
+        if (authError.message.includes("Invalid login credentials")) {
+          throw new Error("Invalid email or password. Please try again.");
         }
         
         throw authError;
       }
-      
-      // Now use our custom login function which handles client role verification
-      await login(email.trim().toLowerCase(), password);
-      
-      // Force navigation to dashboard after successful login
-      navigate("/client/dashboard", { replace: true });
     } catch (error: any) {
       console.error("Client login error:", error);
       

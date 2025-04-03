@@ -5,8 +5,8 @@ import { Session, User } from "@supabase/supabase-js";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 
-// Debug mode - set to false in production
-const DEBUG_AUTH = false;
+// Debug mode - set to true for detailed logs in development
+const DEBUG_AUTH = true;
 
 // Extended User interface to include profile data
 interface ClientUserWithProfile {
@@ -47,6 +47,8 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
     if (currentUser.email === 'support@digitalshopi.in') return false;
     
     try {
+      if (DEBUG_AUTH) console.log("Checking client role for user ID:", currentUser.id);
+      
       // Check if there's a client record for this user
       const { data: clientData, error: clientError } = await supabase
         .from('clients')
@@ -59,11 +61,14 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
       }
       
       if (clientData && clientData.length > 0) {
+        if (DEBUG_AUTH) console.log("Found client record by user_id:", clientData[0]);
         return true;
       }
       
       // Try finding by email if user_id not found
       if (currentUser.email) {
+        if (DEBUG_AUTH) console.log("Checking client by email:", currentUser.email);
+        
         const { data: clientByEmail, error: emailError } = await supabase
           .from('clients')
           .select('id, name, user_id')
@@ -75,8 +80,12 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
         }
         
         if (clientByEmail && clientByEmail.length > 0) {
+          if (DEBUG_AUTH) console.log("Found client record by email:", clientByEmail[0]);
+          
           // Update the client record with the user_id if it's missing
           if (!clientByEmail[0].user_id) {
+            if (DEBUG_AUTH) console.log("Updating client with user_id:", currentUser.id);
+            
             const { error: updateError } = await supabase
               .from('clients')
               .update({ user_id: currentUser.id })
@@ -93,7 +102,7 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
         }
       }
       
-      // Fallback to email check
+      // Fallback to email check (exclude admin email)
       return currentUser.email !== 'support@digitalshopi.in';
     } catch (error) {
       console.error("Failed to check client role:", error);
@@ -166,6 +175,8 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
     
     const initializeAuth = async () => {
       try {
+        if (DEBUG_AUTH) console.log("Initializing client auth context...");
+        
         // First set up the onAuthStateChange listener
         const { data: { subscription } } = supabase.auth.onAuthStateChange(
           (event, currentSession) => {
@@ -241,6 +252,7 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
         // Add shorter timeout as a safety measure
         authTimeout = setTimeout(() => {
           if (mounted && isLoading) {
+            if (DEBUG_AUTH) console.log("Auth initialization timed out, forcing completion");
             setIsLoading(false);
           }
         }, 2000);
@@ -277,8 +289,11 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
     try {
       setIsLoading(true);
       
+      // Standardize email format
+      const standardizedEmail = email.trim().toLowerCase();
+      
       // Block admin email from logging in through client portal
-      if (email.toLowerCase() === 'support@digitalshopi.in') {
+      if (standardizedEmail === 'support@digitalshopi.in') {
         throw new Error("Admin users should use the admin login");
       }
       
@@ -286,7 +301,7 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
       const { data: clientData, error: clientError } = await supabase
         .from('clients')
         .select('id, name, user_id')
-        .eq('email', email.toLowerCase())
+        .eq('email', standardizedEmail)
         .maybeSingle();
       
       if (clientError) {
@@ -297,8 +312,10 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
         throw new Error("No client account found with this email. Please contact support.");
       }
       
+      if (DEBUG_AUTH) console.log("Found client record before login:", clientData);
+      
       const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.toLowerCase().trim(),
+        email: standardizedEmail,
         password,
       });
 
@@ -318,6 +335,8 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
         
         // If the client record exists but has no user_id, update it now
         if (clientData && !clientData.user_id) {
+          if (DEBUG_AUTH) console.log("Updating client user_id after login:", data.user.id);
+          
           const { error: updateError } = await supabase
             .from('clients')
             .update({ user_id: data.user.id })
@@ -382,9 +401,13 @@ export const ClientAuthProvider = ({ children }: { children: React.ReactNode }) 
         .from("clients")
         .select("id")
         .eq("user_id", user.id)
-        .single();
+        .maybeSingle();
       
       if (fetchError) throw fetchError;
+      
+      if (!clientData) {
+        throw new Error("Client record not found");
+      }
       
       // Update client record
       const { error } = await supabase

@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { TaskStatus, TaskPriority } from "@/lib/models";
-import { supabase, createClientWithAuth } from "@/integrations/supabase/client";
+import { createClientWithAuth } from "@/integrations/supabase/client";
 
 const clientFormSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -59,10 +59,10 @@ export function AddClientDialog() {
 
   const createDefaultTasks = async (clientId: string, clientName: string) => {
     const today = new Date();
-    const oneWeekLater = new Date(today);
+    const oneWeekLater = new Date();
     oneWeekLater.setDate(today.getDate() + 7);
     
-    const oneMonthLater = new Date(today);
+    const oneMonthLater = new Date();
     oneMonthLater.setMonth(today.getMonth() + 1);
     
     const defaultTasks = [
@@ -110,7 +110,7 @@ export function AddClientDialog() {
       setIsSubmitting(true);
       console.log("Creating client account with auth for:", data.email);
       
-      // Use the enhanced createClientWithAuth function to create both auth user and client record
+      // Use the enhanced createClientWithAuth function
       const result = await createClientWithAuth(
         data.name,
         data.email,
@@ -122,7 +122,10 @@ export function AddClientDialog() {
       
       console.log("Client created successfully:", result);
       
-      if (result && result.client && result.client.id) {
+      if (result?.client) {
+        // Add to local state
+        addClient(result.client);
+        
         // Create default tasks for the new client
         console.log("Creating default tasks for new client");
         await createDefaultTasks(result.client.id, result.client.name);
