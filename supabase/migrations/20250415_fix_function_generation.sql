@@ -1,5 +1,5 @@
 
--- Recreate admin_create_client_with_auth function with additional safeguards and fix result handling
+-- Recreate admin_create_client_with_auth function with explicit UUID generation and proper return
 CREATE OR REPLACE FUNCTION public.admin_create_client_with_auth(
   admin_id UUID,
   client_name TEXT,
@@ -77,13 +77,13 @@ BEGIN
   )
   RETURNING id INTO new_client_id;
   
-  -- Return all created data as JSON - Using the correct syntax for JSON creation
-  SELECT jsonb_build_object(
+  -- Return all created data as JSON - Build using direct assignment to avoid any syntax errors
+  result := json_build_object(
     'user_id', new_user_id,
     'client_id', new_client_id,
     'name', client_name,
     'email', client_email
-  ) INTO result;
+  );
   
   RETURN result;
 END;

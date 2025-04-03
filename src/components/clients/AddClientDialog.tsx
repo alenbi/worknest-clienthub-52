@@ -115,6 +115,17 @@ export function AddClientDialog() {
         throw new Error("You must be logged in to create a client");
       }
       
+      console.log("Admin ID:", user.id);
+      console.log("Submitting data to admin_create_client_with_auth:", {
+        admin_id: user.id,
+        client_name: data.name,
+        client_email: data.email,
+        client_password: data.password,
+        client_company: data.company || null,
+        client_phone: data.phone || null,
+        client_domain: data.domain || null
+      });
+      
       // Make sure we're catching any errors properly
       const { data: result, error } = await supabase.rpc('admin_create_client_with_auth', {
         admin_id: user.id,
@@ -135,20 +146,31 @@ export function AddClientDialog() {
         throw new Error("No result returned from client creation");
       }
       
-      console.log("Client created successfully:", result);
+      console.log("Client created successfully, raw result:", result);
+      
+      // Extract the values properly from the result
+      const clientId = result.client_id;
+      const userId = result.user_id;
+      
+      if (!clientId || !userId) {
+        console.error("Invalid result structure:", result);
+        throw new Error("Invalid response format from server");
+      }
+      
+      console.log("Extracted IDs - clientId:", clientId, "userId:", userId);
       
       try {
         await addClient({
-          id: result.client_id,
+          id: clientId,
           name: data.name,
           email: data.email,
           phone: data.phone,
           company: data.company,
           domain: data.domain,
-          user_id: result.user_id
+          user_id: userId
         });
         
-        await createDefaultTasks(result.client_id, data.name);
+        await createDefaultTasks(clientId, data.name);
         toast.success("Client added successfully with login credentials and default tasks");
       } catch (addError) {
         console.error("Error after client creation:", addError);
